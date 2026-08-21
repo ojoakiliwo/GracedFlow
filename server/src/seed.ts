@@ -130,8 +130,18 @@ export function seed(): void {
      VALUES (?, 'Wednesday Prayer Meeting', 'Corporate prayer and the Word.', 'prayer', datetime('now','+1 days','start of day','+17 hours','+30 minutes'), 'Prayer Hall', 1, 'weekly')`,
   ).run(newId("evt"));
 
+  // Meetings (upcoming) so leaders see them on the dashboard.
+  db.prepare(
+    `INSERT INTO meetings (id, title, description, department_id, scheduled_at, duration_mins, location, created_by, status)
+     VALUES (?, 'Monthly Workers Meeting', 'General gathering for all ministry workers.', ?, datetime('now','+2 days','start of day','+16 hours'), 90, 'Fellowship Hall', ?, 'scheduled')`,
+  ).run(newId("mtg"), depts["all-workers"], admin);
+  db.prepare(
+    `INSERT INTO meetings (id, title, description, department_id, scheduled_at, duration_mins, location, created_by, status)
+     VALUES (?, 'Choir Rehearsal', 'Weekly rehearsal ahead of Sunday.', ?, datetime('now','+1 days','start of day','+17 hours'), 120, 'Music Room', ?, 'scheduled')`,
+  ).run(newId("mtg"), depts["choir"], worker);
+
   // eslint-disable-next-line no-console
-  console.log("[seed] Seeded admin (admin@igc.church / Grace@2024), departments, members, projects, events.");
+  console.log("[seed] Seeded admin (admin@igc.church / Grace@2024), departments, members, projects, events, meetings.");
 }
 
 // Allow `npm run seed` to (re)initialise a fresh database.
