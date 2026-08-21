@@ -13,7 +13,12 @@ export function ensureReady(): Promise<void> {
     readyPromise = (async () => {
       await initSchema();
       await ensureSeed();
-    })();
+    })().catch((err) => {
+      // Do not cache a failed bootstrap — allow the next request to retry
+      // (e.g. once the database env var/connection is fixed).
+      readyPromise = null;
+      throw err;
+    });
   }
   return readyPromise;
 }
