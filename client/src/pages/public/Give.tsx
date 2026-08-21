@@ -1,17 +1,25 @@
 import { useState } from "react";
-import { HandCoins, CheckCircle2, Landmark } from "lucide-react";
+import { HandCoins, CheckCircle2, Landmark, CreditCard } from "lucide-react";
 import { apiPost } from "../../lib/api";
-import { Button, Card, Field, Input, Select } from "../../components/ui";
+import { useApi } from "../../lib/useApi";
+import { Button, Card, Field, Input, Select, Spinner } from "../../components/ui";
 import { naira } from "../../lib/format";
 
-interface GiveResult {
-  reference: string;
-  giving: {
+interface GivingOptions {
+  currency: string;
+  online: boolean;
+  onlineLive: boolean;
+  bank: {
     bankName: string;
     accountName: string;
     accountNumber: string;
-    onlineUrl?: string;
   };
+}
+interface GiveResult {
+  reference: string;
+  method: string;
+  authorizationUrl?: string;
+  giving?: { bankName: string; accountName: string; accountNumber: string };
 }
 
 const TYPES = [
@@ -24,6 +32,8 @@ const TYPES = [
 ];
 
 export default function Give() {
+  const { data: options, loading } = useApi<GivingOptions>("/public/giving-options");
+  const [method, setMethod] = useState<"online" | "transfer">("online");
   const [form, setForm] = useState({
     donorName: "",
     donorEmail: "",
@@ -32,23 +42,28 @@ export default function Give() {
     amount: "",
   });
   const [result, setResult] = useState<GiveResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+    setSubmitting(true);
     try {
       const res = await apiPost<GiveResult>("/public/give", {
         ...form,
         amount: Number(form.amount),
+        method,
       });
+      if (res.method === "online" && res.authorizationUrl) {
+        // Hand off to the Paystack hosted checkout (or simulated callback).
+        window.location.href = res.authorizationUrl;
+        return;
+      }
       setResult(res);
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
@@ -64,7 +79,11 @@ export default function Give() {
       </section>
 
       <section className="mx-auto max-w-2xl px-6 py-14">
-        {result ? (
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <Spinner className="h-7 w-7" />
+          </div>
+        ) : result && result.method === "transfer" ? (
           <Card className="p-8 text-center">
             <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-500" />
             <h2 className="mt-4 text-2xl text-ink-900">Thank you for your gift!</h2>
@@ -80,9 +99,9 @@ export default function Give() {
                 <span className="font-semibold">Bank transfer</span>
               </div>
               <dl className="space-y-2 text-sm">
-                <Row label="Bank" value={result.giving.bankName} />
-                <Row label="Account name" value={result.giving.accountName} />
-                <Row label="Account number" value={result.giving.accountNumber} />
+                <Row label="Bank" value={result.giving!.bankName} />
+                <Row label="Account name" value={result.giving!.accountName} />
+                <Row label="Account number" value={result.giving!.accountNumber} />
                 <Row label="Reference" value={result.reference} highlight />
               </dl>
             </div>
@@ -91,6 +110,7 @@ export default function Give() {
               variant="outline"
               onClick={() => {
                 setResult(null);
+                setSubmitting(false);
                 setForm({ ...form, amount: "" });
               }}
             >
@@ -99,6 +119,25 @@ export default function Give() {
           </Card>
         ) : (
           <Card className="p-8">
+            {options?.online && (
+              <div className="mb-6 grid grid-cols-2 gap-3">
+                <MethodTile
+                  active={method === "online"}
+                  onClick={() => setMethod("online")}
+                  icon={<CreditCard className="h-5 w-5" />}
+                  title="Card / Online"
+                  subtitle={options.onlineLive ? "Secured by Paystack" : "Instant & secure"}
+                />
+                <MethodTile
+                  active={method === "transfer"}
+                  onClick={() => setMethod("transfer")}
+                  icon={<Landmark className="h-5 w-5" />}
+                  title="Bank transfer"
+                  subtitle="Get account details"
+                />
+              </div>
+            )}
+
             <form onSubmit={submit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Giving type">
@@ -137,7 +176,7 @@ export default function Give() {
                     type="email"
                     value={form.donorEmail}
                     onChange={(e) => setForm({ ...form, donorEmail: e.target.value })}
-                    placeholder="Optional"
+                    placeholder={method === "online" ? "For your receipt" : "Optional"}
                   />
                 </Field>
                 <Field label="Phone">
@@ -153,14 +192,64 @@ export default function Give() {
                   {error}
                 </p>
               )}
-              <Button type="submit" size="lg" variant="gold" loading={loading} className="w-full">
-                Continue to give {form.amount && naira(Number(form.amount))}
+              <Button
+                type="submit"
+                size="lg"
+                variant="gold"
+                loading={submitting}
+                className="w-full"
+              >
+                {method === "online" ? "Give securely" : "Continue"}{" "}
+                {form.amount && naira(Number(form.amount))}
               </Button>
+              {method === "online" && !options?.onlineLive && (
+                <p className="text-center text-xs text-ink-400">
+                  Demo mode: no live payment keys yet — you'll see a simulated success.
+                </p>
+              )}
             </form>
           </Card>
         )}
       </section>
     </div>
+  );
+}
+
+function MethodTile({
+  active,
+  onClick,
+  icon,
+  title,
+  subtitle,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${
+        active
+          ? "border-brand-500 bg-brand-50"
+          : "border-ink-200 hover:bg-ink-50"
+      }`}
+    >
+      <span
+        className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+          active ? "bg-brand-600 text-white" : "bg-ink-100 text-ink-500"
+        }`}
+      >
+        {icon}
+      </span>
+      <span>
+        <span className="block text-sm font-semibold text-ink-800">{title}</span>
+        <span className="block text-xs text-ink-500">{subtitle}</span>
+      </span>
+    </button>
   );
 }
 

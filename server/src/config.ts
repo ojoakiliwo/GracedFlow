@@ -57,6 +57,15 @@ export const config = {
     accountNumber: process.env.GIVING_ACCOUNT_NUMBER ?? "0000000000",
     onlineUrl: process.env.GIVING_ONLINE_URL ?? "",
   },
+  payments: {
+    // Paystack activates automatically when a secret key is present; otherwise
+    // giving runs in a self-contained simulated mode so the flow is testable.
+    provider: process.env.PAYMENT_PROVIDER ?? (process.env.PAYSTACK_SECRET_KEY ? "paystack" : "dryrun"),
+    currency: process.env.PAYMENT_CURRENCY ?? "NGN",
+    paystackSecretKey: process.env.PAYSTACK_SECRET_KEY ?? "",
+    paystackPublicKey: process.env.PAYSTACK_PUBLIC_KEY ?? "",
+  },
+  appUrl: process.env.APP_URL ?? "http://localhost:5173",
 };
 
 export type AppConfig = typeof config;

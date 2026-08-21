@@ -14,6 +14,7 @@ import {
   HandCoins,
   HeartHandshake,
   CalendarRange,
+  Settings2,
   LogOut,
   Menu,
   X,
@@ -67,6 +68,10 @@ const groups: NavGroup[] = [
   {
     title: "Finance",
     items: [{ to: "/app/giving", label: "Giving & Donations", icon: HandCoins }],
+  },
+  {
+    title: "Administration",
+    items: [{ to: "/app/settings", label: "Settings & Integrations", icon: Settings2 }],
   },
 ];
 

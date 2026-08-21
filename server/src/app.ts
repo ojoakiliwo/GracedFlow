@@ -16,10 +16,16 @@ import { eventsRouter } from "./routes/events.js";
 import { prayerRouter } from "./routes/prayer.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { publicRouter } from "./routes/public.js";
+import { settingsRouter } from "./routes/settings.js";
+import { webhooksRouter } from "./routes/webhooks.js";
 
 export function createApp() {
   const app = express();
   app.use(cors());
+
+  // Webhooks need the raw body for signature verification, so mount before json.
+  app.use("/api/webhooks", webhooksRouter);
+
   app.use(express.json({ limit: "2mb" }));
 
   app.get("/api/health", (_req, res) => {
@@ -45,6 +51,7 @@ export function createApp() {
   app.use("/api/donations", donationsRouter);
   app.use("/api/events", eventsRouter);
   app.use("/api/prayer-requests", prayerRouter);
+  app.use("/api/settings", settingsRouter);
 
   app.use((_req, res) => {
     res.status(404).json({ error: "Not found" });

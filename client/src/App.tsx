@@ -8,6 +8,7 @@ import PublicLayout from "./components/PublicLayout";
 import Home from "./pages/public/Home";
 import About from "./pages/public/About";
 import Give from "./pages/public/Give";
+import GiveCallback from "./pages/public/GiveCallback";
 import Prayer from "./pages/public/Prayer";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
@@ -26,6 +27,7 @@ import Automations from "./pages/app/Automations";
 import Social from "./pages/app/Social";
 import Giving from "./pages/app/Giving";
 import PrayerRequests from "./pages/app/PrayerRequests";
+import Settings from "./pages/app/Settings";
 
 function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -46,6 +48,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
         <Route path="/give" element={<Give />} />
+        <Route path="/give/callback" element={<GiveCallback />} />
         <Route path="/prayer" element={<Prayer />} />
       </Route>
 
@@ -74,6 +77,7 @@ export default function App() {
         <Route path="social" element={<Social />} />
         <Route path="giving" element={<Giving />} />
         <Route path="prayer" element={<PrayerRequests />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
