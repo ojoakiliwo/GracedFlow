@@ -1,45 +1,63 @@
-import express, { type Request, type Response, type NextFunction } from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
-import { NotFoundError, TaskStore, ValidationError } from "./tasks.js";
+import { config } from "./config.js";
+import { HttpError } from "./util.js";
+import { authRouter } from "./routes/auth.js";
+import { membersRouter } from "./routes/members.js";
+import { departmentsRouter } from "./routes/departments.js";
+import { projectsRouter } from "./routes/projects.js";
+import { meetingsRouter } from "./routes/meetings.js";
+import { tasksRouter } from "./routes/tasks.js";
+import { messagesRouter } from "./routes/messages.js";
+import { automationsRouter } from "./routes/automations.js";
+import { socialRouter } from "./routes/social.js";
+import { donationsRouter } from "./routes/donations.js";
+import { eventsRouter } from "./routes/events.js";
+import { prayerRouter } from "./routes/prayer.js";
+import { dashboardRouter } from "./routes/dashboard.js";
+import { publicRouter } from "./routes/public.js";
 
-export function createApp(store: TaskStore = new TaskStore()) {
+export function createApp() {
   const app = express();
   app.use(cors());
-  app.use(express.json());
+  app.use(express.json({ limit: "2mb" }));
 
   app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", service: "gracedflow-server", time: new Date().toISOString() });
+    res.json({
+      status: "ok",
+      service: "gracedflow-api",
+      church: config.church.name,
+      time: new Date().toISOString(),
+    });
   });
 
-  app.get("/api/tasks", (_req, res) => {
-    res.json(store.list());
+  app.use("/api/public", publicRouter);
+  app.use("/api/auth", authRouter);
+  app.use("/api/dashboard", dashboardRouter);
+  app.use("/api/members", membersRouter);
+  app.use("/api/departments", departmentsRouter);
+  app.use("/api/projects", projectsRouter);
+  app.use("/api/meetings", meetingsRouter);
+  app.use("/api/tasks", tasksRouter);
+  app.use("/api/messages", messagesRouter);
+  app.use("/api/automations", automationsRouter);
+  app.use("/api/social", socialRouter);
+  app.use("/api/donations", donationsRouter);
+  app.use("/api/events", eventsRouter);
+  app.use("/api/prayer-requests", prayerRouter);
+
+  app.use((_req, res) => {
+    res.status(404).json({ error: "Not found" });
   });
 
-  app.post("/api/tasks", (req, res) => {
-    const task = store.create({ title: req.body?.title, status: req.body?.status });
-    res.status(201).json(task);
-  });
-
-  app.patch("/api/tasks/:id", (req, res) => {
-    const task = store.update(req.params.id, req.body?.status);
-    res.json(task);
-  });
-
-  app.delete("/api/tasks/:id", (req, res) => {
-    store.remove(req.params.id);
-    res.status(204).end();
-  });
-
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    if (err instanceof ValidationError) {
-      return res.status(400).json({ error: err.message });
-    }
-    if (err instanceof NotFoundError) {
-      return res.status(404).json({ error: err.message });
+    if (err instanceof HttpError) {
+      return res.status(err.status).json({ error: err.message });
     }
     // eslint-disable-next-line no-console
     console.error(err);
-    return res.status(500).json({ error: "internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   });
 
   return app;

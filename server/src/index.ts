@@ -1,16 +1,17 @@
 import { createApp } from "./app.js";
-import { TaskStore } from "./tasks.js";
+import { config } from "./config.js";
+import { initSchema } from "./db.js";
+import { ensureSeed } from "./seed.js";
+import { registerSchedules } from "./scheduler.js";
 
-const PORT = Number(process.env.PORT ?? 3001);
+initSchema();
+ensureSeed();
+registerSchedules();
 
-const store = new TaskStore();
-// Seed a couple of tasks so the UI is not empty on first boot.
-store.create({ title: "Welcome to GracedFlow", status: "done" });
-store.create({ title: "Create your first task", status: "todo" });
-
-const app = createApp(store);
-
-app.listen(PORT, () => {
+const app = createApp();
+app.listen(config.port, () => {
   // eslint-disable-next-line no-console
-  console.log(`GracedFlow API listening on http://localhost:${PORT}`);
+  console.log(
+    `${config.church.name} API listening on http://localhost:${config.port}`,
+  );
 });

@@ -3,6 +3,11 @@ dist/
 build/
 coverage/
 
+# local database (SQLite)
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+
 # logs
 *.log
 npm-debug.log*
