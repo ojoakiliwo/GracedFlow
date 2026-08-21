@@ -71,17 +71,35 @@ Built as an npm-workspaces monorepo:
 ## Prerequisites
 - Node.js `>= 20` (developed against Node 22)
 
-## Getting started
+## Run it yourself (view the app locally)
 
-```bash
-npm install        # install all workspaces
-npm run dev        # run API (:3001) and client (:5173) together
-```
+The app runs on your own computer — here is the full path from zero:
 
-Open http://localhost:5173. The API auto-creates and seeds the SQLite database on first
-run.
+1. Install **Node.js 20+** (https://nodejs.org) and **Git**.
+2. Get the code and start it:
+
+   ```bash
+   git clone https://github.com/ojoakiliwo/GracedFlow.git
+   cd GracedFlow
+   git checkout cursor/infinitely-graced-church-system-f8d5   # this branch, until it's merged
+   npm install        # install everything
+   npm run dev        # start API (:3001) + website/app (:5173)
+   ```
+
+3. Open **http://localhost:5173** in your browser.
+   - Public site: `/`, `/about`, `/give`, `/prayer`.
+   - Ministry portal: click **Member Login** (or go to `/login`).
 
 **Demo login:** `admin@igc.church` / `Grace@2024`
+
+The API auto-creates and seeds the SQLite database on first run — no database setup
+needed. Everything (SMS, email, payments, social) works in safe **simulated mode** until
+you add credentials, so you can explore the whole system immediately.
+
+> Deploying for real? Host the API (any Node host) and the built client
+> (`npm run build --workspace client` → static `client/dist`), point the client's
+> `/api` at your API URL, set `APP_URL` to your public site URL, and add the credentials
+> below.
 
 ### Useful commands
 
@@ -102,19 +120,42 @@ Copy `server/.env.example` to `server/.env` to enable real integrations.
 | Auth | `JWT_SECRET`, `JWT_EXPIRES_IN` |
 | SMS (Twilio) | `SMS_PROVIDER=twilio`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` |
 | Email (SMTP) | `EMAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` |
+| Payments (Paystack) | `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `PAYMENT_CURRENCY`, `APP_URL` |
 | Social | `SOCIAL_CONNECTED=facebook,twitter,...` |
-| Giving | `GIVING_BANK_NAME`, `GIVING_ACCOUNT_NAME`, `GIVING_ACCOUNT_NUMBER`, `GIVING_ONLINE_URL` |
+| Giving (bank) | `GIVING_BANK_NAME`, `GIVING_ACCOUNT_NAME`, `GIVING_ACCOUNT_NUMBER`, `GIVING_ONLINE_URL` |
 | Scheduler | `SCHEDULER_ENABLED`, `TZ_NAME` (default `Africa/Lagos`) |
 
-Without these, SMS/email/social run in **dry-run** mode (messages are composed, targeted
-and logged) so everything is fully demonstrable out of the box.
+Without these, SMS/email/payments/social run in **simulated** mode (records are created,
+targeted and logged) so everything is fully demonstrable out of the box. The
+**Settings → Integrations** page shows the live/simulated status of each and lets admins
+send a test SMS/email.
 
-## Notes on external integrations
+## Going live with integrations
 
-To go fully live you only need to add credentials — the adapters are already wired:
-- **Twilio** for real SMS, **SMTP/SendGrid** for real email.
-- Social platform API tokens (Meta, X, YouTube, Telegram, WhatsApp Cloud API).
-- A payment gateway (e.g. Paystack/Flutterwave) can be attached to the giving flow.
+The adapters are already wired — you only add credentials.
+
+### Payments — Paystack
+1. Create a Paystack account and copy your keys from
+   Dashboard → Settings → API Keys & Webhooks.
+2. Set `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, and `APP_URL` (your public site URL),
+   then restart the API. The **Card / Online** giving option now creates a real Paystack
+   checkout; donors are redirected back to `/give/callback` which verifies the payment.
+3. Add a webhook in Paystack pointing to `https://<your-api-host>/api/webhooks/paystack`.
+   Incoming `charge.success` events are signature-verified (HMAC-SHA512) and auto-confirm
+   the donation in the giving ledger.
+
+### SMS — Twilio
+Set `SMS_PROVIDER=twilio`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`.
+Real SMS then sends for single/bulk/segmented messages and the automated reminders.
+
+### Email — SMTP / SendGrid
+Set `EMAIL_PROVIDER=smtp` plus `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`,
+`EMAIL_FROM`. Works with SendGrid, Mailgun, Gmail, etc.
+
+### Social
+Set `SOCIAL_CONNECTED` to the platforms you have API tokens for (Meta/Facebook,
+X/Twitter, Instagram, YouTube, Telegram, WhatsApp Cloud API), and plug the tokens into
+`server/src/comms.ts` (`publishToPlatform`).
 
 ## Cloud Agent environment
 
