@@ -1,143 +1,82 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  createTask,
-  deleteTask,
-  fetchTasks,
-  updateTask,
-  type Task,
-  type TaskStatus,
-} from "./api";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { type ReactNode } from "react";
+import { useAuth } from "./lib/auth";
+import { Spinner } from "./components/ui";
+import Layout from "./components/Layout";
+import PublicLayout from "./components/PublicLayout";
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  todo: "To do",
-  in_progress: "In progress",
-  done: "Done",
-};
+import Home from "./pages/public/Home";
+import About from "./pages/public/About";
+import Give from "./pages/public/Give";
+import Prayer from "./pages/public/Prayer";
+import Login from "./pages/auth/Login";
+import Register from "./pages/auth/Register";
 
-const STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "done"];
+import Dashboard from "./pages/app/Dashboard";
+import Members from "./pages/app/Members";
+import MemberDetail from "./pages/app/MemberDetail";
+import Departments from "./pages/app/Departments";
+import DepartmentRoom from "./pages/app/DepartmentRoom";
+import Projects from "./pages/app/Projects";
+import Meetings from "./pages/app/Meetings";
+import Tasks from "./pages/app/Tasks";
+import Events from "./pages/app/Events";
+import Messages from "./pages/app/Messages";
+import Automations from "./pages/app/Automations";
+import Social from "./pages/app/Social";
+import Giving from "./pages/app/Giving";
+import PrayerRequests from "./pages/app/PrayerRequests";
 
-function nextStatus(status: TaskStatus): TaskStatus {
-  const idx = STATUS_ORDER.indexOf(status);
-  return STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
+function Protected({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading)
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Spinner className="h-8 w-8" />
+      </div>
+    );
+  if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
 }
 
 export default function App() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [title, setTitle] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchTasks()
-      .then(setTasks)
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const stats = useMemo(() => {
-    return {
-      total: tasks.length,
-      done: tasks.filter((t) => t.status === "done").length,
-    };
-  }, [tasks]);
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = title.trim();
-    if (!trimmed) return;
-    setError(null);
-    try {
-      const created = await createTask(trimmed);
-      setTasks((prev) => [created, ...prev]);
-      setTitle("");
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-
-  async function handleCycleStatus(task: Task) {
-    setError(null);
-    try {
-      const updated = await updateTask(task.id, nextStatus(task.status));
-      setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-
-  async function handleDelete(task: Task) {
-    setError(null);
-    try {
-      await deleteTask(task.id);
-      setTasks((prev) => prev.filter((t) => t.id !== task.id));
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-
   return (
-    <div className="app">
-      <header className="hero">
-        <div className="hero__mark" aria-hidden>~</div>
-        <h1>GracedFlow</h1>
-        <p>Track your work, one graceful flow at a time.</p>
-        <div className="hero__stats">
-          <span>
-            <strong>{stats.total}</strong> total
-          </span>
-          <span>
-            <strong>{stats.done}</strong> done
-          </span>
-        </div>
-      </header>
+    <Routes>
+      <Route element={<PublicLayout />}>
+        <Route path="/" element={<Home />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/give" element={<Give />} />
+        <Route path="/prayer" element={<Prayer />} />
+      </Route>
 
-      <main className="panel">
-        <form className="composer" onSubmit={handleCreate}>
-          <input
-            aria-label="New task title"
-            placeholder="What needs to flow today?"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <button type="submit" disabled={!title.trim()}>
-            Add task
-          </button>
-        </form>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
 
-        {error && <p className="error" role="alert">{error}</p>}
+      <Route
+        path="/app"
+        element={
+          <Protected>
+            <Layout />
+          </Protected>
+        }
+      >
+        <Route index element={<Dashboard />} />
+        <Route path="members" element={<Members />} />
+        <Route path="members/:id" element={<MemberDetail />} />
+        <Route path="departments" element={<Departments />} />
+        <Route path="departments/:id" element={<DepartmentRoom />} />
+        <Route path="projects" element={<Projects />} />
+        <Route path="meetings" element={<Meetings />} />
+        <Route path="tasks" element={<Tasks />} />
+        <Route path="events" element={<Events />} />
+        <Route path="messages" element={<Messages />} />
+        <Route path="automations" element={<Automations />} />
+        <Route path="social" element={<Social />} />
+        <Route path="giving" element={<Giving />} />
+        <Route path="prayer" element={<PrayerRequests />} />
+      </Route>
 
-        {loading ? (
-          <p className="muted">Loading tasks…</p>
-        ) : tasks.length === 0 ? (
-          <p className="muted">No tasks yet. Add your first one above.</p>
-        ) : (
-          <ul className="tasks">
-            {tasks.map((task) => (
-              <li key={task.id} className={`task task--${task.status}`}>
-                <button
-                  className={`chip chip--${task.status}`}
-                  onClick={() => handleCycleStatus(task)}
-                  title="Click to change status"
-                >
-                  {STATUS_LABELS[task.status]}
-                </button>
-                <span className="task__title">{task.title}</span>
-                <button
-                  className="task__delete"
-                  onClick={() => handleDelete(task)}
-                  aria-label={`Delete ${task.title}`}
-                >
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </main>
-
-      <footer className="footer">
-        <span>GracedFlow · local development</span>
-      </footer>
-    </div>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
