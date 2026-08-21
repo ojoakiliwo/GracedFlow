@@ -10,9 +10,16 @@ export const config = {
   port: Number(process.env.PORT ?? 3001),
   jwtSecret: process.env.JWT_SECRET ?? "igc-dev-secret-change-in-production",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
+  // Accept the many env-var names Vercel/Neon may use (depending on the chosen
+  // storage prefix) so the connection string is found regardless of setup.
   databaseUrl:
     process.env.DATABASE_URL ??
     process.env.POSTGRES_URL ??
+    process.env.POSTGRES_PRISMA_URL ??
+    process.env.DATABASE_POSTGRES_URL ??
+    process.env.STORAGE_URL ??
+    process.env.STORAGE_POSTGRES_URL ??
+    process.env.NEON_DATABASE_URL ??
     "postgres://igc:igc@127.0.0.1:5432/gracedflow",
   // True when running inside a Vercel serverless function (no always-on process).
   isServerless: !!process.env.VERCEL,
