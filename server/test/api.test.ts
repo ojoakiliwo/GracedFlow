@@ -2,19 +2,22 @@ import { beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 
-// Use an isolated in-memory-ish database file for tests.
-process.env.DB_PATH = ":memory:";
+// Use a dedicated Postgres test database.
+process.env.DATABASE_URL =
+  process.env.TEST_DATABASE_URL ??
+  "postgres://igc:igc@127.0.0.1:5432/gracedflow_test";
 process.env.SCHEDULER_ENABLED = "false";
 
 let app: Express;
 let token: string;
 
 beforeAll(async () => {
-  const { initSchema } = await import("../src/db.js");
+  const { initSchema, resetSchema } = await import("../src/db.js");
   const { seed } = await import("../src/seed.js");
   const { createApp } = await import("../src/app.js");
-  initSchema();
-  seed();
+  await resetSchema();
+  await initSchema();
+  await seed();
   app = createApp();
 
   const login = await request(app)

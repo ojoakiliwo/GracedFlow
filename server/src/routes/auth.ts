@@ -22,8 +22,7 @@ authRouter.post(
   "/login",
   asyncHandler(async (req, res) => {
     const { email, password } = parseBody(loginSchema, req.body);
-    const row = db
-      .prepare("SELECT * FROM members WHERE email = ?")
+    const row = await db.prepare("SELECT * FROM members WHERE email = ?")
       .get(email.toLowerCase()) as
       | { id: string; email: string; role: string; first_name: string; last_name: string; password_hash: string | null; account_status: string }
       | undefined;
@@ -36,7 +35,7 @@ authRouter.post(
     const ok = await verifyPassword(password, row.password_hash);
     if (!ok) throw new HttpError(401, "Invalid email or password");
 
-    db.prepare("UPDATE members SET last_login_at = ? WHERE id = ?").run(nowIso(), row.id);
+    await db.prepare("UPDATE members SET last_login_at = ? WHERE id = ?").run(nowIso(), row.id);
     const user: AuthUser = {
       id: row.id,
       email: row.email,
@@ -62,13 +61,12 @@ authRouter.post(
   "/register",
   asyncHandler(async (req, res) => {
     const input = parseBody(registerSchema, req.body);
-    const existing = db
-      .prepare("SELECT id FROM members WHERE email = ?")
+    const existing = await db.prepare("SELECT id FROM members WHERE email = ?")
       .get(input.email.toLowerCase());
     if (existing) throw new HttpError(409, "An account with this email already exists");
 
     const id = newId("mbr");
-    db.prepare(
+    await db.prepare(
       `INSERT INTO members (id, first_name, last_name, email, phone, password_hash, role, spiritual_class, membership_status, account_status, join_date)
        VALUES (?, ?, ?, ?, ?, ?, 'worker', 'worker', 'new', 'active', ?)`,
     ).run(
@@ -96,8 +94,7 @@ authRouter.get(
   "/me",
   authenticate,
   asyncHandler(async (req, res) => {
-    const row = db
-      .prepare(
+    const row = await db.prepare(
         "SELECT id, first_name, last_name, email, phone, role, spiritual_class, photo_url, last_login_at FROM members WHERE id = ?",
       )
       .get(req.user!.id);

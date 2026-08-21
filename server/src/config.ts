@@ -1,8 +1,4 @@
 import "dotenv/config";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function bool(value: string | undefined, fallback = false): boolean {
   if (value === undefined) return fallback;
@@ -14,8 +10,13 @@ export const config = {
   port: Number(process.env.PORT ?? 3001),
   jwtSecret: process.env.JWT_SECRET ?? "igc-dev-secret-change-in-production",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
-  dbPath:
-    process.env.DB_PATH ?? path.join(__dirname, "..", "data", "gracedflow.db"),
+  databaseUrl:
+    process.env.DATABASE_URL ??
+    process.env.POSTGRES_URL ??
+    "postgres://igc:igc@127.0.0.1:5432/gracedflow",
+  // True when running inside a Vercel serverless function (no always-on process).
+  isServerless: !!process.env.VERCEL,
+  cronSecret: process.env.CRON_SECRET ?? "",
 
   church: {
     name: process.env.CHURCH_NAME ?? "Infinitely Graced Church",

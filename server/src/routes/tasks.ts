@@ -31,8 +31,7 @@ tasksRouter.get(
       params.push(status);
     }
     const where = clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
-    const rows = db
-      .prepare(
+    const rows = await db.prepare(
         `SELECT t.*, d.name AS department_name,
           m.first_name AS assignee_first, m.last_name AS assignee_last
          FROM tasks t
@@ -63,7 +62,7 @@ tasksRouter.post(
   asyncHandler(async (req, res) => {
     const input = parseBody(taskSchema, req.body);
     const id = newId("tsk");
-    db.prepare(
+    await db.prepare(
       `INSERT INTO tasks (id, title, description, department_id, assigned_to, created_by, due_date, priority, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
@@ -78,14 +77,14 @@ tasksRouter.post(
       input.status,
     );
     audit("create", "task", id, req.user);
-    res.status(201).json(db.prepare("SELECT * FROM tasks WHERE id = ?").get(id));
+    res.status(201).json(await db.prepare("SELECT * FROM tasks WHERE id = ?").get(id));
   }),
 );
 
 tasksRouter.put(
   "/:id",
   asyncHandler(async (req, res) => {
-    const existing = db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
+    const existing = await db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
     if (!existing) throw new HttpError(404, "Task not found");
     const input = parseBody(taskSchema.partial(), req.body);
     const map: Record<string, string> = {
@@ -107,8 +106,8 @@ tasksRouter.put(
     }
     sets.push("updated_at = @updatedAt");
     params.updatedAt = nowIso();
-    db.prepare(`UPDATE tasks SET ${sets.join(", ")} WHERE id = @id`).run(params);
-    res.json(db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id));
+    await db.prepare(`UPDATE tasks SET ${sets.join(", ")} WHERE id = @id`).run(params);
+    res.json(await db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id));
   }),
 );
 
@@ -116,7 +115,7 @@ tasksRouter.delete(
   "/:id",
   requireRole("worker"),
   asyncHandler(async (req, res) => {
-    db.prepare("DELETE FROM tasks WHERE id = ?").run(req.params.id);
+    await db.prepare("DELETE FROM tasks WHERE id = ?").run(req.params.id);
     res.status(204).end();
   }),
 );

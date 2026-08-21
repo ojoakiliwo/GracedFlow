@@ -5,10 +5,12 @@ import { createAndSendMessage } from "./messaging.js";
 import { sendEmail, sendSms } from "./comms.js";
 import { newId, nowIso } from "./util.js";
 
-function logRun(job: string, detail: string, recipients: number): void {
-  db.prepare(
-    "INSERT INTO automation_runs (id, job, detail, recipients_count) VALUES (?, ?, ?, ?)",
-  ).run(newId("run"), job, detail, recipients);
+async function logRun(job: string, detail: string, recipients: number): Promise<void> {
+  await db
+    .prepare(
+      "INSERT INTO automation_runs (id, job, detail, recipients_count) VALUES (?, ?, ?, ?)",
+    )
+    .run(newId("run"), job, detail, recipients);
 }
 
 export async function runSundayReminder() {
@@ -19,7 +21,7 @@ export async function runSundayReminder() {
     audienceType: "all",
     category: "auto:sunday_reminder",
   });
-  logRun("sunday_reminder", `Sent to ${summary.sent} deliveries`, summary.recipients);
+  await logRun("sunday_reminder", `Sent to ${summary.sent} deliveries`, summary.recipients);
   return summary;
 }
 
@@ -31,7 +33,7 @@ export async function runPrayerReminder() {
     audienceType: "all",
     category: "auto:prayer_reminder",
   });
-  logRun("prayer_reminder", `Sent to ${summary.sent} deliveries`, summary.recipients);
+  await logRun("prayer_reminder", `Sent to ${summary.sent} deliveries`, summary.recipients);
   return summary;
 }
 
@@ -45,8 +47,8 @@ export async function runCelebrations(dateIso?: string) {
     target.getDate(),
   ).padStart(2, "0")}`;
 
-  const birthdays = resolveCelebrants("date_of_birth", mmdd);
-  const anniversaries = resolveCelebrants("wedding_anniversary", mmdd);
+  const birthdays = await resolveCelebrants("date_of_birth", mmdd);
+  const anniversaries = await resolveCelebrants("wedding_anniversary", mmdd);
   let count = 0;
 
   for (const m of birthdays) {
@@ -66,7 +68,7 @@ export async function runCelebrations(dateIso?: string) {
     count++;
   }
 
-  logRun(
+  await logRun(
     "celebrations",
     `Birthdays: ${birthdays.length}, Anniversaries: ${anniversaries.length}`,
     count,
@@ -82,19 +84,18 @@ interface Celebrant {
   phone: string | null;
 }
 
-function resolveCelebrants(column: string, mmdd: string): Celebrant[] {
-  return db
-    .prepare(
+async function resolveCelebrants(column: string, mmdd: string): Promise<Celebrant[]> {
+  return await db.prepare(
       `SELECT id, first_name, last_name, email, phone FROM members
-       WHERE ${column} IS NOT NULL AND substr(${column}, 6, 5) = ?
+       WHERE ${column} IS NOT NULL AND substring(${column} from 6 for 5) = ?
        AND membership_status != 'inactive'`,
     )
-    .all(mmdd) as Celebrant[];
+    .all<Celebrant>(mmdd);
 }
 
 async function sendPrivate(m: Celebrant, subject: string, body: string): Promise<void> {
   const messageId = newId("msg");
-  db.prepare(
+  await db.prepare(
     `INSERT INTO messages (id, channel, subject, body, audience_type, audience_value, status, recipients_count, category, sent_at)
      VALUES (?, 'both', ?, ?, 'individual', ?, 'sent', 1, 'auto:celebration', ?)`,
   ).run(messageId, subject, body, m.id, nowIso());
@@ -106,7 +107,7 @@ async function sendPrivate(m: Celebrant, subject: string, body: string): Promise
     if (!to) continue;
     const result =
       channel === "sms" ? await sendSms(to, body) : await sendEmail(to, subject, body);
-    db.prepare(
+    await db.prepare(
       `INSERT INTO message_recipients (id, message_id, member_id, channel, to_address, recipient_name, status, provider, sent_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
@@ -124,6 +125,13 @@ async function sendPrivate(m: Celebrant, subject: string, body: string): Promise
 }
 
 export function registerSchedules(): void {
+  if (config.isServerless) {
+    // On serverless (e.g. Vercel) there is no always-on process; automations run
+    // via HTTP cron endpoints (/api/cron/:job) triggered by Vercel Cron instead.
+    // eslint-disable-next-line no-console
+    console.log("[scheduler] serverless mode — using cron endpoints");
+    return;
+  }
   if (!config.scheduler.enabled) {
     // eslint-disable-next-line no-console
     console.log("[scheduler] disabled");

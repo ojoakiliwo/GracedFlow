@@ -10,7 +10,7 @@ export const webhooksRouter = Router();
 webhooksRouter.post(
   "/paystack",
   raw({ type: "*/*" }),
-  (req, res) => {
+  async (req, res) => {
     const signature = req.headers["x-paystack-signature"] as string | undefined;
     const rawBody = req.body as Buffer;
     if (!verifyWebhookSignature(rawBody, signature)) {
@@ -24,13 +24,15 @@ webhooksRouter.post(
     }
 
     if (event.event === "charge.success" && event.data?.reference) {
-      const donation = db
+      const donation = (await db
         .prepare("SELECT id, status FROM donations WHERE reference = ?")
-        .get(event.data.reference) as { id: string; status: string } | undefined;
+        .get(event.data.reference)) as { id: string; status: string } | undefined;
       if (donation && donation.status !== "confirmed") {
-        db.prepare(
-          "UPDATE donations SET status = 'confirmed', method = 'card', confirmed_at = ? WHERE id = ?",
-        ).run(nowIso(), donation.id);
+        await db
+          .prepare(
+            "UPDATE donations SET status = 'confirmed', method = 'card', confirmed_at = ? WHERE id = ?",
+          )
+          .run(nowIso(), donation.id);
         audit("webhook_confirm", "donation", donation.id, undefined, {
           reference: event.data.reference,
         });

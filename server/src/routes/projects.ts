@@ -13,15 +13,13 @@ projectsRouter.get(
   asyncHandler(async (req, res) => {
     const { status } = req.query as Record<string, string>;
     const rows = status
-      ? db
-          .prepare(
+      ? await db.prepare(
             `SELECT p.*, m.first_name AS lead_first, m.last_name AS lead_last
              FROM projects p LEFT JOIN members m ON m.id = p.lead_id
              WHERE p.status = ? ORDER BY p.updated_at DESC`,
           )
           .all(status)
-      : db
-          .prepare(
+      : await db.prepare(
             `SELECT p.*, m.first_name AS lead_first, m.last_name AS lead_last
              FROM projects p LEFT JOIN members m ON m.id = p.lead_id
              ORDER BY p.updated_at DESC`,
@@ -52,7 +50,7 @@ projectsRouter.post(
   asyncHandler(async (req, res) => {
     const input = parseBody(projectSchema, req.body);
     const id = newId("prj");
-    db.prepare(
+    await db.prepare(
       `INSERT INTO projects (id, title, description, category, status, visibility, progress, budget, amount_raised, lead_id, start_date, target_date, completed_date)
        VALUES (@id, @title, @description, @category, @status, @visibility, @progress, @budget, @amountRaised, @leadId, @startDate, @targetDate, @completedDate)`,
     ).run({
@@ -71,7 +69,7 @@ projectsRouter.post(
       completedDate: input.completedDate || null,
     });
     audit("create", "project", id, req.user);
-    res.status(201).json(db.prepare("SELECT * FROM projects WHERE id = ?").get(id));
+    res.status(201).json(await db.prepare("SELECT * FROM projects WHERE id = ?").get(id));
   }),
 );
 
@@ -79,7 +77,7 @@ projectsRouter.put(
   "/:id",
   requireRole("pastor"),
   asyncHandler(async (req, res) => {
-    const existing = db.prepare("SELECT id FROM projects WHERE id = ?").get(req.params.id);
+    const existing = await db.prepare("SELECT id FROM projects WHERE id = ?").get(req.params.id);
     if (!existing) throw new HttpError(404, "Project not found");
     const input = parseBody(projectSchema.partial(), req.body);
     const map: Record<string, string> = {
@@ -106,9 +104,9 @@ projectsRouter.put(
     }
     sets.push("updated_at = @updatedAt");
     params.updatedAt = nowIso();
-    db.prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = @id`).run(params);
+    await db.prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = @id`).run(params);
     audit("update", "project", req.params.id, req.user);
-    res.json(db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id));
+    res.json(await db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id));
   }),
 );
 
@@ -116,7 +114,7 @@ projectsRouter.delete(
   "/:id",
   requireRole("admin"),
   asyncHandler(async (req, res) => {
-    db.prepare("DELETE FROM projects WHERE id = ?").run(req.params.id);
+    await db.prepare("DELETE FROM projects WHERE id = ?").run(req.params.id);
     audit("delete", "project", req.params.id, req.user);
     res.status(204).end();
   }),

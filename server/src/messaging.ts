@@ -18,38 +18,32 @@ export type AudienceType =
   | "individual"
   | "custom";
 
-export function resolveAudience(
+export async function resolveAudience(
   audienceType: AudienceType,
   audienceValue?: string | null,
-): MemberContact[] {
+): Promise<MemberContact[]> {
   const base =
     "SELECT DISTINCT m.id, m.first_name, m.last_name, m.email, m.phone FROM members m";
   switch (audienceType) {
     case "all":
-      return db
-        .prepare(`${base} WHERE m.membership_status != 'inactive'`)
-        .all() as MemberContact[];
+      return await db.prepare(`${base} WHERE m.membership_status != 'inactive'`)
+        .all<MemberContact>();
     case "class":
-      return db
-        .prepare(`${base} WHERE m.spiritual_class = ?`)
-        .all(audienceValue) as MemberContact[];
+      return await db.prepare(`${base} WHERE m.spiritual_class = ?`).all<MemberContact>(audienceValue);
     case "role":
-      return db.prepare(`${base} WHERE m.role = ?`).all(audienceValue) as MemberContact[];
+      return await db.prepare(`${base} WHERE m.role = ?`).all<MemberContact>(audienceValue);
     case "department":
-      return db
-        .prepare(
+      return await db.prepare(
           `${base} JOIN department_members dm ON dm.member_id = m.id WHERE dm.department_id = ?`,
         )
-        .all(audienceValue) as MemberContact[];
+        .all<MemberContact>(audienceValue);
     case "individual":
-      return db.prepare(`${base} WHERE m.id = ?`).all(audienceValue) as MemberContact[];
+      return await db.prepare(`${base} WHERE m.id = ?`).all<MemberContact>(audienceValue);
     case "custom": {
       const ids: string[] = audienceValue ? JSON.parse(audienceValue) : [];
       if (ids.length === 0) return [];
       const placeholders = ids.map(() => "?").join(",");
-      return db
-        .prepare(`${base} WHERE m.id IN (${placeholders})`)
-        .all(...ids) as MemberContact[];
+      return await db.prepare(`${base} WHERE m.id IN (${placeholders})`).all<MemberContact>(...ids);
     }
     default:
       return [];
@@ -88,10 +82,10 @@ export interface SendSummary {
 export async function createAndSendMessage(
   input: CreateMessageInput,
 ): Promise<SendSummary> {
-  const recipients = resolveAudience(input.audienceType, input.audienceValue);
+  const recipients = await resolveAudience(input.audienceType, input.audienceValue);
   const messageId = newId("msg");
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO messages (id, channel, subject, body, audience_type, audience_value, status, recipients_count, category, created_by)
      VALUES (?, ?, ?, ?, ?, ?, 'sending', ?, ?, ?)`,
   ).run(
@@ -123,7 +117,7 @@ export async function createAndSendMessage(
       const to = channel === "sms" ? member.phone : member.email;
       const recipientId = newId("rcpt");
       if (!to) {
-        db.prepare(
+        await db.prepare(
           `INSERT INTO message_recipients (id, message_id, member_id, channel, to_address, recipient_name, status, error)
            VALUES (?, ?, ?, ?, ?, ?, 'skipped', ?)`,
         ).run(
@@ -143,7 +137,7 @@ export async function createAndSendMessage(
           ? await sendSms(to, personalBody)
           : await sendEmail(to, personalSubject, personalBody);
 
-      db.prepare(
+      await db.prepare(
         `INSERT INTO message_recipients (id, message_id, member_id, channel, to_address, recipient_name, status, provider, error, sent_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
@@ -163,7 +157,7 @@ export async function createAndSendMessage(
     }
   }
 
-  db.prepare("UPDATE messages SET status = 'sent', sent_at = ? WHERE id = ?").run(
+  await db.prepare("UPDATE messages SET status = 'sent', sent_at = ? WHERE id = ?").run(
     nowIso(),
     messageId,
   );

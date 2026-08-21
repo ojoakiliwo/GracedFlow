@@ -18,8 +18,7 @@ function slugify(name: string): string {
 departmentsRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
-    const rows = db
-      .prepare(
+    const rows = await db.prepare(
         `SELECT d.*, (SELECT COUNT(*) FROM department_members dm WHERE dm.department_id = d.id) AS member_count
          FROM departments d ORDER BY d.type DESC, d.name`,
       )
@@ -31,10 +30,9 @@ departmentsRouter.get(
 departmentsRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const dept = db.prepare("SELECT * FROM departments WHERE id = ?").get(req.params.id);
+    const dept = await db.prepare("SELECT * FROM departments WHERE id = ?").get(req.params.id);
     if (!dept) throw new HttpError(404, "Department not found");
-    const members = db
-      .prepare(
+    const members = await db.prepare(
         `SELECT m.id, m.first_name, m.last_name, m.email, m.phone, m.role, dm.position
          FROM members m JOIN department_members dm ON dm.member_id = m.id
          WHERE dm.department_id = ? ORDER BY dm.position, m.first_name`,
@@ -56,11 +54,11 @@ departmentsRouter.post(
   asyncHandler(async (req, res) => {
     const input = parseBody(deptSchema, req.body);
     const id = newId("dpt");
-    db.prepare(
+    await db.prepare(
       "INSERT INTO departments (id, name, slug, description, type) VALUES (?, ?, ?, ?, ?)",
     ).run(id, input.name, slugify(input.name), input.description ?? null, input.type);
     audit("create", "department", id, req.user);
-    res.status(201).json(db.prepare("SELECT * FROM departments WHERE id = ?").get(id));
+    res.status(201).json(await db.prepare("SELECT * FROM departments WHERE id = ?").get(id));
   }),
 );
 
@@ -74,16 +72,15 @@ departmentsRouter.post(
   requireRole("worker"),
   asyncHandler(async (req, res) => {
     const input = parseBody(memberSchema, req.body);
-    const existing = db
-      .prepare("SELECT id FROM department_members WHERE department_id = ? AND member_id = ?")
+    const existing = await db.prepare("SELECT id FROM department_members WHERE department_id = ? AND member_id = ?")
       .get(req.params.id, input.memberId);
     if (existing) {
-      db.prepare("UPDATE department_members SET position = ? WHERE id = ?").run(
+      await db.prepare("UPDATE department_members SET position = ? WHERE id = ?").run(
         input.position,
         (existing as { id: string }).id,
       );
     } else {
-      db.prepare(
+      await db.prepare(
         "INSERT INTO department_members (id, department_id, member_id, position) VALUES (?, ?, ?, ?)",
       ).run(newId("dmb"), req.params.id, input.memberId, input.position);
     }
@@ -95,7 +92,7 @@ departmentsRouter.delete(
   "/:id/members/:memberId",
   requireRole("worker"),
   asyncHandler(async (req, res) => {
-    db.prepare(
+    await db.prepare(
       "DELETE FROM department_members WHERE department_id = ? AND member_id = ?",
     ).run(req.params.id, req.params.memberId);
     res.status(204).end();
@@ -106,8 +103,7 @@ departmentsRouter.delete(
 departmentsRouter.get(
   "/:id/room",
   asyncHandler(async (req, res) => {
-    const rows = db
-      .prepare(
+    const rows = await db.prepare(
         `SELECT rm.*, m.first_name, m.last_name FROM room_messages rm
          LEFT JOIN members m ON m.id = rm.member_id
          WHERE rm.department_id = ? ORDER BY rm.created_at ASC LIMIT 200`,
@@ -123,7 +119,7 @@ departmentsRouter.post(
   asyncHandler(async (req, res) => {
     const input = parseBody(roomMsgSchema, req.body);
     const id = newId("rmsg");
-    db.prepare(
+    await db.prepare(
       `INSERT INTO room_messages (id, department_id, member_id, author_name, body)
        VALUES (?, ?, ?, ?, ?)`,
     ).run(
@@ -133,6 +129,6 @@ departmentsRouter.post(
       `${req.user!.first_name} ${req.user!.last_name}`,
       input.body,
     );
-    res.status(201).json(db.prepare("SELECT * FROM room_messages WHERE id = ?").get(id));
+    res.status(201).json(await db.prepare("SELECT * FROM room_messages WHERE id = ?").get(id));
   }),
 );

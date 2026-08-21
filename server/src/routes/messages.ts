@@ -16,8 +16,7 @@ messagesRouter.use(authenticate);
 messagesRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
-    const rows = db
-      .prepare(
+    const rows = await db.prepare(
         `SELECT m.*,
           (SELECT COUNT(*) FROM message_recipients r WHERE r.message_id = m.id AND r.status = 'sent') AS delivered,
           (SELECT COUNT(*) FROM message_recipients r WHERE r.message_id = m.id AND r.status = 'failed') AS failed
@@ -31,10 +30,9 @@ messagesRouter.get(
 messagesRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const message = db.prepare("SELECT * FROM messages WHERE id = ?").get(req.params.id);
+    const message = await db.prepare("SELECT * FROM messages WHERE id = ?").get(req.params.id);
     if (!message) throw new HttpError(404, "Message not found");
-    const recipients = db
-      .prepare(
+    const recipients = await db.prepare(
         "SELECT * FROM message_recipients WHERE message_id = ? ORDER BY created_at",
       )
       .all(req.params.id);
@@ -52,7 +50,7 @@ messagesRouter.post(
   "/preview",
   asyncHandler(async (req, res) => {
     const input = parseBody(audienceSchema, req.body);
-    const members = resolveAudience(
+    const members = await resolveAudience(
       input.audienceType as AudienceType,
       input.audienceValue,
     );

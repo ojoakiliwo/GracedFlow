@@ -73,10 +73,15 @@ Built as an npm-workspaces monorepo:
 
 ## Run it yourself (view the app locally)
 
-The app runs on your own computer — here is the full path from zero:
+1. Install **Node.js 20+** (https://nodejs.org), **Git**, and **PostgreSQL 14+**.
+2. Create a local database and point the app at it:
 
-1. Install **Node.js 20+** (https://nodejs.org) and **Git**.
-2. Get the code and start it:
+   ```bash
+   createdb gracedflow    # or use any Postgres instance
+   export DATABASE_URL="postgres://<user>:<password>@127.0.0.1:5432/gracedflow"
+   ```
+
+3. Get the code and start it:
 
    ```bash
    git clone https://github.com/ojoakiliwo/GracedFlow.git
@@ -86,20 +91,66 @@ The app runs on your own computer — here is the full path from zero:
    npm run dev        # start API (:3001) + website/app (:5173)
    ```
 
-3. Open **http://localhost:5173** in your browser.
+4. Open **http://localhost:5173** in your browser.
    - Public site: `/`, `/about`, `/give`, `/prayer`.
    - Ministry portal: click **Member Login** (or go to `/login`).
 
 **Demo login:** `admin@igc.church` / `Grace@2024`
 
-The API auto-creates and seeds the SQLite database on first run — no database setup
-needed. Everything (SMS, email, payments, social) works in safe **simulated mode** until
-you add credentials, so you can explore the whole system immediately.
+The API auto-creates the schema and seeds demo data on first run. Everything (SMS, email,
+payments, social) works in safe **simulated mode** until you add credentials, so you can
+explore the whole system immediately.
 
-> Deploying for real? Host the API (any Node host) and the built client
-> (`npm run build --workspace client` → static `client/dist`), point the client's
-> `/api` at your API URL, set `APP_URL` to your public site URL, and add the credentials
-> below.
+## Deploy to Vercel
+
+The app is Vercel-ready: the React client is served as static files, the Express API runs
+as a **serverless function** (`api/[...path].ts`), the database is **serverless Postgres**,
+and the automations run via **Vercel Cron**.
+
+### 1. Create a Postgres database
+In the Vercel dashboard → **Storage** → create a **Postgres** database (Neon). Copy its
+connection string — Vercel exposes it as `DATABASE_URL`/`POSTGRES_URL` automatically when
+the store is linked to the project.
+
+### 2. Import the repo
+Vercel dashboard → **Add New… → Project** → import `GracedFlow`. Vercel reads
+`vercel.json` (build command, output dir, functions, cron), so no framework tweaking is
+needed. (CLI alternative: `npm i -g vercel && vercel && vercel --prod`.)
+
+### 3. Set environment variables (Project → Settings → Environment Variables)
+
+| Variable | Notes |
+| --- | --- |
+| `DATABASE_URL` | From your Vercel/Neon Postgres (auto-set if the store is linked) |
+| `JWT_SECRET` | Long random string |
+| `CRON_SECRET` | Long random string — required for the automation endpoints |
+| `APP_URL` | Your production URL, e.g. `https://your-app.vercel.app` |
+| `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY` | For live giving (optional) |
+| `SMS_PROVIDER=twilio`, `TWILIO_*` | For live SMS (optional) |
+| `EMAIL_PROVIDER=smtp`, `SMTP_*` | For live email (optional) |
+| `SOCIAL_CONNECTED` | Connected social platforms (optional) |
+
+### 4. Deploy
+Click **Deploy**. On first request the API creates the schema and seeds demo data. Visit
+your URL — the public site and `/login` (admin@igc.church / Grace@2024) both work.
+
+### 5. Paystack webhook (if using live giving)
+In Paystack → **Settings → Webhooks**, set the URL to
+`https://<your-app>.vercel.app/api/webhooks/paystack`.
+
+### Automations on Vercel Cron
+`vercel.json` schedules three cron jobs (UTC): Sunday-service reminder (Sat 17:00),
+prayer reminder (Wed 05:00) and daily celebrations (06:00) — matching 6 PM / 6 AM / 7 AM
+West Africa Time. Vercel sends `Authorization: Bearer $CRON_SECRET` to
+`/api/cron/:job`, which the endpoint verifies.
+
+> Note: Vercel's **Hobby** plan runs cron jobs at most once per day. For the exact
+> weekly Saturday/Wednesday schedules use the **Pro** plan, or trigger the same endpoints
+> from any external scheduler (GitHub Actions, cron-job.org) with the `CRON_SECRET`
+> bearer token.
+
+> Deploying elsewhere instead? Host the API on any Node host (it self-runs node-cron for
+> automations) and the built client (`client/dist`) on any static host.
 
 ### Useful commands
 

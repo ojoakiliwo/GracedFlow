@@ -13,7 +13,7 @@ prayerRouter.get(
   requireRole("worker"),
   asyncHandler(async (_req, res) => {
     res.json(
-      db.prepare("SELECT * FROM prayer_requests ORDER BY created_at DESC LIMIT 200").all(),
+      await db.prepare("SELECT * FROM prayer_requests ORDER BY created_at DESC LIMIT 200").all(),
     );
   }),
 );
@@ -24,28 +24,28 @@ prayerRouter.put(
   requireRole("worker"),
   asyncHandler(async (req, res) => {
     const input = parseBody(statusSchema, req.body);
-    const existing = db
+    const existing = await db
       .prepare("SELECT id FROM prayer_requests WHERE id = ?")
       .get(req.params.id);
     if (!existing) throw new HttpError(404, "Prayer request not found");
-    db.prepare("UPDATE prayer_requests SET status = ? WHERE id = ?").run(
+    await db.prepare("UPDATE prayer_requests SET status = ? WHERE id = ?").run(
       input.status,
       req.params.id,
     );
-    res.json(db.prepare("SELECT * FROM prayer_requests WHERE id = ?").get(req.params.id));
+    res.json(await db.prepare("SELECT * FROM prayer_requests WHERE id = ?").get(req.params.id));
   }),
 );
 
 // Exposed as a helper for the public router.
-export function createPrayerRequest(input: {
+export async function createPrayerRequest(input: {
   name?: string;
   email?: string;
   phone?: string;
   request: string;
   isPublic?: boolean;
-}): string {
+}): Promise<string> {
   const id = newId("pray");
-  db.prepare(
+  await db.prepare(
     `INSERT INTO prayer_requests (id, name, email, phone, request, is_public)
      VALUES (?, ?, ?, ?, ?, ?)`,
   ).run(

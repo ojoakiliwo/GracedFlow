@@ -33,8 +33,7 @@ publicRouter.get(
   "/events",
   asyncHandler(async (_req, res) => {
     res.json(
-      db
-        .prepare(
+      await db.prepare(
           "SELECT id, title, description, type, starts_at, ends_at, location FROM events WHERE is_public = 1 ORDER BY starts_at ASC",
         )
         .all(),
@@ -46,8 +45,7 @@ publicRouter.get(
   "/projects",
   asyncHandler(async (_req, res) => {
     res.json(
-      db
-        .prepare(
+      await db.prepare(
           "SELECT id, title, description, category, status, progress FROM projects WHERE visibility = 'public' ORDER BY updated_at DESC",
         )
         .all(),
@@ -67,7 +65,7 @@ publicRouter.post(
   "/prayer-requests",
   asyncHandler(async (req, res) => {
     const input = parseBody(prayerSchema, req.body);
-    const id = createPrayerRequest({
+    const id = await createPrayerRequest({
       name: input.name,
       email: input.email || undefined,
       phone: input.phone,
@@ -112,7 +110,7 @@ publicRouter.post(
     const reference = `IGC-${Date.now().toString(36).toUpperCase()}-${Math.floor(
       Math.random() * 1000,
     )}`;
-    db.prepare(
+    await db.prepare(
       `INSERT INTO donations (id, donor_name, donor_email, donor_phone, type, amount, currency, method, reference, status, note, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
     ).run(
@@ -162,8 +160,7 @@ publicRouter.get(
   asyncHandler(async (req, res) => {
     const reference = String(req.query.reference ?? "");
     if (!reference) throw new HttpError(400, "Missing reference");
-    const donation = db
-      .prepare("SELECT * FROM donations WHERE reference = ?")
+    const donation = await db.prepare("SELECT * FROM donations WHERE reference = ?")
       .get(reference) as { id: string; amount: number; type: string; status: string } | undefined;
     if (!donation) throw new HttpError(404, "Donation not found");
 
@@ -173,7 +170,7 @@ publicRouter.get(
 
     const result = await verifyTransaction(reference);
     if (result.status === "success") {
-      db.prepare(
+      await db.prepare(
         "UPDATE donations SET status = 'confirmed', method = 'card', confirmed_at = ? WHERE id = ?",
       ).run(nowIso(), donation.id);
     }

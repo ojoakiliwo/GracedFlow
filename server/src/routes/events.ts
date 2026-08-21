@@ -11,7 +11,7 @@ eventsRouter.use(authenticate);
 eventsRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
-    res.json(db.prepare("SELECT * FROM events ORDER BY starts_at DESC").all());
+    res.json(await db.prepare("SELECT * FROM events ORDER BY starts_at DESC").all());
   }),
 );
 
@@ -32,7 +32,7 @@ eventsRouter.post(
   asyncHandler(async (req, res) => {
     const input = parseBody(eventSchema, req.body);
     const id = newId("evt");
-    db.prepare(
+    await db.prepare(
       `INSERT INTO events (id, title, description, type, starts_at, ends_at, location, is_public, recurrence)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
@@ -47,7 +47,7 @@ eventsRouter.post(
       input.recurrence,
     );
     audit("create", "event", id, req.user);
-    res.status(201).json(db.prepare("SELECT * FROM events WHERE id = ?").get(id));
+    res.status(201).json(await db.prepare("SELECT * FROM events WHERE id = ?").get(id));
   }),
 );
 
@@ -55,7 +55,7 @@ eventsRouter.delete(
   "/:id",
   requireRole("worker"),
   asyncHandler(async (req, res) => {
-    db.prepare("DELETE FROM events WHERE id = ?").run(req.params.id);
+    await db.prepare("DELETE FROM events WHERE id = ?").run(req.params.id);
     res.status(204).end();
   }),
 );

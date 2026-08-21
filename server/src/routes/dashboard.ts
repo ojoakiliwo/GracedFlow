@@ -9,61 +9,61 @@ dashboardRouter.use(authenticate);
 dashboardRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
-    const count = (sql: string, ...params: unknown[]) =>
-      (db.prepare(sql).get(...params) as { c: number }).c;
+    const count = async (sql: string, ...params: unknown[]) =>
+      ((await db.prepare(sql).get(...params)) as { c: number }).c;
 
-    const totalMembers = count("SELECT COUNT(*) AS c FROM members");
-    const newConverts = count(
-      "SELECT COUNT(*) AS c FROM members WHERE spiritual_class = 'new_convert'",
+    const totalMembers = await count("SELECT COUNT(*)::int AS c FROM members");
+    const newConverts = await count(
+      "SELECT COUNT(*)::int AS c FROM members WHERE spiritual_class = 'new_convert'",
     );
-    const workers = count(
-      "SELECT COUNT(*) AS c FROM members WHERE role IN ('worker','pastor','admin','super_admin')",
+    const workers = await count(
+      "SELECT COUNT(*)::int AS c FROM members WHERE role IN ('worker','pastor','admin','super_admin')",
     );
-    const departments = count("SELECT COUNT(*) AS c FROM departments");
+    const departments = await count("SELECT COUNT(*)::int AS c FROM departments");
 
-    const projectsByStatus = db
-      .prepare("SELECT status, COUNT(*) AS count FROM projects GROUP BY status")
+    const projectsByStatus = await db
+      .prepare("SELECT status, COUNT(*)::int AS count FROM projects GROUP BY status")
       .all();
-    const givingConfirmed = db
+    const givingConfirmed = await db
       .prepare(
-        "SELECT COALESCE(SUM(amount),0) AS total, COUNT(*) AS count FROM donations WHERE status = 'confirmed'",
+        "SELECT COALESCE(SUM(amount),0) AS total, COUNT(*)::int AS count FROM donations WHERE status = 'confirmed'",
       )
       .get();
-    const givingPending = count(
-      "SELECT COUNT(*) AS c FROM donations WHERE status = 'pending'",
+    const givingPending = await count(
+      "SELECT COUNT(*)::int AS c FROM donations WHERE status = 'pending'",
     );
 
-    const membersByClass = db
+    const membersByClass = await db
       .prepare(
-        "SELECT spiritual_class, COUNT(*) AS count FROM members GROUP BY spiritual_class ORDER BY count DESC",
+        "SELECT spiritual_class, COUNT(*)::int AS count FROM members GROUP BY spiritual_class ORDER BY count DESC",
       )
       .all();
 
-    const upcomingMeetings = db
+    const upcomingMeetings = await db
       .prepare(
         `SELECT mt.*, d.name AS department_name FROM meetings mt
          LEFT JOIN departments d ON d.id = mt.department_id
-         WHERE mt.scheduled_at >= datetime('now') ORDER BY mt.scheduled_at ASC LIMIT 5`,
+         WHERE mt.scheduled_at >= now() ORDER BY mt.scheduled_at ASC LIMIT 5`,
       )
       .all();
 
-    const openTasks = count("SELECT COUNT(*) AS c FROM tasks WHERE status != 'done'");
-    const newPrayers = count(
-      "SELECT COUNT(*) AS c FROM prayer_requests WHERE status = 'new'",
+    const openTasks = await count("SELECT COUNT(*)::int AS c FROM tasks WHERE status != 'done'");
+    const newPrayers = await count(
+      "SELECT COUNT(*)::int AS c FROM prayer_requests WHERE status = 'new'",
     );
-    const recentMessages = db
+    const recentMessages = await db
       .prepare(
         "SELECT id, subject, channel, audience_type, recipients_count, category, created_at FROM messages ORDER BY created_at DESC LIMIT 5",
       )
       .all();
 
     // Upcoming celebrations in the next 30 days.
-    const celebrations = db
+    const celebrations = (await db
       .prepare(
         `SELECT id, first_name, last_name, date_of_birth, wedding_anniversary FROM members
          WHERE date_of_birth IS NOT NULL OR wedding_anniversary IS NOT NULL`,
       )
-      .all() as {
+      .all()) as {
       id: string;
       first_name: string;
       last_name: string;

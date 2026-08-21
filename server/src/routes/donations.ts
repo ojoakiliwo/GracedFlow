@@ -23,8 +23,7 @@ donationsRouter.get(
       params.push(type);
     }
     const where = clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
-    const rows = db
-      .prepare(
+    const rows = await db.prepare(
         `SELECT d.*, m.first_name AS member_first, m.last_name AS member_last, p.title AS project_title
          FROM donations d
          LEFT JOIN members m ON m.id = d.member_id
@@ -33,8 +32,7 @@ donationsRouter.get(
       )
       .all(...params);
 
-    const totals = db
-      .prepare(
+    const totals = await db.prepare(
         `SELECT type, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total
          FROM donations WHERE status = 'confirmed' GROUP BY type`,
       )
@@ -64,7 +62,7 @@ donationsRouter.post(
   asyncHandler(async (req, res) => {
     const input = parseBody(recordSchema, req.body);
     const id = newId("don");
-    db.prepare(
+    await db.prepare(
       `INSERT INTO donations (id, member_id, donor_name, donor_email, donor_phone, type, amount, currency, method, project_id, reference, status, note, recorded_by, confirmed_at)
        VALUES (@id, @memberId, @donorName, @donorEmail, @donorPhone, @type, @amount, @currency, @method, @projectId, @reference, @status, @note, @recordedBy, @confirmedAt)`,
     ).run({
@@ -85,7 +83,7 @@ donationsRouter.post(
       confirmedAt: input.status === "confirmed" ? nowIso() : null,
     });
     audit("record", "donation", id, req.user, { amount: input.amount, type: input.type });
-    res.status(201).json(db.prepare("SELECT * FROM donations WHERE id = ?").get(id));
+    res.status(201).json(await db.prepare("SELECT * FROM donations WHERE id = ?").get(id));
   }),
 );
 
@@ -93,12 +91,12 @@ donationsRouter.post(
   "/:id/confirm",
   requireRole("worker"),
   asyncHandler(async (req, res) => {
-    const existing = db.prepare("SELECT id FROM donations WHERE id = ?").get(req.params.id);
+    const existing = await db.prepare("SELECT id FROM donations WHERE id = ?").get(req.params.id);
     if (!existing) throw new HttpError(404, "Donation not found");
-    db.prepare(
+    await db.prepare(
       "UPDATE donations SET status = 'confirmed', confirmed_at = ? WHERE id = ?",
     ).run(nowIso(), req.params.id);
     audit("confirm", "donation", req.params.id, req.user);
-    res.json(db.prepare("SELECT * FROM donations WHERE id = ?").get(req.params.id));
+    res.json(await db.prepare("SELECT * FROM donations WHERE id = ?").get(req.params.id));
   }),
 );

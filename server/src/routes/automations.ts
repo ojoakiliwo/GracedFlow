@@ -16,8 +16,7 @@ automationsRouter.use(authenticate);
 automationsRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
-    const runs = db
-      .prepare("SELECT * FROM automation_runs ORDER BY created_at DESC LIMIT 50")
+    const runs = await db.prepare("SELECT * FROM automation_runs ORDER BY created_at DESC LIMIT 50")
       .all();
     res.json({
       schedules: [

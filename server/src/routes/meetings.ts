@@ -13,15 +13,13 @@ meetingsRouter.get(
   asyncHandler(async (req, res) => {
     const { department } = req.query as Record<string, string>;
     const rows = department
-      ? db
-          .prepare(
+      ? await db.prepare(
             `SELECT mt.*, d.name AS department_name FROM meetings mt
              LEFT JOIN departments d ON d.id = mt.department_id
              WHERE mt.department_id = ? ORDER BY mt.scheduled_at DESC`,
           )
           .all(department)
-      : db
-          .prepare(
+      : await db.prepare(
             `SELECT mt.*, d.name AS department_name FROM meetings mt
              LEFT JOIN departments d ON d.id = mt.department_id
              ORDER BY mt.scheduled_at DESC`,
@@ -34,10 +32,9 @@ meetingsRouter.get(
 meetingsRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const meeting = db.prepare("SELECT * FROM meetings WHERE id = ?").get(req.params.id);
+    const meeting = await db.prepare("SELECT * FROM meetings WHERE id = ?").get(req.params.id);
     if (!meeting) throw new HttpError(404, "Meeting not found");
-    const attendees = db
-      .prepare(
+    const attendees = await db.prepare(
         `SELECT ma.status, m.id, m.first_name, m.last_name FROM meeting_attendees ma
          JOIN members m ON m.id = ma.member_id WHERE ma.meeting_id = ?`,
       )
@@ -62,7 +59,7 @@ meetingsRouter.post(
   asyncHandler(async (req, res) => {
     const input = parseBody(meetingSchema, req.body);
     const id = newId("mtg");
-    db.prepare(
+    await db.prepare(
       `INSERT INTO meetings (id, title, description, department_id, scheduled_at, duration_mins, location, link, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
@@ -77,7 +74,7 @@ meetingsRouter.post(
       req.user!.id,
     );
     audit("create", "meeting", id, req.user);
-    res.status(201).json(db.prepare("SELECT * FROM meetings WHERE id = ?").get(id));
+    res.status(201).json(await db.prepare("SELECT * FROM meetings WHERE id = ?").get(id));
   }),
 );
 
@@ -86,16 +83,15 @@ meetingsRouter.post(
   "/:id/rsvp",
   asyncHandler(async (req, res) => {
     const input = parseBody(rsvpSchema, req.body);
-    const existing = db
-      .prepare("SELECT id FROM meeting_attendees WHERE meeting_id = ? AND member_id = ?")
+    const existing = await db.prepare("SELECT id FROM meeting_attendees WHERE meeting_id = ? AND member_id = ?")
       .get(req.params.id, req.user!.id);
     if (existing) {
-      db.prepare("UPDATE meeting_attendees SET status = ? WHERE id = ?").run(
+      await db.prepare("UPDATE meeting_attendees SET status = ? WHERE id = ?").run(
         input.status,
         (existing as { id: string }).id,
       );
     } else {
-      db.prepare(
+      await db.prepare(
         "INSERT INTO meeting_attendees (id, meeting_id, member_id, status) VALUES (?, ?, ?, ?)",
       ).run(newId("att"), req.params.id, req.user!.id, input.status);
     }
@@ -107,7 +103,7 @@ meetingsRouter.delete(
   "/:id",
   requireRole("worker"),
   asyncHandler(async (req, res) => {
-    db.prepare("DELETE FROM meetings WHERE id = ?").run(req.params.id);
+    await db.prepare("DELETE FROM meetings WHERE id = ?").run(req.params.id);
     res.status(204).end();
   }),
 );

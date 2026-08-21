@@ -42,30 +42,30 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
     return next(new HttpError(401, "Authentication required"));
   }
   const token = header.slice("Bearer ".length);
+  let decoded: AuthUser;
   try {
-    const decoded = jwt.verify(token, config.jwtSecret) as AuthUser & {
-      iat: number;
-      exp: number;
-    };
-    const row = db
-      .prepare(
-        "SELECT id, email, role, first_name, last_name, account_status FROM members WHERE id = ?",
-      )
-      .get(decoded.id) as (AuthUser & { account_status: string }) | undefined;
-    if (!row || row.account_status !== "active") {
-      return next(new HttpError(401, "Account is not active"));
-    }
-    req.user = {
-      id: row.id,
-      email: row.email,
-      role: row.role,
-      first_name: row.first_name,
-      last_name: row.last_name,
-    };
-    next();
+    decoded = jwt.verify(token, config.jwtSecret) as AuthUser;
   } catch {
-    next(new HttpError(401, "Invalid or expired session"));
+    return next(new HttpError(401, "Invalid or expired session"));
   }
+  db.prepare(
+    "SELECT id, email, role, first_name, last_name, account_status FROM members WHERE id = ?",
+  )
+    .get<AuthUser & { account_status: string }>(decoded.id)
+    .then((row) => {
+      if (!row || row.account_status !== "active") {
+        return next(new HttpError(401, "Account is not active"));
+      }
+      req.user = {
+        id: row.id,
+        email: row.email,
+        role: row.role,
+        first_name: row.first_name,
+        last_name: row.last_name,
+      };
+      next();
+    })
+    .catch(() => next(new HttpError(401, "Authentication failed")));
 }
 
 export function requireRole(min: Role) {

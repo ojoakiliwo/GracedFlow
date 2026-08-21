@@ -13,16 +13,18 @@ socialRouter.use(authenticate);
 socialRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
-    const posts = db
+    const posts = (await db
       .prepare("SELECT * FROM social_posts ORDER BY created_at DESC LIMIT 100")
-      .all() as { id: string; platforms: string }[];
-    const withTargets = posts.map((p) => ({
-      ...p,
-      platforms: JSON.parse(p.platforms) as string[],
-      targets: db
-        .prepare("SELECT * FROM social_post_targets WHERE post_id = ?")
-        .all(p.id),
-    }));
+      .all()) as { id: string; platforms: string }[];
+    const withTargets = await Promise.all(
+      posts.map(async (p) => ({
+        ...p,
+        platforms: JSON.parse(p.platforms) as string[],
+        targets: await db
+          .prepare("SELECT * FROM social_post_targets WHERE post_id = ?")
+          .all(p.id),
+      })),
+    );
     res.json({ connected: config.social.connected, posts: withTargets });
   }),
 );
@@ -40,7 +42,7 @@ socialRouter.post(
   asyncHandler(async (req, res) => {
     const input = parseBody(postSchema, req.body);
     const id = newId("post");
-    db.prepare(
+    await db.prepare(
       `INSERT INTO social_posts (id, content, media_url, platforms, status, created_by, published_at)
        VALUES (?, ?, ?, ?, 'publishing', ?, NULL)`,
     ).run(
@@ -54,7 +56,7 @@ socialRouter.post(
     let published = 0;
     for (const platform of input.platforms) {
       const result = await publishToPlatform(platform, input.content);
-      db.prepare(
+      await db.prepare(
         `INSERT INTO social_post_targets (id, post_id, platform, status, external_url, error, published_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       ).run(
@@ -68,7 +70,7 @@ socialRouter.post(
       );
       if (result.ok) published++;
     }
-    db.prepare(
+    await db.prepare(
       "UPDATE social_posts SET status = 'published', published_at = ? WHERE id = ?",
     ).run(nowIso(), id);
     audit("publish", "social_post", id, req.user, { platforms: input.platforms });
@@ -80,10 +82,9 @@ socialRouter.post(
 socialRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const post = db.prepare("SELECT * FROM social_posts WHERE id = ?").get(req.params.id);
+    const post = await db.prepare("SELECT * FROM social_posts WHERE id = ?").get(req.params.id);
     if (!post) throw new HttpError(404, "Post not found");
-    const targets = db
-      .prepare("SELECT * FROM social_post_targets WHERE post_id = ?")
+    const targets = await db.prepare("SELECT * FROM social_post_targets WHERE post_id = ?")
       .all(req.params.id);
     res.json({ ...(post as object), targets });
   }),
