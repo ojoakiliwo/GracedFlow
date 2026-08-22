@@ -1,9 +1,15 @@
 /** Live church site. Preview `*.vercel.app` URLs are often locked by Vercel SSO. */
-export const LIVE_APP_ORIGIN = "https://graced-flow.vercel.app";
+export const LIVE_APP_ORIGIN = "https://infinitelygracedlandchurch.com";
+
+const LIVE_HOSTS = new Set([
+  "infinitelygracedlandchurch.com",
+  "www.infinitelygracedlandchurch.com",
+  "graced-flow.vercel.app",
+]);
 
 export function isLockedVercelHost(hostname: string): boolean {
   const host = hostname.toLowerCase().split(":")[0];
-  if (host === "graced-flow.vercel.app") return false;
+  if (LIVE_HOSTS.has(host)) return false;
   if (host === "localhost" || host === "127.0.0.1") return false;
   return host.endsWith(".vercel.app");
 }
