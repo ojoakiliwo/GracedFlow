@@ -6,8 +6,8 @@ import { Button, Field, Input } from "../../components/ui";
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@igc.church");
-  const [password, setPassword] = useState("Grace@2024");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -99,10 +99,6 @@ export default function Login() {
               Create an account
             </Link>
           </p>
-          <div className="mt-6 rounded-xl bg-brand-50 px-4 py-3 text-xs text-brand-700">
-            <p className="font-medium">Demo credentials</p>
-            <p className="mt-1">admin@igc.church · Grace@2024</p>
-          </div>
         </div>
       </div>
     </div>

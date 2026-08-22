@@ -95,7 +95,7 @@ describe("Giving & payments", () => {
       method: "transfer",
     });
     expect(res.body.method).toBe("transfer");
-    expect(res.body.giving.accountNumber).toBeTruthy();
+    expect(res.body.giving).toBeTruthy();
   });
 
   it("rejects a webhook with an invalid signature", async () => {

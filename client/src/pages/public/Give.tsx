@@ -127,7 +127,7 @@ export default function Give() {
           <Card className="p-8">
             {options?.online && (
               <div className="mb-6 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className={`grid gap-3 ${hasBankDetails(options) ? "grid-cols-2" : "grid-cols-1"}`}>
                   <MethodTile
                     active={method === "online"}
                     onClick={() => setMethod("online")}
@@ -135,13 +135,15 @@ export default function Give() {
                     title="Card / Online"
                     subtitle={onlineSubtitle(options)}
                   />
-                  <MethodTile
-                    active={method === "transfer"}
-                    onClick={() => setMethod("transfer")}
-                    icon={<Landmark className="h-5 w-5" />}
-                    title="Bank transfer"
-                    subtitle="Get account details"
-                  />
+                  {hasBankDetails(options) && (
+                    <MethodTile
+                      active={method === "transfer"}
+                      onClick={() => setMethod("transfer")}
+                      icon={<Landmark className="h-5 w-5" />}
+                      title="Bank transfer"
+                      subtitle="Get account details"
+                    />
+                  )}
                 </div>
                 {method === "online" && bothLive(options) && (
                   <div className="grid grid-cols-2 gap-3">
@@ -239,6 +241,11 @@ export default function Give() {
       </section>
     </div>
   );
+}
+
+function hasBankDetails(options: GivingOptions): boolean {
+  const number = options.bank?.accountNumber?.trim() ?? "";
+  return number.length > 0 && number !== "0000000000";
 }
 
 function bothLive(options: GivingOptions): boolean {

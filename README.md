@@ -95,11 +95,13 @@ Built as an npm-workspaces monorepo:
    - Public site: `/`, `/about`, `/give`, `/prayer`.
    - Ministry portal: click **Member Login** (or go to `/login`).
 
-**Demo login:** `admin@igc.church` / `Grace@2024`
+Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` before the first boot (or create the first
+account at `/register` — that person becomes the church administrator). The app
+starts empty: no sample members, gifts, or projects.
 
-The API auto-creates the schema and seeds demo data on first run. Everything (SMS, email,
-payments, social) works in safe **simulated mode** until you add credentials, so you can
-explore the whole system immediately.
+SMS, email, payments and social stay in **simulated mode** until you add live credentials.
+
+To load the old sample church locally only, set `SEED_DEMO=true`.
 
 ## Deploy to Vercel
 
@@ -123,6 +125,7 @@ needed. (CLI alternative: `npm i -g vercel && vercel && vercel --prod`.)
 | --- | --- |
 | `DATABASE_URL` | From your Vercel/Neon Postgres (auto-set if the store is linked) |
 | `JWT_SECRET` | Long random string |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | First church administrator (created on boot) |
 | `CRON_SECRET` | Long random string — required for the automation endpoints |
 | `APP_URL` | Your production URL, e.g. `https://your-app.vercel.app` |
 | `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY` | Flutterwave v4 live giving (optional; webhook hash not required) |
@@ -132,8 +135,9 @@ needed. (CLI alternative: `npm i -g vercel && vercel && vercel --prod`.)
 | `SOCIAL_CONNECTED` | Connected social platforms (optional) |
 
 ### 4. Deploy
-Click **Deploy**. On first request the API creates the schema and seeds demo data. Visit
-your URL — the public site and `/login` (admin@igc.church / Grace@2024) both work.
+Click **Deploy**. On first request the API creates the schema, removes leftover demo
+records, and creates the admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. Visit your URL
+and sign in at `/login`.
 
 ### 5. Payment confirmation
 Flutterwave and Paystack can both be live. Gifts confirm when the donor returns
@@ -170,7 +174,7 @@ Copy `server/.env.example` to `server/.env` to enable real integrations.
 
 | Area | Variables |
 | --- | --- |
-| Auth | `JWT_SECRET`, `JWT_EXPIRES_IN` |
+| Auth | `JWT_SECRET`, `JWT_EXPIRES_IN`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` |
 | SMS (Twilio) | `SMS_PROVIDER=twilio`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` |
 | Email (SMTP) | `EMAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` |
 | Payments (Flutterwave v4) | `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY`, `FLW_ENV`, `PAYMENT_CURRENCY`, `APP_URL` |

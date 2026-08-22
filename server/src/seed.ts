@@ -1,6 +1,49 @@
 import bcrypt from "bcryptjs";
+import { config } from "./config.js";
 import { db, initSchema } from "./db.js";
+import { hashPassword } from "./auth.js";
 import { newId } from "./util.js";
+
+export const DEMO_MEMBER_EMAILS = [
+  "admin@igc.church",
+  "pastor@igc.church",
+  "worker@igc.church",
+];
+
+const DEMO_PROJECT_TITLES = [
+  "Church Auditorium Phase 1",
+  "Community Medical Outreach",
+  "Youth Skill Acquisition Center",
+  "Media Studio Upgrade",
+];
+
+const DEMO_EVENT_TITLES = [
+  "Sunday Celebration Service",
+  "Wednesday Prayer Meeting",
+];
+
+const DEMO_MEETING_TITLES = [
+  "Monthly Workers Meeting",
+  "Choir Rehearsal",
+];
+
+const CHURCH_DEPARTMENTS = [
+  ["Pastoral Team", "pastoral", "Pastors and ministers", "department"],
+  ["Choir & Worship", "choir", "Choristers and worship team", "department"],
+  ["Ushering", "ushering", "Ushers and protocol", "department"],
+  ["Media & Publicity", "media", "Media, sound and social media", "department"],
+  ["Evangelism", "evangelism", "Outreach and soul winning", "department"],
+  ["Children & Teens", "children", "Sunday school and teens", "department"],
+  ["All Workers", "all-workers", "General room for every ministry worker", "general"],
+] as const;
+
+function demoEmailClause(): { sql: string; params: string[] } {
+  const placeholders = DEMO_MEMBER_EMAILS.map(() => "?").join(", ");
+  return {
+    sql: `(lower(email) LIKE '%@example.com' OR lower(email) IN (${placeholders}))`,
+    params: DEMO_MEMBER_EMAILS,
+  };
+}
 
 function mmddThisYear(offsetDays = 0): string {
   const d = new Date();
@@ -17,6 +60,122 @@ export async function ensureSeed(): Promise<void> {
     .get()) as { c: number };
   if (row.c > 0) return;
   await seed();
+}
+
+/** Removes the original demo fixtures so a live church starts from real data. */
+export async function purgeDemoFixtures(): Promise<{ members: number }> {
+  const { sql, params } = demoEmailClause();
+  await db
+    .prepare(
+      `DELETE FROM donations WHERE
+         lower(coalesce(donor_email, '')) LIKE '%@example.com'
+         OR lower(coalesce(donor_email, '')) IN (${DEMO_MEMBER_EMAILS.map(() => "?").join(", ")})
+         OR member_id IN (SELECT id FROM members WHERE ${sql})`,
+    )
+    .run(...DEMO_MEMBER_EMAILS, ...params);
+
+  const demoMembers = (await db
+    .prepare(`SELECT id FROM members WHERE ${sql}`)
+    .all(...params)) as { id: string }[];
+  const ids = demoMembers.map((m) => m.id);
+  if (ids.length) {
+    const idList = ids.map(() => "?").join(", ");
+    await db.prepare(`DELETE FROM messages WHERE created_by IN (${idList})`).run(...ids);
+    await db.prepare(`DELETE FROM social_posts WHERE created_by IN (${idList})`).run(...ids);
+    await db.prepare(`DELETE FROM tasks WHERE created_by IN (${idList}) OR assigned_to IN (${idList})`).run(
+      ...ids,
+      ...ids,
+    );
+    await db.prepare(`DELETE FROM room_messages WHERE member_id IN (${idList})`).run(...ids);
+  }
+
+  const projectTitles = DEMO_PROJECT_TITLES.map(() => "?").join(", ");
+  await db.prepare(`DELETE FROM projects WHERE title IN (${projectTitles})`).run(...DEMO_PROJECT_TITLES);
+  const eventTitles = DEMO_EVENT_TITLES.map(() => "?").join(", ");
+  await db.prepare(`DELETE FROM events WHERE title IN (${eventTitles})`).run(...DEMO_EVENT_TITLES);
+  const meetingTitles = DEMO_MEETING_TITLES.map(() => "?").join(", ");
+  await db.prepare(`DELETE FROM meetings WHERE title IN (${meetingTitles})`).run(...DEMO_MEETING_TITLES);
+
+  await db.prepare(`DELETE FROM members WHERE ${sql}`).run(...params);
+  return { members: ids.length };
+}
+
+export async function ensureChurchStructure(): Promise<void> {
+  for (const [name, slug, description, type] of CHURCH_DEPARTMENTS) {
+    const existing = await db.prepare("SELECT id FROM departments WHERE slug = ?").get(slug);
+    if (existing) continue;
+    await db
+      .prepare("INSERT INTO departments (id, name, slug, description, type) VALUES (?, ?, ?, ?, ?)")
+      .run(newId("dpt"), name, slug, description, type);
+  }
+}
+
+export async function ensureBootstrapAdmin(): Promise<void> {
+  const email = (
+    process.env.ADMIN_EMAIL ||
+    process.env.BOOTSTRAP_ADMIN_EMAIL ||
+    config.bootstrapAdmin.email
+  ).toLowerCase();
+  const password =
+    process.env.ADMIN_PASSWORD ||
+    process.env.BOOTSTRAP_ADMIN_PASSWORD ||
+    config.bootstrapAdmin.password;
+  if (!email || !password) return;
+
+  const existing = await db.prepare("SELECT id FROM members WHERE email = ?").get(email);
+  if (existing) return;
+
+  const id = newId("mbr");
+  await db
+    .prepare(
+      `INSERT INTO members (id, first_name, last_name, email, password_hash, role, spiritual_class, membership_status, account_status, join_date)
+       VALUES (?, ?, ?, ?, ?, 'super_admin', 'leader', 'active', 'active', ?)`,
+    )
+    .run(
+      id,
+      process.env.ADMIN_FIRST_NAME || config.bootstrapAdmin.firstName,
+      process.env.ADMIN_LAST_NAME || config.bootstrapAdmin.lastName,
+      email,
+      await hashPassword(password),
+      new Date().toISOString().slice(0, 10),
+    );
+
+  const pastoral = (await db.prepare("SELECT id FROM departments WHERE slug = 'pastoral'").get()) as
+    | { id: string }
+    | undefined;
+  const workers = (await db.prepare("SELECT id FROM departments WHERE slug = 'all-workers'").get()) as
+    | { id: string }
+    | undefined;
+  if (pastoral) {
+    await db
+      .prepare("INSERT INTO department_members (id, department_id, member_id, position) VALUES (?, ?, ?, ?)")
+      .run(newId("dmb"), pastoral.id, id, "HOD");
+  }
+  if (workers) {
+    await db
+      .prepare("INSERT INTO department_members (id, department_id, member_id, position) VALUES (?, ?, ?, ?)")
+      .run(newId("dmb"), workers.id, id, "member");
+  }
+}
+
+/**
+ * Production boot: strip demo fixtures, keep empty ministry rooms, and create
+ * the real admin from ADMIN_EMAIL / ADMIN_PASSWORD when those are set.
+ * Set SEED_DEMO=true to load the old sample church instead.
+ */
+export async function prepareAppData(): Promise<void> {
+  const seedDemo = ["1", "true", "yes", "on"].includes((process.env.SEED_DEMO ?? "").toLowerCase());
+  if (seedDemo) {
+    await ensureSeed();
+    return;
+  }
+  const purged = await purgeDemoFixtures();
+  await ensureChurchStructure();
+  await ensureBootstrapAdmin();
+  if (purged.members > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[prepare] Removed ${purged.members} demo member(s) and related sample records.`);
+  }
 }
 
 export async function seed(): Promise<void> {

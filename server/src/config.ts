@@ -40,6 +40,14 @@ export const config = {
   // True when running inside a Vercel serverless function (no always-on process).
   isServerless: !!process.env.VERCEL,
   cronSecret: process.env.CRON_SECRET ?? "",
+  // Load the sample church (fake members, gifts, projects) only when explicitly requested.
+  seedDemo: bool(process.env.SEED_DEMO, false),
+  bootstrapAdmin: {
+    email: firstEnv("ADMIN_EMAIL", "BOOTSTRAP_ADMIN_EMAIL"),
+    password: firstEnv("ADMIN_PASSWORD", "BOOTSTRAP_ADMIN_PASSWORD"),
+    firstName: process.env.ADMIN_FIRST_NAME ?? "Church",
+    lastName: process.env.ADMIN_LAST_NAME ?? "Admin",
+  },
 
   church: {
     name: process.env.CHURCH_NAME ?? "Infinitely Graced Church",
@@ -76,9 +84,9 @@ export const config = {
     timezone: process.env.TZ_NAME ?? "Africa/Lagos",
   },
   giving: {
-    bankName: process.env.GIVING_BANK_NAME ?? "First Bank",
-    accountName: process.env.GIVING_ACCOUNT_NAME ?? "Infinitely Graced Church",
-    accountNumber: process.env.GIVING_ACCOUNT_NUMBER ?? "0000000000",
+    bankName: process.env.GIVING_BANK_NAME ?? "",
+    accountName: process.env.GIVING_ACCOUNT_NAME ?? "",
+    accountNumber: process.env.GIVING_ACCOUNT_NUMBER ?? "",
     onlineUrl: process.env.GIVING_ONLINE_URL ?? "",
   },
   payments: {

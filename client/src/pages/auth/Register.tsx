@@ -42,9 +42,9 @@ export default function Register() {
             Infinitely Graced Church
           </span>
         </Link>
-        <h2 className="text-2xl text-ink-900">Create your worker account</h2>
+        <h2 className="text-2xl text-ink-900">Create your account</h2>
         <p className="mt-1 text-sm text-ink-500">
-          Join the ministry portal to receive messages, join rooms and take on tasks.
+          The first account becomes the church administrator. Later signups join as workers.
         </p>
 
         <form onSubmit={submit} className="mt-6 space-y-4">

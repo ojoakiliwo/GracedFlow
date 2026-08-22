@@ -65,10 +65,20 @@ authRouter.post(
       .get(input.email.toLowerCase());
     if (existing) throw new HttpError(409, "An account with this email already exists");
 
+    const admins = (await db
+      .prepare(
+        "SELECT COUNT(*)::int AS c FROM members WHERE role IN ('admin', 'super_admin')",
+      )
+      .get()) as { c: number };
+    const isFirstAdmin = admins.c === 0;
+    const role = isFirstAdmin ? "super_admin" : "worker";
+    const spiritualClass = isFirstAdmin ? "leader" : "worker";
+    const membershipStatus = isFirstAdmin ? "active" : "new";
+
     const id = newId("mbr");
     await db.prepare(
       `INSERT INTO members (id, first_name, last_name, email, phone, password_hash, role, spiritual_class, membership_status, account_status, join_date)
-       VALUES (?, ?, ?, ?, ?, ?, 'worker', 'worker', 'new', 'active', ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
     ).run(
       id,
       input.firstName,
@@ -76,12 +86,15 @@ authRouter.post(
       input.email.toLowerCase(),
       input.phone ?? null,
       await hashPassword(input.password),
+      role,
+      spiritualClass,
+      membershipStatus,
       nowIso().slice(0, 10),
     );
     const user: AuthUser = {
       id,
       email: input.email.toLowerCase(),
-      role: "worker",
+      role,
       first_name: input.firstName,
       last_name: input.lastName,
     };
