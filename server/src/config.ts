@@ -98,7 +98,9 @@ export const config = {
     smtpPort: Number(process.env.SMTP_PORT ?? 587),
     smtpUser: process.env.SMTP_USER,
     smtpPass: process.env.SMTP_PASS,
-    from: process.env.EMAIL_FROM ?? "Infinitely Graced Church <noreply@igc.church>",
+    from:
+      process.env.EMAIL_FROM ??
+      "Infinitely Graced Church <noreply@infinitelygracedchurch.com>",
   },
   social: {
     // Comma separated list of platforms that have credentials configured.

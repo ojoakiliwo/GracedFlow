@@ -55,7 +55,7 @@ settingsRouter.get(
           live: emailIsConfigured(),
           detail: emailIsConfigured()
             ? `Live · ${process.env.SMTP_HOST}`
-            : "Simulated — add SMTP_HOST, SMTP_USER, SMTP_PASS to go live",
+            : "Simulated — add SMTP_HOST, SMTP_USER, SMTP_PASS for @infinitelygracedchurch.com",
         },
         {
           key: "payments",
