@@ -28,6 +28,7 @@ describe("Giving & payments", () => {
     // No live payment keys in tests -> simulated.
     expect(res.body.onlineLive).toBe(false);
     expect(res.body.provider).toBe("dryrun");
+    expect(res.body.providers).toEqual({ flutterwave: false, paystack: false });
   });
 
   it("starts an online gift and returns an authorization URL", async () => {
@@ -41,7 +42,36 @@ describe("Giving & payments", () => {
     expect(res.status).toBe(201);
     expect(res.body.method).toBe("online");
     expect(res.body.authorizationUrl).toContain("/give/callback");
+    expect(res.body.authorizationUrl).toContain("provider=dryrun");
     expect(res.body.reference).toMatch(/^IGC-/);
+    expect(res.body.provider).toBe("dryrun");
+  });
+
+  it("defaults checkout to dryrun when neither gateway has keys", async () => {
+    const { livePaymentProviders, resolveCheckoutProvider } = await import("../src/payments.js");
+    expect(livePaymentProviders()).toEqual([]);
+    expect(resolveCheckoutProvider("paystack")).toBe("dryrun");
+    expect(resolveCheckoutProvider("flutterwave")).toBe("dryrun");
+  });
+
+  it("accepts an explicit Paystack or Flutterwave choice and still simulates without keys", async () => {
+    const paystack = await request(app).post("/api/public/give").send({
+      type: "tithe",
+      amount: 1000,
+      method: "online",
+      provider: "paystack",
+    });
+    expect(paystack.status).toBe(201);
+    expect(paystack.body.provider).toBe("dryrun");
+
+    const flutterwave = await request(app).post("/api/public/give").send({
+      type: "tithe",
+      amount: 1000,
+      method: "online",
+      provider: "flutterwave",
+    });
+    expect(flutterwave.status).toBe(201);
+    expect(flutterwave.body.provider).toBe("dryrun");
   });
 
   it("verifies a simulated online gift and confirms it", async () => {

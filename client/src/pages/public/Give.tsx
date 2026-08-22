@@ -5,11 +5,14 @@ import { useApi } from "../../lib/useApi";
 import { Button, Card, Field, Input, Select, Spinner } from "../../components/ui";
 import { naira } from "../../lib/format";
 
+type CheckoutProvider = "paystack" | "flutterwave" | "dryrun";
+
 interface GivingOptions {
   currency: string;
   online: boolean;
   onlineLive: boolean;
-  provider?: "paystack" | "flutterwave" | "dryrun";
+  provider?: CheckoutProvider;
+  providers?: { flutterwave: boolean; paystack: boolean };
   bank: {
     bankName: string;
     accountName: string;
@@ -35,6 +38,7 @@ const TYPES = [
 export default function Give() {
   const { data: options, loading } = useApi<GivingOptions>("/public/giving-options");
   const [method, setMethod] = useState<"online" | "transfer">("online");
+  const [checkout, setCheckout] = useState<CheckoutProvider | "">("");
   const [form, setForm] = useState({
     donorName: "",
     donorEmail: "",
@@ -55,6 +59,7 @@ export default function Give() {
         ...form,
         amount: Number(form.amount),
         method,
+        provider: method === "online" && checkout ? checkout : undefined,
       });
       if (res.method === "online" && res.authorizationUrl) {
         // Hand off to Flutterwave / Paystack hosted checkout (or simulated callback).
@@ -121,27 +126,41 @@ export default function Give() {
         ) : (
           <Card className="p-8">
             {options?.online && (
-              <div className="mb-6 grid grid-cols-2 gap-3">
-                <MethodTile
-                  active={method === "online"}
-                  onClick={() => setMethod("online")}
-                  icon={<CreditCard className="h-5 w-5" />}
-                  title="Card / Online"
-                  subtitle={
-                    options.onlineLive
-                      ? options.provider === "flutterwave"
-                        ? "Secured by Flutterwave"
-                        : "Secured by Paystack"
-                      : "Instant & secure"
-                  }
-                />
-                <MethodTile
-                  active={method === "transfer"}
-                  onClick={() => setMethod("transfer")}
-                  icon={<Landmark className="h-5 w-5" />}
-                  title="Bank transfer"
-                  subtitle="Get account details"
-                />
+              <div className="mb-6 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <MethodTile
+                    active={method === "online"}
+                    onClick={() => setMethod("online")}
+                    icon={<CreditCard className="h-5 w-5" />}
+                    title="Card / Online"
+                    subtitle={onlineSubtitle(options)}
+                  />
+                  <MethodTile
+                    active={method === "transfer"}
+                    onClick={() => setMethod("transfer")}
+                    icon={<Landmark className="h-5 w-5" />}
+                    title="Bank transfer"
+                    subtitle="Get account details"
+                  />
+                </div>
+                {method === "online" && bothLive(options) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <MethodTile
+                      active={checkout === "flutterwave" || (!checkout && options.provider !== "paystack")}
+                      onClick={() => setCheckout("flutterwave")}
+                      icon={<CreditCard className="h-5 w-5" />}
+                      title="Flutterwave"
+                      subtitle="Cards, transfer, USSD"
+                    />
+                    <MethodTile
+                      active={checkout === "paystack" || (!checkout && options.provider === "paystack")}
+                      onClick={() => setCheckout("paystack")}
+                      icon={<CreditCard className="h-5 w-5" />}
+                      title="Paystack"
+                      subtitle="Cards & bank"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -220,6 +239,18 @@ export default function Give() {
       </section>
     </div>
   );
+}
+
+function bothLive(options: GivingOptions): boolean {
+  return !!options.providers?.flutterwave && !!options.providers?.paystack;
+}
+
+function onlineSubtitle(options: GivingOptions): string {
+  if (!options.onlineLive) return "Instant & secure";
+  if (bothLive(options)) return "Choose Flutterwave or Paystack";
+  if (options.providers?.flutterwave) return "Secured by Flutterwave";
+  if (options.providers?.paystack) return "Secured by Paystack";
+  return "Instant & secure";
 }
 
 function MethodTile({

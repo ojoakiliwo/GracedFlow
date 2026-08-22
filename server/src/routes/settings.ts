@@ -8,26 +8,22 @@ import { HttpError } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 
 function paymentsIntegrationName(): string {
-  if (isFlutterwaveLive() || config.payments.provider === "flutterwave") {
-    return "Payments (Flutterwave v4)";
-  }
-  if (isPaystackLive() || config.payments.provider === "paystack") {
-    return "Payments (Paystack)";
-  }
+  const flw = isFlutterwaveLive();
+  const paystack = isPaystackLive();
+  if (flw && paystack) return "Payments (Flutterwave + Paystack)";
+  if (flw || config.payments.provider === "flutterwave") return "Payments (Flutterwave v4)";
+  if (paystack || config.payments.provider === "paystack") return "Payments (Paystack)";
   return "Payments";
 }
 
 function paymentsIntegrationDetail(): string {
-  if (isFlutterwaveLive()) {
-    return `Live · Flutterwave ${config.payments.flutterwaveEnv} · ${config.payments.currency} · confirms on checkout return`;
+  const parts: string[] = [];
+  if (isFlutterwaveLive()) parts.push(`Flutterwave ${config.payments.flutterwaveEnv}`);
+  if (isPaystackLive()) parts.push("Paystack");
+  if (parts.length) {
+    return `Live · ${parts.join(" + ")} · ${config.payments.currency} · confirms on checkout return`;
   }
-  if (isPaystackLive()) {
-    return `Live · ${config.payments.currency}`;
-  }
-  if (config.payments.provider === "flutterwave") {
-    return "Simulated — add FLW_CLIENT_ID and FLW_CLIENT_SECRET to accept real payments";
-  }
-  return "Simulated — add Flutterwave v4 (FLW_CLIENT_ID + FLW_CLIENT_SECRET) or PAYSTACK_SECRET_KEY";
+  return "Simulated — add Flutterwave (FLW_CLIENT_ID + FLW_CLIENT_SECRET) and/or PAYSTACK_SECRET_KEY";
 }
 
 export const settingsRouter = Router();

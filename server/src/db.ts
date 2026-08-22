@@ -342,5 +342,7 @@ export async function initSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_support_member ON support_records(member_id);
     CREATE INDEX IF NOT EXISTS idx_msg_recipients_msg ON message_recipients(message_id);
     CREATE INDEX IF NOT EXISTS idx_room_messages_dept ON room_messages(department_id);
+
+    ALTER TABLE donations ADD COLUMN IF NOT EXISTS provider TEXT;
   `);
 }

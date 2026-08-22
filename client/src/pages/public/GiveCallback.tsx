@@ -25,6 +25,7 @@ export default function GiveCallback() {
   const [params] = useSearchParams();
   const reference = firstParam(params, "reference", "trxref", "tx_ref");
   const chargeId = firstParam(params, "id", "transaction_id", "charge_id", "chargeId");
+  const provider = firstParam(params, "provider");
   const redirectHint = (params.get("status") ?? "").toLowerCase();
   const [state, setState] = useState<"loading" | VerifyResult["status"]>("loading");
   const [result, setResult] = useState<VerifyResult | null>(null);
@@ -37,6 +38,7 @@ export default function GiveCallback() {
     }
     const qs = new URLSearchParams({ reference });
     if (chargeId) qs.set("chargeId", chargeId);
+    if (provider) qs.set("provider", provider);
     try {
       const r = await api<VerifyResult>(`/public/give/verify?${qs.toString()}`);
       setResult(r);
@@ -62,7 +64,7 @@ export default function GiveCallback() {
     void confirm(0);
     // Intentionally run once when the donor lands from checkout.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reference, chargeId]);
+  }, [reference, chargeId, provider]);
 
   async function checkAgain() {
     setChecking(true);

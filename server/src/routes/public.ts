@@ -5,7 +5,12 @@ import { config } from "../config.js";
 import { HttpError, newId, nowIso } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 import { createPrayerRequest } from "./prayer.js";
-import { initializeTransaction, isOnlineLive, verifyTransaction } from "../payments.js";
+import {
+  initializeTransaction,
+  isOnlineLive,
+  livePaymentProviders,
+  verifyTransaction,
+} from "../payments.js";
 
 export const publicRouter = Router();
 
@@ -80,14 +85,16 @@ publicRouter.post(
 publicRouter.get(
   "/giving-options",
   asyncHandler(async (_req, res) => {
+    const providers = livePaymentProviders();
     res.json({
       currency: config.payments.currency,
-      online:
-        config.payments.provider === "paystack" ||
-        config.payments.provider === "flutterwave" ||
-        config.payments.provider === "dryrun",
+      online: true,
       onlineLive: isOnlineLive(),
       provider: config.payments.provider,
+      providers: {
+        flutterwave: providers.includes("flutterwave"),
+        paystack: providers.includes("paystack"),
+      },
       paystackPublicKey: config.payments.paystackPublicKey || null,
       bank: config.giving,
     });
@@ -103,6 +110,7 @@ const giveSchema = z.object({
   type: z.string().default("offering"),
   amount: z.number().positive(),
   method: z.enum(["online", "transfer"]).default("online"),
+  provider: z.enum(["flutterwave", "paystack", "dryrun"]).optional(),
   note: z.string().optional(),
 });
 
@@ -114,9 +122,44 @@ publicRouter.post(
     const reference = `IGC-${Date.now().toString(36).toUpperCase()}-${Math.floor(
       Math.random() * 1000,
     )}`;
+    if (input.method === "online") {
+      const init = await initializeTransaction({
+        email: input.donorEmail || "giving@infinitelygraced.church",
+        amountMajor: input.amount,
+        reference,
+        customerName: input.donorName,
+        provider: input.provider,
+        metadata: { donationId: id, type: input.type, donorName: input.donorName },
+      });
+      await db.prepare(
+        `INSERT INTO donations (id, donor_name, donor_email, donor_phone, type, amount, currency, method, reference, status, note, provider, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+      ).run(
+        id,
+        input.donorName ?? null,
+        input.donorEmail || null,
+        input.donorPhone ?? null,
+        input.type,
+        input.amount,
+        config.payments.currency,
+        input.method,
+        reference,
+        input.note ?? null,
+        init.provider,
+        nowIso(),
+      );
+      return void res.status(201).json({
+        id,
+        reference,
+        method: "online",
+        provider: init.provider,
+        authorizationUrl: init.authorizationUrl,
+      });
+    }
+
     await db.prepare(
-      `INSERT INTO donations (id, donor_name, donor_email, donor_phone, type, amount, currency, method, reference, status, note, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+      `INSERT INTO donations (id, donor_name, donor_email, donor_phone, type, amount, currency, method, reference, status, note, provider, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
     ).run(
       id,
       input.donorName ?? null,
@@ -128,25 +171,9 @@ publicRouter.post(
       input.method,
       reference,
       input.note ?? null,
+      null,
       nowIso(),
     );
-
-    if (input.method === "online") {
-      const init = await initializeTransaction({
-        email: input.donorEmail || "giving@infinitelygraced.church",
-        amountMajor: input.amount,
-        reference,
-        customerName: input.donorName,
-        metadata: { donationId: id, type: input.type, donorName: input.donorName },
-      });
-      return void res.status(201).json({
-        id,
-        reference,
-        method: "online",
-        provider: init.provider,
-        authorizationUrl: init.authorizationUrl,
-      });
-    }
 
     res.status(201).json({
       id,
@@ -167,7 +194,13 @@ publicRouter.get(
     const reference = String(req.query.reference ?? req.query.tx_ref ?? req.query.trxref ?? "");
     if (!reference) throw new HttpError(400, "Missing reference");
     const donation = await db.prepare("SELECT * FROM donations WHERE reference = ?")
-      .get(reference) as { id: string; amount: number; type: string; status: string } | undefined;
+      .get(reference) as {
+        id: string;
+        amount: number;
+        type: string;
+        status: string;
+        provider?: string | null;
+      } | undefined;
     if (!donation) throw new HttpError(404, "Donation not found");
 
     if (donation.status === "confirmed") {
@@ -177,8 +210,10 @@ publicRouter.get(
     const chargeId = String(
       req.query.chargeId ?? req.query.id ?? req.query.transaction_id ?? req.query.charge_id ?? "",
     );
+    const provider = String(req.query.provider ?? donation.provider ?? "");
     const result = await verifyTransaction(reference, {
       chargeId: chargeId || undefined,
+      provider: provider || undefined,
     });
     if (result.status === "success") {
       await db.prepare(

@@ -126,7 +126,7 @@ needed. (CLI alternative: `npm i -g vercel && vercel && vercel --prod`.)
 | `CRON_SECRET` | Long random string — required for the automation endpoints |
 | `APP_URL` | Your production URL, e.g. `https://your-app.vercel.app` |
 | `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY` | Flutterwave v4 live giving (optional; webhook hash not required) |
-| `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY` | Paystack giving (optional alternative) |
+| `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY` | Paystack giving (optional; can be live together with Flutterwave) |
 | `SMS_PROVIDER=twilio`, `TWILIO_*` | For live SMS (optional) |
 | `EMAIL_PROVIDER=smtp`, `SMTP_*` | For live email (optional) |
 | `SOCIAL_CONNECTED` | Connected social platforms (optional) |
@@ -136,13 +136,9 @@ Click **Deploy**. On first request the API creates the schema and seeds demo dat
 your URL — the public site and `/login` (admin@igc.church / Grace@2024) both work.
 
 ### 5. Payment confirmation
-Flutterwave gifts confirm when the donor is redirected back to `/give/callback` —
-the API re-queries the charge. A webhook is **not required**, so you can keep
-using the same Flutterwave account/webhook on another project.
-
-If this app *does* own the Flutterwave webhook later, point it at
-`https://<your-app>.vercel.app/api/webhooks/flutterwave` and set `FLW_SECRET_HASH`.
-Paystack (if used) still uses `https://<your-app>.vercel.app/api/webhooks/paystack`.
+Flutterwave and Paystack can both be live. Gifts confirm when the donor returns
+to `/give/callback` — the API re-queries that gateway. Webhooks are **not
+required**, so you can keep each account’s webhook pointed at another project.
 
 ### Automations on Vercel Cron
 `vercel.json` schedules three cron jobs (UTC): Sunday-service reminder (Sat 17:00),
@@ -220,14 +216,15 @@ The encryption key is stored for Flutterwave's AES-256-GCM card encryption. Host
 checkout (this app's giving page) never sends card data through our server, so
 OAuth (Client ID + Client Secret) is what actually activates live payments.
 
-### Payments — Paystack
-1. Create a Paystack account and copy your keys from
-   Dashboard → Settings → API Keys & Webhooks.
-2. Set `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `PAYMENT_PROVIDER=paystack`,
-   and `APP_URL` (your public site URL), then restart the API.
-3. Add a webhook in Paystack pointing to `https://<your-api-host>/api/webhooks/paystack`.
-   Incoming `charge.success` events are signature-verified (HMAC-SHA512) and auto-confirm
-   the donation in the giving ledger.
+### Payments — Paystack (can run alongside Flutterwave)
+1. Copy your keys from Paystack → Settings → API Keys & Webhooks.
+2. Set `PAYSTACK_SECRET_KEY` and `PAYSTACK_PUBLIC_KEY` on this app (plus the
+   Flutterwave vars if you want both). Restart the API. Do **not** set
+   `PAYMENT_PROVIDER=paystack` unless you want Paystack as the default tile —
+   both stay available whenever their keys are present.
+3. After payment, Paystack sends the donor back to `/give/callback`, which
+   verifies the transaction. **Leave the webhook on the other project** if that
+   account already uses one. You do not need `/api/webhooks/paystack` here.
 
 ### SMS — Twilio
 Set `SMS_PROVIDER=twilio`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`.

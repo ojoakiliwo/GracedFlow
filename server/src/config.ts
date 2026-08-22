@@ -82,8 +82,8 @@ export const config = {
     onlineUrl: process.env.GIVING_ONLINE_URL ?? "",
   },
   payments: {
-    // Flutterwave v4 (Client ID + Secret) or Paystack activate automatically
-    // when credentials are present; otherwise giving runs in simulated mode.
+    // Default checkout when the donor does not pick a gateway. Flutterwave and
+    // Paystack can both be live at once when their keys are set.
     provider: resolvePaymentProvider(),
     currency: process.env.PAYMENT_CURRENCY ?? "NGN",
     paystackSecretKey: process.env.PAYSTACK_SECRET_KEY ?? "",

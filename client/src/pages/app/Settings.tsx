@@ -154,12 +154,12 @@ export default function Settings() {
                   <code>SMTP_HOST</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>
                 </li>
                 <li>
-                  <strong>Payments (Flutterwave v4):</strong>{" "}
+                  <strong>Payments:</strong> Flutterwave{" "}
                   <code>FLW_CLIENT_ID</code>, <code>FLW_CLIENT_SECRET</code>,{" "}
-                  <code>FLW_ENCRYPTION_KEY</code>, <code>FLW_ENV=live</code>.
-                  Gifts confirm when the donor returns from checkout — a
-                  webhook is optional. (Or Paystack:{" "}
-                  <code>PAYSTACK_SECRET_KEY</code>, <code>PAYSTACK_PUBLIC_KEY</code>)
+                  <code>FLW_ENCRYPTION_KEY</code> and/or Paystack{" "}
+                  <code>PAYSTACK_SECRET_KEY</code>, <code>PAYSTACK_PUBLIC_KEY</code>.
+                  Both can be live together. Gifts confirm on checkout return —
+                  you can keep each account’s webhook on the other project.
                 </li>
                 <li>
                   <strong>Social:</strong> <code>SOCIAL_CONNECTED=facebook,twitter,...</code>
