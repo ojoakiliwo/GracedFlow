@@ -18,6 +18,25 @@ function hasFlutterwaveCreds(): boolean {
     firstEnv("FLW_CLIENT_SECRET", "FLUTTERWAVE_CLIENT_SECRET"));
 }
 
+export function resolveSmsProvider(): "bulksmsnigeria" | "termii" | "twilio" | "dryrun" {
+  const explicit = process.env.SMS_PROVIDER;
+  if (explicit === "dryrun") return "dryrun";
+  if (explicit === "bulksmsnigeria" || explicit === "termii" || explicit === "twilio") {
+    return explicit;
+  }
+  if (firstEnv("BULKSMS_API_TOKEN", "BULKSMSNIGERIA_API_TOKEN")) return "bulksmsnigeria";
+  if (process.env.TERMII_API_KEY) return "termii";
+  if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM) {
+    return "twilio";
+  }
+  return "dryrun";
+}
+
+export function emailIsConfigured(): boolean {
+  if ((process.env.EMAIL_PROVIDER ?? "").toLowerCase() === "dryrun") return false;
+  return !!(process.env.SMTP_HOST && (process.env.SMTP_USER || process.env.SMTP_PASS));
+}
+
 function resolvePaymentProvider(): "flutterwave" | "paystack" | "dryrun" {
   const explicit = process.env.PAYMENT_PROVIDER;
   if (explicit === "flutterwave" || explicit === "paystack" || explicit === "dryrun") {
@@ -58,13 +77,23 @@ export const config = {
   // External providers run in "dry-run" mode unless real credentials are set.
   // Every message is still composed, targeted and recorded in the outbox.
   sms: {
-    provider: process.env.SMS_PROVIDER ?? "dryrun", // "twilio" | "dryrun"
+    get provider() {
+      return resolveSmsProvider();
+    },
     twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
     twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,
     twilioFrom: process.env.TWILIO_FROM,
+    bulkSmsToken: firstEnv("BULKSMS_API_TOKEN", "BULKSMSNIGERIA_API_TOKEN"),
+    bulkSmsSender: process.env.BULKSMS_SENDER_ID || process.env.CHURCH_SHORT_NAME || "IGC",
+    bulkSmsGateway: process.env.BULKSMS_GATEWAY || "direct-corporate",
+    termiiApiKey: process.env.TERMII_API_KEY ?? "",
+    termiiSender: process.env.TERMII_SENDER_ID || process.env.CHURCH_SHORT_NAME || "IGC",
+    termiiChannel: process.env.TERMII_CHANNEL || "generic",
   },
   email: {
-    provider: process.env.EMAIL_PROVIDER ?? "dryrun", // "smtp" | "dryrun"
+    get provider() {
+      return emailIsConfigured() ? "smtp" : "dryrun";
+    },
     smtpHost: process.env.SMTP_HOST,
     smtpPort: Number(process.env.SMTP_PORT ?? 587),
     smtpUser: process.env.SMTP_USER,

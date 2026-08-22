@@ -1,4 +1,4 @@
-import { sendEmail, sendSms, sendWhatsApp } from "./comms.js";
+import { sendEmail, sendSms } from "./comms.js";
 import { config } from "./config.js";
 import { toE164 } from "./util.js";
 
@@ -13,9 +13,7 @@ async function deliverToMember(
 ): Promise<void> {
   const jobs: Promise<unknown>[] = [];
   if (member.phone) {
-    const dest = toE164(member.phone);
-    jobs.push(sendSms(dest, body));
-    jobs.push(sendWhatsApp(dest, body));
+    jobs.push(sendSms(toE164(member.phone), body));
   }
   if (member.email) {
     jobs.push(sendEmail(member.email, subject, body));

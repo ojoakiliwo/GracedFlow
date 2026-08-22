@@ -70,9 +70,8 @@ describe("Member records vs portal accounts", () => {
     expect(again.status).toBe(409);
   });
 
-  it("notifies the assignee by SMS, WhatsApp and email when a task is given", async () => {
+  it("notifies the assignee by SMS and email when a task is given", async () => {
     const sms = vi.spyOn(comms, "sendSms").mockResolvedValue({ ok: true, provider: "test" });
-    const wa = vi.spyOn(comms, "sendWhatsApp").mockResolvedValue({ ok: true, provider: "test" });
     const email = vi.spyOn(comms, "sendEmail").mockResolvedValue({ ok: true, provider: "test" });
     const created = await request(app)
       .post("/api/members")
@@ -99,10 +98,8 @@ describe("Member records vs portal accounts", () => {
     const smsBody = sms.mock.calls.map((c) => String(c[1])).find((b) => b.includes("Prepare Sunday ushering"));
     expect(smsBody).toBeTruthy();
     expect(smsBody).toContain("/login");
-    expect(wa.mock.calls.some((c) => String(c[1]).includes("Prepare Sunday ushering"))).toBe(true);
     expect(email.mock.calls.some((c) => String(c[1]).includes("New task"))).toBe(true);
     sms.mockRestore();
-    wa.mockRestore();
     email.mockRestore();
   });
 });

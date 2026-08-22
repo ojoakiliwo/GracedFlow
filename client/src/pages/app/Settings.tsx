@@ -59,7 +59,7 @@ export default function Settings() {
     <div>
       <PageHeader
         title="Settings & Integrations"
-        subtitle="Connect SMS, email, payments and social accounts to go fully live."
+        subtitle="Church notices go out by email and SMS. Connect those two first."
       />
 
       {loading || !data ? (
@@ -145,13 +145,16 @@ export default function Settings() {
               </p>
               <ul className="ml-5 list-disc space-y-1 text-ink-500">
                 <li>
-                  <strong>SMS:</strong> <code>SMS_PROVIDER=twilio</code>,{" "}
-                  <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code>,{" "}
-                  <code>TWILIO_FROM</code>
+                  <strong>SMS (Nigeria):</strong> add{" "}
+                  <code>BULKSMS_API_TOKEN</code> and <code>BULKSMS_SENDER_ID</code>{" "}
+                  (max 11 characters, registered in BulkSMS Nigeria). Termii or Twilio
+                  also work if those keys are set instead.
                 </li>
                 <li>
-                  <strong>Email:</strong> <code>EMAIL_PROVIDER=smtp</code>,{" "}
-                  <code>SMTP_HOST</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>
+                  <strong>Email:</strong> <code>SMTP_HOST</code>,{" "}
+                  <code>SMTP_USER</code>, <code>SMTP_PASS</code>,{" "}
+                  <code>EMAIL_FROM</code>. Gmail or Brevo is enough — no extra
+                  provider flag.
                 </li>
                 <li>
                   <strong>Payments:</strong> Flutterwave{" "}

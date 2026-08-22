@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { config } from "../config.js";
+import { config, emailIsConfigured, resolveSmsProvider } from "../config.js";
 import { authenticate, requireRole } from "../auth.js";
 import { sendEmail, sendSms } from "../comms.js";
 import { isFlutterwaveLive, isOnlineLive, isPaystackLive } from "../payments.js";
@@ -38,21 +38,24 @@ settingsRouter.get(
       integrations: [
         {
           key: "sms",
-          name: "SMS (Twilio)",
-          live: config.sms.provider === "twilio" && !!config.sms.twilioAccountSid,
+          name: "SMS",
+          live: resolveSmsProvider() !== "dryrun",
           detail:
-            config.sms.provider === "twilio" && config.sms.twilioAccountSid
-              ? `From ${config.sms.twilioFrom ?? "(unset)"}`
-              : "Simulated — add TWILIO_* credentials to go live",
+            resolveSmsProvider() === "bulksmsnigeria"
+              ? `Live · BulkSMS Nigeria · sender ${process.env.BULKSMS_SENDER_ID || config.church.shortName}`
+              : resolveSmsProvider() === "termii"
+                ? `Live · Termii · sender ${process.env.TERMII_SENDER_ID || config.church.shortName}`
+                : resolveSmsProvider() === "twilio"
+                  ? `Live · Twilio · from ${config.sms.twilioFrom ?? "(unset)"}`
+                  : "Simulated — add BULKSMS_API_TOKEN (cheap NG SMS) to go live",
         },
         {
           key: "email",
           name: "Email (SMTP)",
-          live: config.email.provider === "smtp" && !!config.email.smtpHost,
-          detail:
-            config.email.provider === "smtp" && config.email.smtpHost
-              ? `Host ${config.email.smtpHost}`
-              : "Simulated — add SMTP_* credentials to go live",
+          live: emailIsConfigured(),
+          detail: emailIsConfigured()
+            ? `Live · ${process.env.SMTP_HOST}`
+            : "Simulated — add SMTP_HOST, SMTP_USER, SMTP_PASS to go live",
         },
         {
           key: "payments",

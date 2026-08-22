@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
-import { config } from "./config.js";
+import { config, emailIsConfigured, resolveSmsProvider } from "./config.js";
+import { toE164 } from "./util.js";
 
 export interface DeliveryResult {
   ok: boolean;
@@ -7,130 +8,150 @@ export interface DeliveryResult {
   error?: string;
 }
 
+function smsMsisdn(to: string): string {
+  return toE164(to).replace(/^\+/, "");
+}
+
+async function sendSmsTwilio(to: string, body: string): Promise<DeliveryResult> {
+  const { twilioAccountSid, twilioAuthToken, twilioFrom } = config.sms;
+  if (!twilioAccountSid || !twilioAuthToken || !twilioFrom) {
+    return { ok: false, provider: "twilio", error: "Twilio credentials are incomplete" };
+  }
+  try {
+    const params = new URLSearchParams({ To: toE164(to), From: twilioFrom, Body: body });
+    const res = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization:
+            "Basic " + Buffer.from(`${twilioAccountSid}:${twilioAuthToken}`).toString("base64"),
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: params.toString(),
+      },
+    );
+    if (!res.ok) {
+      return { ok: false, provider: "twilio", error: `Twilio ${res.status}` };
+    }
+    return { ok: true, provider: "twilio" };
+  } catch (e) {
+    return { ok: false, provider: "twilio", error: (e as Error).message };
+  }
+}
+
+async function sendSmsBulkNigeria(to: string, body: string): Promise<DeliveryResult> {
+  const token =
+    process.env.BULKSMS_API_TOKEN || process.env.BULKSMSNIGERIA_API_TOKEN || "";
+  const from = (process.env.BULKSMS_SENDER_ID || config.church.shortName || "IGC").slice(0, 11);
+  const gateway = process.env.BULKSMS_GATEWAY || "direct-corporate";
+  if (!token) {
+    return { ok: false, provider: "bulksmsnigeria", error: "BULKSMS_API_TOKEN is not set" };
+  }
+  try {
+    const res = await fetch("https://www.bulksmsnigeria.com/api/v2/sms", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: smsMsisdn(to),
+        body,
+        gateway,
+      }),
+    });
+    const payload = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+      data?: { status?: string };
+    };
+    if (!res.ok) {
+      return {
+        ok: false,
+        provider: "bulksmsnigeria",
+        error: payload.error || payload.message || `BulkSMS ${res.status}`,
+      };
+    }
+    return { ok: true, provider: "bulksmsnigeria" };
+  } catch (e) {
+    return { ok: false, provider: "bulksmsnigeria", error: (e as Error).message };
+  }
+}
+
+async function sendSmsTermii(to: string, body: string): Promise<DeliveryResult> {
+  const apiKey = process.env.TERMII_API_KEY || "";
+  const from = (process.env.TERMII_SENDER_ID || config.church.shortName || "IGC").slice(0, 11);
+  const channel = process.env.TERMII_CHANNEL || "generic";
+  if (!apiKey) {
+    return { ok: false, provider: "termii", error: "TERMII_API_KEY is not set" };
+  }
+  try {
+    const res = await fetch("https://api.ng.termii.com/api/sms/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: smsMsisdn(to),
+        from,
+        sms: body,
+        type: "plain",
+        channel,
+        api_key: apiKey,
+      }),
+    });
+    const payload = (await res.json().catch(() => ({}))) as {
+      message?: string;
+      code?: string;
+    };
+    if (!res.ok) {
+      return { ok: false, provider: "termii", error: payload.message || `Termii ${res.status}` };
+    }
+    return { ok: true, provider: "termii" };
+  } catch (e) {
+    return { ok: false, provider: "termii", error: (e as Error).message };
+  }
+}
+
 /**
- * SMS adapter. Ships a Twilio implementation that activates automatically when
- * TWILIO_* credentials are present; otherwise runs in dry-run mode so the whole
- * targeting + outbox flow is fully testable without a paid provider.
+ * SMS: BulkSMS Nigeria (cheap NG), Termii, or Twilio. Dry-run when no keys.
  */
 export async function sendSms(to: string, body: string): Promise<DeliveryResult> {
-  const { provider, twilioAccountSid, twilioAuthToken, twilioFrom } = config.sms;
-  if (provider === "twilio" && twilioAccountSid && twilioAuthToken && twilioFrom) {
-    try {
-      const params = new URLSearchParams({ To: to, From: twilioFrom, Body: body });
-      const res = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`,
-        {
-          method: "POST",
-          headers: {
-            Authorization:
-              "Basic " +
-              Buffer.from(`${twilioAccountSid}:${twilioAuthToken}`).toString("base64"),
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: params.toString(),
-        },
-      );
-      if (!res.ok) {
-        return { ok: false, provider: "twilio", error: `Twilio ${res.status}` };
-      }
-      return { ok: true, provider: "twilio" };
-    } catch (e) {
-      return { ok: false, provider: "twilio", error: (e as Error).message };
-    }
-  }
-  // Dry-run: pretend delivery succeeds and log it.
+  const provider = resolveSmsProvider();
+  if (provider === "bulksmsnigeria") return sendSmsBulkNigeria(to, body);
+  if (provider === "termii") return sendSmsTermii(to, body);
+  if (provider === "twilio") return sendSmsTwilio(to, body);
   // eslint-disable-next-line no-console
   console.log(`[SMS:dryrun] -> ${to}: ${body.slice(0, 80)}`);
   return { ok: true, provider: "dryrun" };
 }
 
 /**
- * WhatsApp via Twilio (TWILIO_WHATSAPP_FROM) or Meta Cloud API.
- * Falls back to dry-run so assignment notices are testable without a provider.
+ * WhatsApp is unused for church notices (email + SMS only). Kept for optional later use.
  */
 export async function sendWhatsApp(to: string, body: string): Promise<DeliveryResult> {
-  const from = process.env.TWILIO_WHATSAPP_FROM ?? "";
-  const { twilioAccountSid, twilioAuthToken } = config.sms;
-  if (from && twilioAccountSid && twilioAuthToken) {
-    try {
-      const dest = to.startsWith("whatsapp:") ? to : `whatsapp:${to}`;
-      const params = new URLSearchParams({
-        To: dest,
-        From: from.startsWith("whatsapp:") ? from : `whatsapp:${from}`,
-        Body: body,
-      });
-      const res = await fetch(
-        `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`,
-        {
-          method: "POST",
-          headers: {
-            Authorization:
-              "Basic " +
-              Buffer.from(`${twilioAccountSid}:${twilioAuthToken}`).toString("base64"),
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: params.toString(),
-        },
-      );
-      if (!res.ok) {
-        return { ok: false, provider: "twilio-whatsapp", error: `Twilio ${res.status}` };
-      }
-      return { ok: true, provider: "twilio-whatsapp" };
-    } catch (e) {
-      return { ok: false, provider: "twilio-whatsapp", error: (e as Error).message };
-    }
-  }
-
-  const token = process.env.WHATSAPP_TOKEN ?? "";
-  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID ?? "";
-  if (token && phoneId) {
-    try {
-      const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: to.replace(/^\+/, ""),
-          type: "text",
-          text: { body },
-        }),
-      });
-      if (!res.ok) {
-        return { ok: false, provider: "whatsapp-cloud", error: `WhatsApp ${res.status}` };
-      }
-      return { ok: true, provider: "whatsapp-cloud" };
-    } catch (e) {
-      return { ok: false, provider: "whatsapp-cloud", error: (e as Error).message };
-    }
-  }
-
   // eslint-disable-next-line no-console
-  console.log(`[WHATSAPP:dryrun] -> ${to}: ${body.slice(0, 80)}`);
-  return { ok: true, provider: "dryrun" };
+  console.log(`[WHATSAPP:skipped] -> ${to}: ${body.slice(0, 80)}`);
+  return { ok: true, provider: "skipped" };
 }
 
 let transporter: nodemailer.Transporter | null = null;
 function getTransporter(): nodemailer.Transporter | null {
-  const { provider, smtpHost, smtpPort, smtpUser, smtpPass } = config.email;
-  if (provider !== "smtp" || !smtpHost) return null;
+  if (!emailIsConfigured() || !config.email.smtpHost) return null;
   if (!transporter) {
     transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpPort === 465,
-      auth: smtpUser ? { user: smtpUser, pass: smtpPass } : undefined,
+      host: config.email.smtpHost,
+      port: config.email.smtpPort,
+      secure: config.email.smtpPort === 465,
+      auth: config.email.smtpUser
+        ? { user: config.email.smtpUser, pass: config.email.smtpPass }
+        : undefined,
     });
   }
   return transporter;
 }
 
-/**
- * Email adapter (SMTP via nodemailer). Falls back to dry-run when SMTP is not
- * configured.
- */
 export async function sendEmail(
   to: string,
   subject: string,
@@ -156,17 +177,11 @@ export interface SocialResult {
   error?: string;
 }
 
-/**
- * Social broadcast adapter. Real platform SDKs plug in here; connected
- * platforms are read from SOCIAL_CONNECTED. Unconnected platforms are queued in
- * dry-run so a post can be composed and its distribution tracked.
- */
 export async function publishToPlatform(
   platform: string,
   content: string,
 ): Promise<SocialResult> {
   if (config.social.connected.includes(platform)) {
-    // Real integration would call the platform API here.
     return { ok: true, externalUrl: `https://${platform}.com/igc/posts/live` };
   }
   // eslint-disable-next-line no-console
