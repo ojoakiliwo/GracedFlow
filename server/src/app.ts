@@ -44,6 +44,7 @@ export function createApp() {
       status: "ok",
       service: "gracedflow-api",
       church: config.church.name,
+      commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
       time: new Date().toISOString(),
     });
   });

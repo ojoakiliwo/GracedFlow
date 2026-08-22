@@ -67,6 +67,13 @@ describe("Production-ready data", () => {
     await seed();
     process.env.SEED_DEMO = "false";
     delete process.env.ALLOW_DEMO_DATA;
+    await db
+      .prepare(
+        `INSERT INTO donations (id, donor_name, donor_email, type, amount, currency, method, reference, status, confirmed_at)
+         VALUES ('don_guest_1', 'Guest', NULL, 'offering', 5000000, 'NGN', 'card', 'IGC-TEST-1', 'confirmed', now()),
+                ('don_guest_2', 'Guest', NULL, 'offering', 5000, 'NGN', 'card', 'IGC-TEST-2', 'confirmed', now())`,
+      )
+      .run();
 
     const meetingsBefore = (await db.prepare("SELECT title FROM meetings").all()) as { title: string }[];
     expect(meetingsBefore.map((m) => m.title)).toEqual(
@@ -83,9 +90,19 @@ describe("Production-ready data", () => {
 
     const meetings = (await db.prepare("SELECT title FROM meetings").all()) as { title: string }[];
     expect(meetings).toHaveLength(0);
-    const members = (await db.prepare("SELECT email FROM members").all()) as { email: string }[];
+    const members = (await db.prepare("SELECT email, first_name, last_name FROM members").all()) as {
+      email: string;
+      first_name: string;
+      last_name: string;
+    }[];
     expect(members.every((m) => !m.email.endsWith("@example.com"))).toBe(true);
+    expect(members.every((m) => `${m.first_name} ${m.last_name}` !== "Emmanuel Okafor")).toBe(true);
     expect(members.some((m) => m.email === "pastor@infinitelygraced.church")).toBe(true);
+
+    const giving = (await db.prepare("SELECT COALESCE(SUM(amount),0) AS total FROM donations").get()) as {
+      total: number;
+    };
+    expect(Number(giving.total)).toBe(0);
   });
 
   it("ignores leftover SEED_DEMO on Vercel production", async () => {

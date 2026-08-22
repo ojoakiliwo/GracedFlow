@@ -31,6 +31,12 @@ const DEMO_SAMPLE_NAMES = [
   ["Caleb", "Ola"],
 ] as const;
 
+const DEMO_STAFF_NAMES = [
+  ["Grace", "Adeyemi"],
+  ["Emmanuel", "Okafor"],
+  ["Deborah", "Musa"],
+] as const;
+
 const DEMO_PROJECTS = [
   ["Church Auditorium Phase 1", "Construction of the main auditorium."],
   ["Community Medical Outreach", "Free medical care for the community."],
@@ -87,11 +93,17 @@ function keepAdminEmail(): string {
 function demoMemberClause(): { sql: string; params: unknown[] } {
   const emailPh = DEMO_MEMBER_EMAILS.map(() => "?").join(", ");
   const phonePh = DEMO_STAFF_PHONES.map(() => "?").join(", ");
-  const nameSql = DEMO_SAMPLE_NAMES.map(
+  const sampleSql = DEMO_SAMPLE_NAMES.map(
     () =>
       "(lower(first_name) = lower(?) AND lower(last_name) = lower(?) AND join_date = '2023-01-15')",
   ).join(" OR ");
-  const nameParams = DEMO_SAMPLE_NAMES.flatMap(([first, last]) => [first, last]);
+  const staffSql = DEMO_STAFF_NAMES.map(
+    () => "(lower(first_name) = lower(?) AND lower(last_name) = lower(?))",
+  ).join(" OR ");
+  const nameParams = [
+    ...DEMO_SAMPLE_NAMES.flatMap(([first, last]) => [first, last]),
+    ...DEMO_STAFF_NAMES.flatMap(([first, last]) => [first, last]),
+  ];
   const keep = keepAdminEmail();
   const keepSql = keep ? " AND (email IS NULL OR lower(email) <> ?)" : "";
   const keepParams = keep ? [keep] : [];
@@ -101,7 +113,8 @@ function demoMemberClause(): { sql: string; params: unknown[] } {
       OR lower(coalesce(email, '')) LIKE '%@example.com'
       OR phone IN (${phonePh})
       OR phone LIKE '+23480100000%'
-      OR (${nameSql})
+      OR (${sampleSql})
+      OR (${staffSql})
     )${keepSql}`,
     params: [...DEMO_MEMBER_EMAILS, ...DEMO_STAFF_PHONES, ...nameParams, ...keepParams],
   };
@@ -221,6 +234,18 @@ export async function purgeDemoFixtures(): Promise<{ members: number }> {
     .run(...meetings.params, ...DEMO_MEETING_TITLES, ...ids);
 
   const deleted = await db.prepare(`DELETE FROM members WHERE ${sql}`).run(...params);
+
+  // Guest gifts recorded while the sample church was loaded (e.g. ₦5,005,000
+  // with no demo email) must not remain after the fake members are gone.
+  await db
+    .prepare(
+      `DELETE FROM donations WHERE
+         member_id IS NULL
+         OR member_id NOT IN (SELECT id FROM members)
+         OR project_id IN (SELECT id FROM projects WHERE title IN (${DEMO_PROJECT_TITLES.map(() => "?").join(", ")}))`,
+    )
+    .run(...DEMO_PROJECT_TITLES);
+
   return { members: Math.max(ids.length, deleted.changes) };
 }
 
