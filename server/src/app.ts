@@ -2,7 +2,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import cors from "cors";
 import { config } from "./config.js";
 import { ensureReady } from "./bootstrap.js";
-import { ensureDemoDataRemoved } from "./seed.js";
+import { ensureProductionData } from "./seed.js";
 import { HttpError } from "./util.js";
 import { authRouter } from "./routes/auth.js";
 import { membersRouter } from "./routes/members.js";
@@ -55,7 +55,7 @@ export function createApp() {
       next();
       return;
     }
-    ensureDemoDataRemoved()
+    ensureProductionData()
       .then(() => next())
       .catch((err) => {
         // eslint-disable-next-line no-console

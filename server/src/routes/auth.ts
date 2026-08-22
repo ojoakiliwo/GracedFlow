@@ -10,6 +10,8 @@ import {
 } from "../auth.js";
 import { HttpError, audit, newId, nowIso } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
+import { configuredAdminEmail, getLedDepartments } from "../access.js";
+import { DEMO_MEMBER_EMAILS } from "../seed.js";
 
 export const authRouter = Router();
 
@@ -56,21 +58,28 @@ const registerSchema = z.object({
   password: z.string().min(6),
 });
 
-// Self-service worker signup — always created as a pending 'worker' member.
+// Self-service signup. The configured ADMIN_EMAIL (and the first real account)
+// become super_admin; everyone else starts as a worker.
 authRouter.post(
   "/register",
   asyncHandler(async (req, res) => {
     const input = parseBody(registerSchema, req.body);
+    const email = input.email.toLowerCase();
     const existing = await db.prepare("SELECT id FROM members WHERE email = ?")
-      .get(input.email.toLowerCase());
+      .get(email);
     if (existing) throw new HttpError(409, "An account with this email already exists");
 
+    const configuredAdmin = configuredAdminEmail();
+    const demoPh = DEMO_MEMBER_EMAILS.map(() => "?").join(", ");
     const admins = (await db
       .prepare(
-        "SELECT COUNT(*)::int AS c FROM members WHERE role IN ('admin', 'super_admin')",
+        `SELECT COUNT(*)::int AS c FROM members
+         WHERE role IN ('admin', 'super_admin')
+           AND (email IS NULL OR lower(email) NOT IN (${demoPh}))`,
       )
-      .get()) as { c: number };
-    const isFirstAdmin = admins.c === 0;
+      .get(...DEMO_MEMBER_EMAILS)) as { c: number };
+    const isConfiguredAdmin = !!configuredAdmin && email === configuredAdmin;
+    const isFirstAdmin = admins.c === 0 || isConfiguredAdmin;
     const role = isFirstAdmin ? "super_admin" : "worker";
     const spiritualClass = isFirstAdmin ? "leader" : "worker";
     const membershipStatus = isFirstAdmin ? "active" : "new";
@@ -83,7 +92,7 @@ authRouter.post(
       id,
       input.firstName,
       input.lastName,
-      input.email.toLowerCase(),
+      email,
       input.phone ?? null,
       await hashPassword(input.password),
       role,
@@ -93,7 +102,7 @@ authRouter.post(
     );
     const user: AuthUser = {
       id,
-      email: input.email.toLowerCase(),
+      email: email,
       role,
       first_name: input.firstName,
       last_name: input.lastName,
@@ -111,6 +120,7 @@ authRouter.get(
         "SELECT id, first_name, last_name, email, phone, role, spiritual_class, photo_url, last_login_at FROM members WHERE id = ?",
       )
       .get(req.user!.id);
-    res.json(row);
+    const ledDepartments = await getLedDepartments(req.user!.id);
+    res.json({ ...(row as object), ledDepartments });
   }),
 );

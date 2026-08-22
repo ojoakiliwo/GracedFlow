@@ -24,6 +24,7 @@ interface Department {
   description: string | null;
   type: string;
   member_count: number;
+  leader_name: string | null;
 }
 
 export default function Departments() {
@@ -84,6 +85,9 @@ export default function Departments() {
                 <div className="mt-4 flex items-center gap-1.5 text-sm text-ink-500">
                   <Users className="h-4 w-4" /> {d.member_count} members
                 </div>
+                {d.leader_name && (
+                  <p className="mt-2 text-xs font-medium text-brand-700">Leader · {d.leader_name}</p>
+                )}
               </Card>
             </Link>
           ))}

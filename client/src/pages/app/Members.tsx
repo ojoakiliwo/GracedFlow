@@ -18,6 +18,7 @@ import {
 } from "../../components/ui";
 import { classLabel, roleLabel, ROLES, SPIRITUAL_CLASSES } from "../../lib/format";
 import { useToast } from "../../components/toast";
+import { useAuth } from "../../lib/auth";
 
 interface Member {
   id: string;
@@ -59,6 +60,7 @@ export default function Members() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const { notify } = useToast();
+  const { hasRole } = useAuth();
 
   const set = (k: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
@@ -92,9 +94,11 @@ export default function Members() {
         title="Members"
         subtitle="Every soul God has added to our house."
         actions={
+          hasRole("pastor") ? (
           <Button onClick={() => setOpen(true)}>
             <Plus className="h-4 w-4" /> Add member
           </Button>
+          ) : undefined
         }
       />
 

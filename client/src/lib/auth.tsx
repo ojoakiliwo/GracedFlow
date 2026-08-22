@@ -15,6 +15,7 @@ export interface User {
   role: string;
   first_name: string;
   last_name: string;
+  ledDepartments?: { id: string; name: string; slug: string; position: string }[];
 }
 
 interface AuthState {
@@ -24,6 +25,7 @@ interface AuthState {
   register: (input: RegisterInput) => Promise<void>;
   logout: () => void;
   hasRole: (min: Role) => boolean;
+  leadsDepartment: (departmentId?: string | null) => boolean;
 }
 
 export interface RegisterInput {
@@ -66,13 +68,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
     });
     setToken(res.token);
-    setUser(res.user);
+    setUser(await api<User>("/auth/me"));
   }, []);
 
   const register = useCallback(async (input: RegisterInput) => {
     const res = await apiPost<{ token: string; user: User }>("/auth/register", input);
     setToken(res.token);
-    setUser(res.user);
+    setUser(await api<User>("/auth/me"));
   }, []);
 
   const logout = useCallback(() => {
@@ -85,9 +87,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const leadsDepartment = useCallback(
+    (departmentId?: string | null) => {
+      if (!user) return false;
+      if (RANK[user.role as Role] >= RANK.pastor) return true;
+      const led = user.ledDepartments ?? [];
+      if (!departmentId) return led.some((d) => d.slug === "all-workers");
+      return led.some((d) => d.id === departmentId);
+    },
+    [user],
+  );
+
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, hasRole }),
-    [user, loading, login, register, logout, hasRole],
+    () => ({ user, loading, login, register, logout, hasRole, leadsDepartment }),
+    [user, loading, login, register, logout, hasRole, leadsDepartment],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

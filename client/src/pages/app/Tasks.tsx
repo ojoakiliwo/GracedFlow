@@ -16,6 +16,7 @@ import {
 } from "../../components/ui";
 import { formatDate } from "../../lib/format";
 import { useToast } from "../../components/toast";
+import { useAuth } from "../../lib/auth";
 
 interface Task {
   id: string;
@@ -64,6 +65,8 @@ export default function Tasks() {
   });
   const [saving, setSaving] = useState(false);
   const { notify } = useToast();
+  const { hasRole, user } = useAuth();
+  const canCreate = hasRole("pastor") || (user?.ledDepartments?.length ?? 0) > 0;
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -103,9 +106,11 @@ export default function Tasks() {
         title="Tasks"
         subtitle="Assign and track ministry tasks across departments."
         actions={
+          canCreate ? (
           <Button onClick={() => setOpen(true)}>
             <Plus className="h-4 w-4" /> New task
           </Button>
+          ) : undefined
         }
       />
 

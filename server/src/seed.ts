@@ -242,6 +242,14 @@ export async function ensureDemoDataRemoved(): Promise<void> {
   }
 }
 
+/** Strip sample data, keep ministry rooms, and promote ADMIN_EMAIL to super_admin. */
+export async function ensureProductionData(): Promise<void> {
+  if (demoFixturesAllowed()) return;
+  await ensureDemoDataRemoved();
+  await ensureChurchStructure();
+  await ensureBootstrapAdmin();
+}
+
 export async function ensureChurchStructure(): Promise<void> {
   for (const [name, slug, description, type] of CHURCH_DEPARTMENTS) {
     const existing = await db.prepare("SELECT id FROM departments WHERE slug = ?").get(slug);
@@ -253,34 +261,51 @@ export async function ensureChurchStructure(): Promise<void> {
 }
 
 export async function ensureBootstrapAdmin(): Promise<void> {
-  const email = (
-    process.env.ADMIN_EMAIL ||
-    process.env.BOOTSTRAP_ADMIN_EMAIL ||
-    config.bootstrapAdmin.email
-  ).toLowerCase();
-  const password =
-    process.env.ADMIN_PASSWORD ||
-    process.env.BOOTSTRAP_ADMIN_PASSWORD ||
-    config.bootstrapAdmin.password;
+  const email = (process.env.ADMIN_EMAIL || process.env.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase();
+  const password = process.env.ADMIN_PASSWORD || process.env.BOOTSTRAP_ADMIN_PASSWORD || "";
   if (!email || !password) return;
 
-  const existing = await db.prepare("SELECT id FROM members WHERE email = ?").get(email);
-  if (existing) return;
+  const firstName = process.env.ADMIN_FIRST_NAME || config.bootstrapAdmin.firstName;
+  const lastName = process.env.ADMIN_LAST_NAME || config.bootstrapAdmin.lastName;
+  const passwordHash = await hashPassword(password);
+  const existing = (await db.prepare("SELECT id, role FROM members WHERE email = ?").get(email)) as
+    | { id: string; role: string }
+    | undefined;
 
-  const id = newId("mbr");
-  await db
-    .prepare(
-      `INSERT INTO members (id, first_name, last_name, email, password_hash, role, spiritual_class, membership_status, account_status, join_date)
-       VALUES (?, ?, ?, ?, ?, 'super_admin', 'leader', 'active', 'active', ?)`,
-    )
-    .run(
-      id,
-      process.env.ADMIN_FIRST_NAME || config.bootstrapAdmin.firstName,
-      process.env.ADMIN_LAST_NAME || config.bootstrapAdmin.lastName,
-      email,
-      await hashPassword(password),
-      new Date().toISOString().slice(0, 10),
-    );
+  let id = existing?.id;
+  if (existing) {
+    const promote = existing.role !== "super_admin";
+    if (promote) {
+      await db
+        .prepare(
+          `UPDATE members SET
+             first_name = ?, last_name = ?, password_hash = ?,
+             role = 'super_admin', spiritual_class = 'leader',
+             membership_status = 'active', account_status = 'active',
+             updated_at = now()
+           WHERE id = ?`,
+        )
+        .run(firstName, lastName, passwordHash, existing.id);
+    } else {
+      await db
+        .prepare(
+          `UPDATE members SET
+             role = 'super_admin', spiritual_class = 'leader',
+             membership_status = 'active', account_status = 'active',
+             updated_at = now()
+           WHERE id = ?`,
+        )
+        .run(existing.id);
+    }
+  } else {
+    id = newId("mbr");
+    await db
+      .prepare(
+        `INSERT INTO members (id, first_name, last_name, email, password_hash, role, spiritual_class, membership_status, account_status, join_date)
+         VALUES (?, ?, ?, ?, ?, 'super_admin', 'leader', 'active', 'active', ?)`,
+      )
+      .run(id, firstName, lastName, email, passwordHash, new Date().toISOString().slice(0, 10));
+  }
 
   const pastoral = (await db.prepare("SELECT id FROM departments WHERE slug = 'pastoral'").get()) as
     | { id: string }
@@ -289,14 +314,29 @@ export async function ensureBootstrapAdmin(): Promise<void> {
     | { id: string }
     | undefined;
   if (pastoral) {
-    await db
-      .prepare("INSERT INTO department_members (id, department_id, member_id, position) VALUES (?, ?, ?, ?)")
-      .run(newId("dmb"), pastoral.id, id, "HOD");
+    const link = await db
+      .prepare("SELECT id FROM department_members WHERE department_id = ? AND member_id = ?")
+      .get(pastoral.id, id);
+    if (link) {
+      await db.prepare("UPDATE department_members SET position = ? WHERE id = ?").run(
+        "leader",
+        (link as { id: string }).id,
+      );
+    } else {
+      await db
+        .prepare("INSERT INTO department_members (id, department_id, member_id, position) VALUES (?, ?, ?, ?)")
+        .run(newId("dmb"), pastoral.id, id, "leader");
+    }
   }
   if (workers) {
-    await db
-      .prepare("INSERT INTO department_members (id, department_id, member_id, position) VALUES (?, ?, ?, ?)")
-      .run(newId("dmb"), workers.id, id, "member");
+    const link = await db
+      .prepare("SELECT id FROM department_members WHERE department_id = ? AND member_id = ?")
+      .get(workers.id, id);
+    if (!link) {
+      await db
+        .prepare("INSERT INTO department_members (id, department_id, member_id, position) VALUES (?, ?, ?, ?)")
+        .run(newId("dmb"), workers.id, id, "member");
+    }
   }
 }
 
@@ -310,9 +350,7 @@ export async function prepareAppData(): Promise<void> {
     await ensureSeed();
     return;
   }
-  await ensureDemoDataRemoved();
-  await ensureChurchStructure();
-  await ensureBootstrapAdmin();
+  await ensureProductionData();
 }
 
 export async function seed(): Promise<void> {

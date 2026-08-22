@@ -3,9 +3,10 @@ import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Send, Users } from "lucide-react";
 import { apiPost } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
-import { Avatar, Button, Card, Input, Spinner } from "../../components/ui";
+import { Avatar, Badge, Button, Card, Input, Spinner } from "../../components/ui";
 import { formatDateTime } from "../../lib/format";
 import { useAuth } from "../../lib/auth";
+import { useToast } from "../../components/toast";
 
 interface RoomData {
   id: string;
@@ -29,11 +30,12 @@ interface RoomMessage {
 
 export default function DepartmentRoom() {
   const { id } = useParams();
-  const { user } = useAuth();
-  const { data: dept, loading } = useApi<RoomData>(`/departments/${id}`);
-  const { data: messages, reload } = useApi<RoomMessage[]>(`/departments/${id}/room`);
+  const { user, hasRole } = useAuth();
+  const { data: dept, loading, reload } = useApi<RoomData>(`/departments/${id}`);
+  const { data: messages, reload: reloadMessages } = useApi<RoomMessage[]>(`/departments/${id}/room`);
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const { notify } = useToast();
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export default function DepartmentRoom() {
     try {
       await apiPost(`/departments/${id}/room`, { body });
       setBody("");
-      reload();
+      reloadMessages();
     } finally {
       setSending(false);
     }
@@ -143,12 +145,35 @@ export default function DepartmentRoom() {
             {dept.members.map((m) => (
               <li key={m.id} className="flex items-center gap-3">
                 <Avatar first={m.first_name} last={m.last_name} className="h-9 w-9 text-xs" />
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-ink-800">
                     {m.first_name} {m.last_name}
                   </p>
                   <p className="text-xs capitalize text-ink-400">{m.position}</p>
                 </div>
+                {["leader", "hod", "head", "chairman"].includes(m.position.toLowerCase()) && (
+                  <Badge color="gold">Leader</Badge>
+                )}
+                {hasRole("pastor") &&
+                  !["leader", "hod", "head", "chairman"].includes(m.position.toLowerCase()) && (
+                    <button
+                      className="text-xs font-medium text-brand-700 hover:underline"
+                      onClick={async () => {
+                        try {
+                          await apiPost(`/departments/${id}/members`, {
+                            memberId: m.id,
+                            position: "leader",
+                          });
+                          notify(`${m.first_name} is now the department leader`);
+                          reload();
+                        } catch (e) {
+                          notify((e as Error).message, "error");
+                        }
+                      }}
+                    >
+                      Make leader
+                    </button>
+                  )}
               </li>
             ))}
           </ul>

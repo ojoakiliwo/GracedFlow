@@ -12,6 +12,7 @@ import {
 
 export const messagesRouter = Router();
 messagesRouter.use(authenticate);
+messagesRouter.use(requireRole("pastor"));
 
 messagesRouter.get(
   "/",
@@ -71,7 +72,6 @@ const sendSchema = audienceSchema.extend({
 
 messagesRouter.post(
   "/",
-  requireRole("worker"),
   asyncHandler(async (req, res) => {
     const input = parseBody(sendSchema, req.body);
     const summary = await createAndSendMessage({

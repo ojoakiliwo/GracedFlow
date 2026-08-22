@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
 import { authenticate, requireRole } from "../auth.js";
+import { assertCanManageDepartment, isChurchManager, isLeaderPosition } from "../access.js";
 import { HttpError, audit, newId } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 
@@ -19,7 +20,13 @@ departmentsRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
     const rows = await db.prepare(
-        `SELECT d.*, (SELECT COUNT(*) FROM department_members dm WHERE dm.department_id = d.id) AS member_count
+        `SELECT d.*,
+            (SELECT COUNT(*) FROM department_members dm WHERE dm.department_id = d.id) AS member_count,
+            (SELECT m.first_name || ' ' || m.last_name FROM department_members dm
+              JOIN members m ON m.id = dm.member_id
+              WHERE dm.department_id = d.id
+                AND lower(dm.position) IN ('leader','hod','head','chairman')
+              LIMIT 1) AS leader_name
          FROM departments d ORDER BY d.type DESC, d.name`,
       )
       .all();
@@ -69,9 +76,21 @@ const memberSchema = z.object({
 
 departmentsRouter.post(
   "/:id/members",
-  requireRole("worker"),
   asyncHandler(async (req, res) => {
     const input = parseBody(memberSchema, req.body);
+    const makingLeader = isLeaderPosition(input.position);
+    if (makingLeader && !isChurchManager(req.user!.role)) {
+      throw new HttpError(403, "Only pastors and administrators can appoint a department leader");
+    }
+    await assertCanManageDepartment(req.user!, req.params.id);
+    if (makingLeader) {
+      await db
+        .prepare(
+          `UPDATE department_members SET position = 'member'
+           WHERE department_id = ? AND lower(position) IN ('leader','hod','head','chairman')`,
+        )
+        .run(req.params.id);
+    }
     const existing = await db.prepare("SELECT id FROM department_members WHERE department_id = ? AND member_id = ?")
       .get(req.params.id, input.memberId);
     if (existing) {
@@ -90,8 +109,8 @@ departmentsRouter.post(
 
 departmentsRouter.delete(
   "/:id/members/:memberId",
-  requireRole("worker"),
   asyncHandler(async (req, res) => {
+    await assertCanManageDepartment(req.user!, req.params.id);
     await db.prepare(
       "DELETE FROM department_members WHERE department_id = ? AND member_id = ?",
     ).run(req.params.id, req.params.memberId);

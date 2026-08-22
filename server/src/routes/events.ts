@@ -28,7 +28,7 @@ const eventSchema = z.object({
 
 eventsRouter.post(
   "/",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
     const input = parseBody(eventSchema, req.body);
     const id = newId("evt");
@@ -53,7 +53,7 @@ eventsRouter.post(
 
 eventsRouter.delete(
   "/:id",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
     await db.prepare("DELETE FROM events WHERE id = ?").run(req.params.id);
     res.status(204).end();

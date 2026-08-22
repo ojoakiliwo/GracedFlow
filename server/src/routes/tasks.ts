@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
 import { authenticate, requireRole } from "../auth.js";
+import { assertCanManageDepartment } from "../access.js";
 import { HttpError, audit, newId, nowIso } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 
@@ -58,9 +59,9 @@ const taskSchema = z.object({
 
 tasksRouter.post(
   "/",
-  requireRole("worker"),
   asyncHandler(async (req, res) => {
     const input = parseBody(taskSchema, req.body);
+    await assertCanManageDepartment(req.user!, input.departmentId || null);
     const id = newId("tsk");
     await db.prepare(
       `INSERT INTO tasks (id, title, description, department_id, assigned_to, created_by, due_date, priority, status)
@@ -84,8 +85,12 @@ tasksRouter.post(
 tasksRouter.put(
   "/:id",
   asyncHandler(async (req, res) => {
-    const existing = await db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
+    const existing = (await db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id)) as
+      | { id: string; department_id: string | null; assigned_to: string | null }
+      | undefined;
     if (!existing) throw new HttpError(404, "Task not found");
+    const isAssignee = existing.assigned_to === req.user!.id;
+    if (!isAssignee) await assertCanManageDepartment(req.user!, existing.department_id);
     const input = parseBody(taskSchema.partial(), req.body);
     const map: Record<string, string> = {
       title: "title",
@@ -113,8 +118,12 @@ tasksRouter.put(
 
 tasksRouter.delete(
   "/:id",
-  requireRole("worker"),
   asyncHandler(async (req, res) => {
+    const existing = (await db.prepare("SELECT department_id FROM tasks WHERE id = ?").get(req.params.id)) as
+      | { department_id: string | null }
+      | undefined;
+    if (!existing) throw new HttpError(404, "Task not found");
+    await assertCanManageDepartment(req.user!, existing.department_id);
     await db.prepare("DELETE FROM tasks WHERE id = ?").run(req.params.id);
     res.status(204).end();
   }),

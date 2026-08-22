@@ -92,7 +92,7 @@ membersRouter.get(
 
 membersRouter.post(
   "/",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
     const input = parseBody(memberSchema, req.body);
     const id = newId("mbr");
@@ -137,7 +137,7 @@ membersRouter.post(
 
 membersRouter.put(
   "/:id",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
     const existing = await db.prepare("SELECT * FROM members WHERE id = ?").get(req.params.id);
     if (!existing) throw new HttpError(404, "Member not found");
@@ -204,7 +204,7 @@ const growthSchema = z.object({
 });
 membersRouter.post(
   "/:id/growth",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
     const input = parseBody(growthSchema, req.body);
     const id = newId("grw");
@@ -233,7 +233,7 @@ const supportSchema = z.object({
 });
 membersRouter.post(
   "/:id/support",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
     const input = parseBody(supportSchema, req.body);
     const id = newId("sup");

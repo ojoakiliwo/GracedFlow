@@ -43,40 +43,40 @@ const groups: NavGroup[] = [
   {
     title: "People",
     items: [
-      { to: "/app/members", label: "Members", icon: Users },
+      { to: "/app/members", label: "Members", icon: Users, min: "pastor" },
       { to: "/app/departments", label: "Rooms & Departments", icon: DoorOpen },
-      { to: "/app/prayer", label: "Prayer Requests", icon: HeartHandshake },
+      { to: "/app/prayer", label: "Prayer Requests", icon: HeartHandshake, min: "pastor" },
     ],
   },
   {
     title: "Ministry",
     items: [
-      { to: "/app/projects", label: "Projects & Visions", icon: FolderKanban },
+      { to: "/app/projects", label: "Projects & Visions", icon: FolderKanban, min: "pastor" },
       { to: "/app/meetings", label: "Meetings", icon: CalendarDays },
       { to: "/app/tasks", label: "Tasks", icon: ListChecks },
-      { to: "/app/events", label: "Events", icon: CalendarRange },
+      { to: "/app/events", label: "Events", icon: CalendarRange, min: "pastor" },
     ],
   },
   {
     title: "Communication",
     items: [
-      { to: "/app/messages", label: "Messages (SMS/Email)", icon: Send },
-      { to: "/app/automations", label: "Automations", icon: CalendarClock },
-      { to: "/app/social", label: "Social Broadcast", icon: Share2 },
+      { to: "/app/messages", label: "Messages (SMS/Email)", icon: Send, min: "pastor" },
+      { to: "/app/automations", label: "Automations", icon: CalendarClock, min: "pastor" },
+      { to: "/app/social", label: "Social Broadcast", icon: Share2, min: "pastor" },
     ],
   },
   {
     title: "Finance",
-    items: [{ to: "/app/giving", label: "Giving & Donations", icon: HandCoins }],
+    items: [{ to: "/app/giving", label: "Giving & Donations", icon: HandCoins, min: "pastor" }],
   },
   {
     title: "Administration",
-    items: [{ to: "/app/settings", label: "Settings & Integrations", icon: Settings2 }],
+    items: [{ to: "/app/settings", label: "Settings & Integrations", icon: Settings2, min: "admin" }],
   },
 ];
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasRole } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -111,13 +111,16 @@ export default function Layout() {
         </div>
 
         <nav className="no-scrollbar flex-1 space-y-6 overflow-y-auto px-3 pb-6">
-          {groups.map((group) => (
+          {groups.map((group) => {
+            const items = group.items.filter((item) => !item.min || hasRole(item.min));
+            if (!items.length) return null;
+            return (
             <div key={group.title}>
               <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-brand-400">
                 {group.title}
               </p>
               <div className="space-y-0.5">
-                {group.items.map((item) => (
+                {items.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
@@ -138,7 +141,8 @@ export default function Layout() {
                 ))}
               </div>
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="border-t border-white/10 p-3">

@@ -11,6 +11,11 @@ process.env.ADMIN_FIRST_NAME = "Real";
 process.env.ADMIN_LAST_NAME = "Pastor";
 
 beforeAll(async () => {
+  process.env.SEED_DEMO = "false";
+  process.env.ADMIN_EMAIL = "pastor@infinitelygraced.church";
+  process.env.ADMIN_PASSWORD = "RealAdmin-2026";
+  process.env.ADMIN_FIRST_NAME = "Real";
+  process.env.ADMIN_LAST_NAME = "Pastor";
   const { initSchema, resetSchema } = await import("../src/db.js");
   const { seed, prepareAppData, purgeDemoFixtures } = await import("../src/seed.js");
   await resetSchema();
@@ -113,16 +118,25 @@ describe("Production-ready data", () => {
   it("lets the first registrant become super_admin when no admin exists", async () => {
     const { db } = await import("../src/db.js");
     const { createApp } = await import("../src/app.js");
-    await db.prepare("DELETE FROM members WHERE email = ?").run("pastor@infinitelygraced.church");
-    const request = (await import("supertest")).default;
-    const app = createApp();
-    const res = await request(app).post("/api/auth/register").send({
-      firstName: "First",
-      lastName: "Elder",
-      email: "elder@infinitelygraced.church",
-      password: "ElderPass1",
-    });
-    expect(res.status).toBe(201);
-    expect(res.body.user.role).toBe("super_admin");
+    await db.prepare("DELETE FROM members").run();
+    const prevEmail = process.env.ADMIN_EMAIL;
+    const prevPass = process.env.ADMIN_PASSWORD;
+    delete process.env.ADMIN_EMAIL;
+    delete process.env.ADMIN_PASSWORD;
+    try {
+      const request = (await import("supertest")).default;
+      const app = createApp();
+      const res = await request(app).post("/api/auth/register").send({
+        firstName: "First",
+        lastName: "Elder",
+        email: "elder@infinitelygraced.church",
+        password: "ElderPass1",
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.user.role).toBe("super_admin");
+    } finally {
+      process.env.ADMIN_EMAIL = prevEmail;
+      process.env.ADMIN_PASSWORD = prevPass;
+    }
   });
 });
