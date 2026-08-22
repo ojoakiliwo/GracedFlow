@@ -3,7 +3,7 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { authenticate, requireRole } from "../auth.js";
 import { sendEmail, sendSms } from "../comms.js";
-import { isPaystackLive } from "../payments.js";
+import { isPaymentsLive, paymentProviderLabel } from "../payments.js";
 import { HttpError } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 
@@ -37,11 +37,11 @@ settingsRouter.get(
         },
         {
           key: "payments",
-          name: "Payments (Paystack)",
-          live: isPaystackLive(),
-          detail: isPaystackLive()
-            ? `Live · ${config.payments.currency}`
-            : "Simulated — add PAYSTACK_SECRET_KEY to accept real payments",
+          name: `Payments (${paymentProviderLabel()})`,
+          live: isPaymentsLive(),
+          detail: isPaymentsLive()
+            ? `Live · ${paymentProviderLabel()} · ${config.payments.currency}`
+            : "Simulated — add Flutterwave (FLW_CLIENT_ID/SECRET) to accept real payments",
         },
         {
           key: "social",

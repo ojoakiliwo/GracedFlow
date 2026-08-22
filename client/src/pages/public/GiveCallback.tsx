@@ -22,12 +22,35 @@ export default function GiveCallback() {
       setState("failed");
       return;
     }
-    api<VerifyResult>(`/public/give/verify?reference=${encodeURIComponent(reference)}`)
-      .then((r) => {
-        setResult(r);
-        setState(r.status);
-      })
-      .catch(() => setState("failed"));
+    let cancelled = false;
+    let attempts = 0;
+    const poll = async () => {
+      attempts += 1;
+      try {
+        const r = await api<VerifyResult>(
+          `/public/give/verify?reference=${encodeURIComponent(reference)}`,
+        );
+        if (cancelled) return;
+        if (r.status === "success" || r.status === "failed") {
+          setResult(r);
+          setState(r.status);
+          return;
+        }
+        // Still pending (e.g. awaiting the payment webhook) — retry briefly.
+        if (attempts < 6) {
+          setTimeout(poll, 2500);
+        } else {
+          setResult(r);
+          setState("pending");
+        }
+      } catch {
+        if (!cancelled) setState("failed");
+      }
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+    };
   }, [reference]);
 
   return (

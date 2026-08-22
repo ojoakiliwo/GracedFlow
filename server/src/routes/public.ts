@@ -5,7 +5,12 @@ import { config } from "../config.js";
 import { HttpError, newId, nowIso } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 import { createPrayerRequest } from "./prayer.js";
-import { initializeTransaction, isPaystackLive, verifyTransaction } from "../payments.js";
+import {
+  initializeTransaction,
+  isPaymentsLive,
+  paymentProviderLabel,
+  verifyTransaction,
+} from "../payments.js";
 
 export const publicRouter = Router();
 
@@ -82,9 +87,9 @@ publicRouter.get(
   asyncHandler(async (_req, res) => {
     res.json({
       currency: config.payments.currency,
-      online: config.payments.provider === "paystack" || config.payments.provider === "dryrun",
-      onlineLive: isPaystackLive(),
-      paystackPublicKey: config.payments.paystackPublicKey || null,
+      online: true,
+      onlineLive: isPaymentsLive(),
+      provider: paymentProviderLabel(),
       bank: config.giving,
     });
   }),

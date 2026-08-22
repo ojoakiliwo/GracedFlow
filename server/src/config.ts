@@ -66,12 +66,30 @@ export const config = {
     onlineUrl: process.env.GIVING_ONLINE_URL ?? "",
   },
   payments: {
-    // Paystack activates automatically when a secret key is present; otherwise
-    // giving runs in a self-contained simulated mode so the flow is testable.
-    provider: process.env.PAYMENT_PROVIDER ?? (process.env.PAYSTACK_SECRET_KEY ? "paystack" : "dryrun"),
+    // Provider activates automatically when its credentials are present;
+    // otherwise giving runs in a self-contained simulated mode.
+    provider:
+      process.env.PAYMENT_PROVIDER ??
+      (process.env.FLW_CLIENT_ID
+        ? "flutterwave"
+        : process.env.PAYSTACK_SECRET_KEY
+          ? "paystack"
+          : "dryrun"),
     currency: process.env.PAYMENT_CURRENCY ?? "NGN",
     paystackSecretKey: process.env.PAYSTACK_SECRET_KEY ?? "",
     paystackPublicKey: process.env.PAYSTACK_PUBLIC_KEY ?? "",
+    // Flutterwave V4 (OAuth). Encryption key is only needed for direct card
+    // charges, not the hosted checkout used here. Secret hash secures webhooks.
+    flw: {
+      clientId: process.env.FLW_CLIENT_ID ?? "",
+      clientSecret: process.env.FLW_CLIENT_SECRET ?? "",
+      encryptionKey: process.env.FLW_ENCRYPTION_KEY ?? "",
+      secretHash: process.env.FLW_SECRET_HASH ?? "",
+      baseUrl: process.env.FLW_BASE_URL ?? "https://api.flutterwave.cloud/f4bexperience",
+      tokenUrl:
+        process.env.FLW_TOKEN_URL ??
+        "https://idp.flutterwave.com/realms/flutterwave/protocol/openid-connect/token",
+    },
   },
   appUrl: process.env.APP_URL ?? "http://localhost:5173",
 };
