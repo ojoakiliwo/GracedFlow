@@ -1,6 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import { config } from "./config.js";
+import { ensureDemoDataRemoved } from "./seed.js";
 import { HttpError } from "./util.js";
 import { authRouter } from "./routes/auth.js";
 import { membersRouter } from "./routes/members.js";
@@ -36,6 +37,22 @@ export function createApp() {
       church: config.church.name,
       time: new Date().toISOString(),
     });
+  });
+
+  // Opening the site (or any API route) strips leftover sample-church rows so
+  // production never keeps Choir Rehearsal / fake members after a deploy.
+  app.use((req, _res, next) => {
+    if (req.path === "/api/health" || req.path.startsWith("/api/webhooks")) {
+      next();
+      return;
+    }
+    ensureDemoDataRemoved()
+      .then(() => next())
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error("[prepare] demo purge failed", err);
+        next();
+      });
   });
 
   app.use("/api/public", publicRouter);

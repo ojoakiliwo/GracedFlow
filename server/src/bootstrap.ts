@@ -12,7 +12,10 @@ export function ensureReady(): Promise<void> {
     readyPromise = (async () => {
       await initSchema();
       await prepareAppData();
-    })();
+    })().catch((err) => {
+      readyPromise = null;
+      throw err;
+    });
   }
   return readyPromise;
 }

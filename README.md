@@ -101,7 +101,10 @@ starts empty: no sample members, gifts, or projects.
 
 SMS, email, payments and social stay in **simulated mode** until you add live credentials.
 
-To load the old sample church locally only, set `SEED_DEMO=true`.
+To load the old sample church locally only, set `SEED_DEMO=true`. On the hosted
+app, leftover `SEED_DEMO` is ignored unless `ALLOW_DEMO_DATA=true`. Opening any
+page strips the original placeholders (12 sample members, Choir Rehearsal,
+Monthly Workers Meeting, and the sample projects/events).
 
 ## Deploy to Vercel
 

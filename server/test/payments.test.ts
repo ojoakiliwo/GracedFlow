@@ -7,6 +7,7 @@ process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ??
   "postgres://igc:igc@127.0.0.1:5432/gracedflow_test";
 process.env.SCHEDULER_ENABLED = "false";
+process.env.SEED_DEMO = "true";
 
 let app: Express;
 

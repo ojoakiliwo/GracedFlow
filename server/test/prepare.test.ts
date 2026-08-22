@@ -53,6 +53,62 @@ describe("Production-ready data", () => {
     expect(admin?.first_name).toBe("Real");
   });
 
+  it("strips choir rehearsal and fake members when the site is opened", async () => {
+    const { db, initSchema, resetSchema } = await import("../src/db.js");
+    const { seed } = await import("../src/seed.js");
+    const { createApp } = await import("../src/app.js");
+    await resetSchema();
+    await initSchema();
+    await seed();
+    process.env.SEED_DEMO = "false";
+    delete process.env.ALLOW_DEMO_DATA;
+
+    const meetingsBefore = (await db.prepare("SELECT title FROM meetings").all()) as { title: string }[];
+    expect(meetingsBefore.map((m) => m.title)).toEqual(
+      expect.arrayContaining(["Choir Rehearsal", "Monthly Workers Meeting"]),
+    );
+    const memberCountBefore = (await db.prepare("SELECT COUNT(*)::int AS c FROM members").get()) as { c: number };
+    expect(memberCountBefore.c).toBe(11);
+
+    const request = (await import("supertest")).default;
+    const app = createApp();
+    const res = await request(app).get("/api/public/events");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(0);
+
+    const meetings = (await db.prepare("SELECT title FROM meetings").all()) as { title: string }[];
+    expect(meetings).toHaveLength(0);
+    const members = (await db.prepare("SELECT email FROM members").all()) as { email: string }[];
+    expect(members).toHaveLength(0);
+  });
+
+  it("ignores leftover SEED_DEMO on Vercel production", async () => {
+    const { demoFixturesAllowed } = await import("../src/seed.js");
+    const prev = {
+      seed: process.env.SEED_DEMO,
+      allow: process.env.ALLOW_DEMO_DATA,
+      vercel: process.env.VERCEL,
+      node: process.env.NODE_ENV,
+    };
+    try {
+      process.env.SEED_DEMO = "true";
+      delete process.env.ALLOW_DEMO_DATA;
+      process.env.VERCEL = "1";
+      process.env.NODE_ENV = "production";
+      expect(demoFixturesAllowed()).toBe(false);
+
+      process.env.ALLOW_DEMO_DATA = "true";
+      expect(demoFixturesAllowed()).toBe(true);
+    } finally {
+      process.env.SEED_DEMO = prev.seed;
+      if (prev.allow === undefined) delete process.env.ALLOW_DEMO_DATA;
+      else process.env.ALLOW_DEMO_DATA = prev.allow;
+      if (prev.vercel === undefined) delete process.env.VERCEL;
+      else process.env.VERCEL = prev.vercel;
+      process.env.NODE_ENV = prev.node;
+    }
+  });
+
   it("lets the first registrant become super_admin when no admin exists", async () => {
     const { db } = await import("../src/db.js");
     const { createApp } = await import("../src/app.js");
