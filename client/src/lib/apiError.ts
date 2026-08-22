@@ -1,9 +1,9 @@
 /** Live church site. Preview `*.vercel.app` URLs are often locked by Vercel SSO. */
-export const LIVE_APP_ORIGIN = "https://infinitelygracedlandchurch.com";
+export const LIVE_APP_ORIGIN = "https://infinitelygracedchurch.com";
 
 const LIVE_HOSTS = new Set([
-  "infinitelygracedlandchurch.com",
-  "www.infinitelygracedlandchurch.com",
+  "infinitelygracedchurch.com",
+  "www.infinitelygracedchurch.com",
   "graced-flow.vercel.app",
 ]);
 

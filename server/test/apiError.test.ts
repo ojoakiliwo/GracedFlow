@@ -7,8 +7,8 @@ import {
 
 describe("login error messages", () => {
   it("treats Vercel preview hosts as locked and the live domain as open", () => {
-    expect(isLockedVercelHost("infinitelygracedlandchurch.com")).toBe(false);
-    expect(isLockedVercelHost("www.infinitelygracedlandchurch.com")).toBe(false);
+    expect(isLockedVercelHost("infinitelygracedchurch.com")).toBe(false);
+    expect(isLockedVercelHost("www.infinitelygracedchurch.com")).toBe(false);
     expect(isLockedVercelHost("graced-flow.vercel.app")).toBe(false);
     expect(isLockedVercelHost("localhost")).toBe(false);
     expect(
