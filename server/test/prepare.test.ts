@@ -79,7 +79,8 @@ describe("Production-ready data", () => {
     const meetings = (await db.prepare("SELECT title FROM meetings").all()) as { title: string }[];
     expect(meetings).toHaveLength(0);
     const members = (await db.prepare("SELECT email FROM members").all()) as { email: string }[];
-    expect(members).toHaveLength(0);
+    expect(members.every((m) => !m.email.endsWith("@example.com"))).toBe(true);
+    expect(members.some((m) => m.email === "pastor@infinitelygraced.church")).toBe(true);
   });
 
   it("ignores leftover SEED_DEMO on Vercel production", async () => {

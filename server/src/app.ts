@@ -1,6 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import { config } from "./config.js";
+import { ensureReady } from "./bootstrap.js";
 import { ensureDemoDataRemoved } from "./seed.js";
 import { HttpError } from "./util.js";
 import { authRouter } from "./routes/auth.js";
@@ -24,6 +25,14 @@ import { cronRouter } from "./routes/cron.js";
 export function createApp() {
   const app = express();
   app.use(cors());
+
+  // Any Vercel/Express entry (default export or api handler) must init schema
+  // before routes run — not only the Node `listen()` boot path.
+  app.use((_req, _res, next) => {
+    ensureReady()
+      .then(() => next())
+      .catch(next);
+  });
 
   // Webhooks need the raw body for signature verification, so mount before json.
   app.use("/api/webhooks", webhooksRouter);
@@ -88,3 +97,6 @@ export function createApp() {
 
   return app;
 }
+
+/** Vercel Express looks for a default export in `src/app.ts`. */
+export default createApp();

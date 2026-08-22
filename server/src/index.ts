@@ -3,11 +3,15 @@ import { config } from "./config.js";
 import { ensureReady } from "./bootstrap.js";
 import { registerSchedules } from "./scheduler.js";
 
+const app = createApp();
+
+/** Vercel Express can also pick up `src/index.ts` as the application entry. */
+export default app;
+
 async function main() {
   await ensureReady();
   registerSchedules();
 
-  const app = createApp();
   app.listen(config.port, () => {
     // eslint-disable-next-line no-console
     console.log(
@@ -16,8 +20,11 @@ async function main() {
   });
 }
 
-main().catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error("Failed to start server", err);
-  process.exit(1);
-});
+// Do not listen (or exit) when Vercel imports this file as a serverless function.
+if (!process.env.VERCEL) {
+  main().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error("Failed to start server", err);
+    process.exit(1);
+  });
+}
