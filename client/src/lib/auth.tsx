@@ -68,13 +68,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
     });
     setToken(res.token);
-    setUser(await api<User>("/auth/me"));
+    setUser(res.user);
+    try {
+      setUser(await api<User>("/auth/me"));
+    } catch {
+      // Session is already established from /auth/login.
+    }
   }, []);
 
   const register = useCallback(async (input: RegisterInput) => {
     const res = await apiPost<{ token: string; user: User }>("/auth/register", input);
     setToken(res.token);
-    setUser(await api<User>("/auth/me"));
+    setUser(res.user);
+    try {
+      setUser(await api<User>("/auth/me"));
+    } catch {
+      // Session is already established from /auth/register.
+    }
   }, []);
 
   const logout = useCallback(() => {

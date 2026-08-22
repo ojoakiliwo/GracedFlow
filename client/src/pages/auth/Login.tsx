@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { Button, Field, Input } from "../../components/ui";
+import { PreviewLockNotice } from "../../components/PreviewLockNotice";
 
 export default function Login() {
   const { login } = useAuth();
@@ -63,6 +64,7 @@ export default function Login() {
           <p className="mt-1 text-sm text-ink-500">
             Sign in to the ministry portal to continue.
           </p>
+          <PreviewLockNotice />
 
           <form onSubmit={submit} className="mt-8 space-y-4">
             <Field label="Email address">

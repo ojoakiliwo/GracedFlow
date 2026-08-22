@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { Button, Field, Input } from "../../components/ui";
+import { PreviewLockNotice } from "../../components/PreviewLockNotice";
 
 export default function Register() {
   const { register } = useAuth();
@@ -46,6 +47,7 @@ export default function Register() {
         <p className="mt-1 text-sm text-ink-500">
           The first account becomes the church administrator. Later signups join as workers.
         </p>
+        <PreviewLockNotice />
 
         <form onSubmit={submit} className="mt-6 space-y-4">
           <div className="grid grid-cols-2 gap-3">
