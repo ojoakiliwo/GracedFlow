@@ -3,7 +3,7 @@ import {
   LIVE_APP_ORIGIN,
   formatApiError,
   isLockedVercelHost,
-} from "../../client/src/lib/apiError.ts";
+} from "../../client/src/lib/apiError.js";
 
 describe("login error messages", () => {
   it("treats Vercel preview hosts as locked and the live domain as open", () => {
