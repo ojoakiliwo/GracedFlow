@@ -152,11 +152,11 @@ export default function Settings() {
                 </li>
                 <li>
                   <strong>Email:</strong> send from{" "}
-                  <code>@infinitelygracedchurch.com</code> with{" "}
-                  <code>SMTP_HOST</code> (<code>smtp.zoho.com</code> or{" "}
-                  <code>mail.privateemail.com</code>),{" "}
-                  <code>SMTP_USER</code>, <code>SMTP_PASS</code>, and{" "}
-                  <code>EMAIL_FROM</code>.
+                  <code>@infinitelygracedchurch.com</code> via Brevo. Set{" "}
+                  <code>SMTP_HOST=smtp-relay.brevo.com</code>,{" "}
+                  <code>SMTP_PORT=587</code>, <code>SMTP_USER</code> (Brevo SMTP
+                  login), <code>SMTP_PASS</code> (Brevo SMTP key, not the API
+                  key), and <code>EMAIL_FROM</code>.
                 </li>
                 <li>
                   <strong>Payments:</strong> Flutterwave{" "}
