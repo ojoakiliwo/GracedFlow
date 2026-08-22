@@ -136,20 +136,47 @@ export async function sendWhatsApp(to: string, body: string): Promise<DeliveryRe
   return { ok: true, provider: "skipped" };
 }
 
-let transporter: nodemailer.Transporter | null = null;
-function getTransporter(): nodemailer.Transporter | null {
-  if (!emailIsConfigured() || !config.email.smtpHost) return null;
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: config.email.smtpHost,
-      port: config.email.smtpPort,
-      secure: config.email.smtpPort === 465,
-      auth: config.email.smtpUser
-        ? { user: config.email.smtpUser, pass: config.email.smtpPass }
-        : undefined,
-    });
+function smtpErrorMessage(error: unknown): string {
+  const err = error as {
+    message?: string;
+    response?: string;
+    responseCode?: number;
+  };
+  const parts = [err.response, err.message].filter(Boolean);
+  const text = parts.join(" — ") || "SMTP delivery failed";
+  if (/535|authentication failed|invalid login|invalid user/i.test(text)) {
+    return (
+      `${text}. SMTP_USER must be the Login on Brevo → Settings → SMTP & API ` +
+      `(often ends with @smtp-brevo.com), and SMTP_PASS must be an SMTP key, not the API key.`
+    );
   }
-  return transporter;
+  if (/sender|from address|not valid|not authorized|unverified/i.test(text)) {
+    return (
+      `${text}. EMAIL_FROM must be a verified Brevo sender on the authenticated domain, ` +
+      `e.g. Infinitely Graced Church <noreply@infinitelygracedchurch.com>.`
+    );
+  }
+  return text;
+}
+
+function createTransporter(): nodemailer.Transporter | null {
+  if (!emailIsConfigured() || !config.email.smtpHost) return null;
+  const port = config.email.smtpPort;
+  return nodemailer.createTransport({
+    host: config.email.smtpHost,
+    port,
+    secure: port === 465,
+    requireTLS: port === 587,
+    auth: config.email.smtpUser
+      ? {
+          user: config.email.smtpUser.trim(),
+          pass: (config.email.smtpPass ?? "").trim(),
+        }
+      : undefined,
+    connectionTimeout: 12_000,
+    greetingTimeout: 12_000,
+    socketTimeout: 12_000,
+  });
 }
 
 export async function sendEmail(
@@ -157,13 +184,13 @@ export async function sendEmail(
   subject: string,
   body: string,
 ): Promise<DeliveryResult> {
-  const t = getTransporter();
+  const t = createTransporter();
   if (t) {
     try {
       await t.sendMail({ from: config.email.from, to, subject, text: body });
       return { ok: true, provider: "smtp" };
     } catch (e) {
-      return { ok: false, provider: "smtp", error: (e as Error).message };
+      return { ok: false, provider: "smtp", error: smtpErrorMessage(e) };
     }
   }
   // eslint-disable-next-line no-console

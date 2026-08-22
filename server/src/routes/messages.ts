@@ -20,7 +20,8 @@ messagesRouter.get(
     const rows = await db.prepare(
         `SELECT m.*,
           (SELECT COUNT(*) FROM message_recipients r WHERE r.message_id = m.id AND r.status = 'sent') AS delivered,
-          (SELECT COUNT(*) FROM message_recipients r WHERE r.message_id = m.id AND r.status = 'failed') AS failed
+          (SELECT COUNT(*) FROM message_recipients r WHERE r.message_id = m.id AND r.status = 'failed') AS failed,
+          (SELECT r.error FROM message_recipients r WHERE r.message_id = m.id AND r.status = 'failed' AND r.error IS NOT NULL LIMIT 1) AS last_error
          FROM messages m ORDER BY m.created_at DESC LIMIT 100`,
       )
       .all();

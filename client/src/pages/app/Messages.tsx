@@ -36,6 +36,7 @@ interface MessageRow {
   created_at: string;
   delivered: number;
   failed: number;
+  last_error?: string | null;
 }
 interface Preview {
   count: number;
@@ -257,6 +258,9 @@ export default function Messages() {
                     {m.recipients_count} recipients · {m.delivered} delivered
                     {m.failed ? ` · ${m.failed} failed` : ""}
                   </p>
+                  {m.last_error && (
+                    <p className="mt-1 text-xs text-red-600">{m.last_error}</p>
+                  )}
                   <p className="text-xs text-ink-400">{formatDateTime(m.created_at)}</p>
                 </li>
               ))}
