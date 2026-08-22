@@ -1,12 +1,29 @@
 import crypto from "node:crypto";
 import { config } from "./config.js";
+import {
+  createFlutterwaveCheckoutSession,
+  flutterwaveCredentials,
+  isFlutterwaveConfigured,
+  verifyFlutterwaveCharge,
+  verifyFlutterwaveWebhookSignature as verifyFlwSig,
+} from "./flutterwave.js";
 
 export function isPaystackLive(): boolean {
   return config.payments.provider === "paystack" && !!config.payments.paystackSecretKey;
 }
 
+export function isFlutterwaveLive(): boolean {
+  return config.payments.provider === "flutterwave" && isFlutterwaveConfigured();
+}
+
+export function isOnlineLive(): boolean {
+  return isPaystackLive() || isFlutterwaveLive();
+}
+
+export type PaymentProvider = "paystack" | "flutterwave" | "dryrun";
+
 export interface InitResult {
-  provider: "paystack" | "dryrun";
+  provider: PaymentProvider;
   authorizationUrl: string;
   reference: string;
   accessCode?: string;
@@ -15,18 +32,35 @@ export interface InitResult {
 const PAYSTACK_BASE = "https://api.paystack.co";
 
 /**
- * Initializes an online transaction. With a Paystack secret key, this creates a
- * real hosted-checkout session and returns its authorization URL. Without one,
- * it returns a URL back to our own callback so the giving flow is fully testable
- * end-to-end in simulated mode.
+ * Initializes an online transaction. With Flutterwave v4 or Paystack
+ * credentials this creates a hosted-checkout session. Without them it
+ * returns a URL back to our own callback so the giving flow is testable.
  */
 export async function initializeTransaction(params: {
   email: string;
   amountMajor: number; // in Naira (major units)
   reference: string;
+  customerName?: string;
   metadata?: Record<string, unknown>;
 }): Promise<InitResult> {
-  const callbackUrl = `${config.appUrl}/give/callback`;
+  const callbackUrl = `${config.appUrl}/give/callback?reference=${encodeURIComponent(params.reference)}`;
+
+  if (isFlutterwaveLive()) {
+    const session = await createFlutterwaveCheckoutSession(flutterwaveCredentials(), {
+      email: params.email,
+      name: params.customerName,
+      amountMajor: params.amountMajor,
+      currency: config.payments.currency,
+      reference: params.reference,
+      redirectUrl: callbackUrl,
+      metadata: params.metadata,
+    });
+    return {
+      provider: "flutterwave",
+      authorizationUrl: session.checkoutUrl,
+      reference: session.reference,
+    };
+  }
 
   if (isPaystackLive()) {
     const res = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
@@ -61,10 +95,7 @@ export async function initializeTransaction(params: {
   }
 
   // Simulated: bounce back to our callback which will "verify" successfully.
-  const url = `${callbackUrl}?reference=${encodeURIComponent(
-    params.reference,
-  )}&simulated=1`;
-  return { provider: "dryrun", authorizationUrl: url, reference: params.reference };
+  return { provider: "dryrun", authorizationUrl: callbackUrl + "&simulated=1", reference: params.reference };
 }
 
 export interface VerifyResult {
@@ -76,6 +107,10 @@ export interface VerifyResult {
 }
 
 export async function verifyTransaction(reference: string): Promise<VerifyResult> {
+  if (isFlutterwaveLive()) {
+    return verifyFlutterwaveCharge(flutterwaveCredentials(), reference);
+  }
+
   if (isPaystackLive()) {
     const res = await fetch(
       `${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`,
@@ -114,4 +149,8 @@ export function verifyWebhookSignature(rawBody: Buffer, signature?: string): boo
   } catch {
     return false;
   }
+}
+
+export function verifyFlutterwaveWebhookSignature(rawBody: Buffer, signature?: string): boolean {
+  return verifyFlwSig(rawBody, signature);
 }

@@ -5,6 +5,29 @@ function bool(value: string | undefined, fallback = false): boolean {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
+function firstEnv(...keys: string[]): string {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value) return value;
+  }
+  return "";
+}
+
+function hasFlutterwaveCreds(): boolean {
+  return !!(firstEnv("FLW_CLIENT_ID", "FLUTTERWAVE_CLIENT_ID") &&
+    firstEnv("FLW_CLIENT_SECRET", "FLUTTERWAVE_CLIENT_SECRET"));
+}
+
+function resolvePaymentProvider(): "flutterwave" | "paystack" | "dryrun" {
+  const explicit = process.env.PAYMENT_PROVIDER;
+  if (explicit === "flutterwave" || explicit === "paystack" || explicit === "dryrun") {
+    return explicit;
+  }
+  if (hasFlutterwaveCreds()) return "flutterwave";
+  if (process.env.PAYSTACK_SECRET_KEY) return "paystack";
+  return "dryrun";
+}
+
 export const config = {
   env: process.env.NODE_ENV ?? "development",
   port: Number(process.env.PORT ?? 3001),
@@ -59,12 +82,19 @@ export const config = {
     onlineUrl: process.env.GIVING_ONLINE_URL ?? "",
   },
   payments: {
-    // Paystack activates automatically when a secret key is present; otherwise
-    // giving runs in a self-contained simulated mode so the flow is testable.
-    provider: process.env.PAYMENT_PROVIDER ?? (process.env.PAYSTACK_SECRET_KEY ? "paystack" : "dryrun"),
+    // Flutterwave v4 (Client ID + Secret) or Paystack activate automatically
+    // when credentials are present; otherwise giving runs in simulated mode.
+    provider: resolvePaymentProvider(),
     currency: process.env.PAYMENT_CURRENCY ?? "NGN",
     paystackSecretKey: process.env.PAYSTACK_SECRET_KEY ?? "",
     paystackPublicKey: process.env.PAYSTACK_PUBLIC_KEY ?? "",
+    flutterwaveClientId: firstEnv("FLW_CLIENT_ID", "FLUTTERWAVE_CLIENT_ID"),
+    flutterwaveClientSecret: firstEnv("FLW_CLIENT_SECRET", "FLUTTERWAVE_CLIENT_SECRET"),
+    flutterwaveEncryptionKey: firstEnv("FLW_ENCRYPTION_KEY", "FLUTTERWAVE_ENCRYPTION_KEY"),
+    // Secret hash you set on the Flutterwave dashboard (Settings → Webhooks).
+    flutterwaveSecretHash: firstEnv("FLW_SECRET_HASH", "FLUTTERWAVE_SECRET_HASH"),
+    flutterwaveEnv: (process.env.FLW_ENV === "sandbox" ? "sandbox" : "live") as "live" | "sandbox",
+    flutterwaveBaseUrl: process.env.FLW_BASE_URL ?? "",
   },
   appUrl: process.env.APP_URL ?? "http://localhost:5173",
 };

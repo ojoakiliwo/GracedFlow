@@ -13,7 +13,8 @@ interface VerifyResult {
 
 export default function GiveCallback() {
   const [params] = useSearchParams();
-  const reference = params.get("reference") ?? params.get("trxref") ?? "";
+  const reference =
+    params.get("reference") ?? params.get("trxref") ?? params.get("tx_ref") ?? "";
   const [state, setState] = useState<"loading" | VerifyResult["status"]>("loading");
   const [result, setResult] = useState<VerifyResult | null>(null);
 

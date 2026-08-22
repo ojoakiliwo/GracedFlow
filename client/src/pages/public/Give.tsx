@@ -9,6 +9,7 @@ interface GivingOptions {
   currency: string;
   online: boolean;
   onlineLive: boolean;
+  provider?: "paystack" | "flutterwave" | "dryrun";
   bank: {
     bankName: string;
     accountName: string;
@@ -56,7 +57,7 @@ export default function Give() {
         method,
       });
       if (res.method === "online" && res.authorizationUrl) {
-        // Hand off to the Paystack hosted checkout (or simulated callback).
+        // Hand off to Flutterwave / Paystack hosted checkout (or simulated callback).
         window.location.href = res.authorizationUrl;
         return;
       }
@@ -126,7 +127,13 @@ export default function Give() {
                   onClick={() => setMethod("online")}
                   icon={<CreditCard className="h-5 w-5" />}
                   title="Card / Online"
-                  subtitle={options.onlineLive ? "Secured by Paystack" : "Instant & secure"}
+                  subtitle={
+                    options.onlineLive
+                      ? options.provider === "flutterwave"
+                        ? "Secured by Flutterwave"
+                        : "Secured by Paystack"
+                      : "Instant & secure"
+                  }
                 />
                 <MethodTile
                   active={method === "transfer"}

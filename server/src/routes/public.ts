@@ -5,7 +5,7 @@ import { config } from "../config.js";
 import { HttpError, newId, nowIso } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 import { createPrayerRequest } from "./prayer.js";
-import { initializeTransaction, isPaystackLive, verifyTransaction } from "../payments.js";
+import { initializeTransaction, isOnlineLive, verifyTransaction } from "../payments.js";
 
 export const publicRouter = Router();
 
@@ -82,8 +82,12 @@ publicRouter.get(
   asyncHandler(async (_req, res) => {
     res.json({
       currency: config.payments.currency,
-      online: config.payments.provider === "paystack" || config.payments.provider === "dryrun",
-      onlineLive: isPaystackLive(),
+      online:
+        config.payments.provider === "paystack" ||
+        config.payments.provider === "flutterwave" ||
+        config.payments.provider === "dryrun",
+      onlineLive: isOnlineLive(),
+      provider: config.payments.provider,
       paystackPublicKey: config.payments.paystackPublicKey || null,
       bank: config.giving,
     });
@@ -132,6 +136,7 @@ publicRouter.post(
         email: input.donorEmail || "giving@infinitelygraced.church",
         amountMajor: input.amount,
         reference,
+        customerName: input.donorName,
         metadata: { donationId: id, type: input.type, donorName: input.donorName },
       });
       return void res.status(201).json({

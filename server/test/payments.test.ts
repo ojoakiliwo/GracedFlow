@@ -25,8 +25,9 @@ describe("Giving & payments", () => {
     const res = await request(app).get("/api/public/giving-options");
     expect(res.status).toBe(200);
     expect(res.body.online).toBe(true);
-    // No Paystack key in tests -> simulated.
+    // No live payment keys in tests -> simulated.
     expect(res.body.onlineLive).toBe(false);
+    expect(res.body.provider).toBe("dryrun");
   });
 
   it("starts an online gift and returns an authorization URL", async () => {
@@ -74,6 +75,15 @@ describe("Giving & payments", () => {
       .set("x-paystack-signature", "bogus")
       .send({ event: "charge.success", data: { reference: "x" } });
     // No secret key configured -> signature verification fails.
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a Flutterwave webhook with an invalid signature", async () => {
+    const res = await request(app)
+      .post("/api/webhooks/flutterwave")
+      .set("Content-Type", "application/json")
+      .set("flutterwave-signature", "bogus")
+      .send({ type: "charge.completed", data: { reference: "x", status: "succeeded" } });
     expect(res.status).toBe(401);
   });
 

@@ -154,8 +154,11 @@ export default function Settings() {
                   <code>SMTP_HOST</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>
                 </li>
                 <li>
-                  <strong>Payments:</strong> <code>PAYSTACK_SECRET_KEY</code>,{" "}
-                  <code>PAYSTACK_PUBLIC_KEY</code>
+                  <strong>Payments (Flutterwave v4):</strong>{" "}
+                  <code>FLW_CLIENT_ID</code>, <code>FLW_CLIENT_SECRET</code>,{" "}
+                  <code>FLW_ENCRYPTION_KEY</code>, <code>FLW_SECRET_HASH</code>,{" "}
+                  <code>FLW_ENV=live</code> (or Paystack:{" "}
+                  <code>PAYSTACK_SECRET_KEY</code>, <code>PAYSTACK_PUBLIC_KEY</code>)
                 </li>
                 <li>
                   <strong>Social:</strong> <code>SOCIAL_CONNECTED=facebook,twitter,...</code>

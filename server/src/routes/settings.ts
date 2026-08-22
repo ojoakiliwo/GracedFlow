@@ -3,9 +3,32 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { authenticate, requireRole } from "../auth.js";
 import { sendEmail, sendSms } from "../comms.js";
-import { isPaystackLive } from "../payments.js";
+import { isFlutterwaveLive, isOnlineLive, isPaystackLive } from "../payments.js";
 import { HttpError } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
+
+function paymentsIntegrationName(): string {
+  if (isFlutterwaveLive() || config.payments.provider === "flutterwave") {
+    return "Payments (Flutterwave v4)";
+  }
+  if (isPaystackLive() || config.payments.provider === "paystack") {
+    return "Payments (Paystack)";
+  }
+  return "Payments";
+}
+
+function paymentsIntegrationDetail(): string {
+  if (isFlutterwaveLive()) {
+    return `Live · Flutterwave ${config.payments.flutterwaveEnv} · ${config.payments.currency}`;
+  }
+  if (isPaystackLive()) {
+    return `Live · ${config.payments.currency}`;
+  }
+  if (config.payments.provider === "flutterwave") {
+    return "Simulated — add FLW_CLIENT_ID and FLW_CLIENT_SECRET to accept real payments";
+  }
+  return "Simulated — add Flutterwave v4 (FLW_CLIENT_ID + FLW_CLIENT_SECRET) or PAYSTACK_SECRET_KEY";
+}
 
 export const settingsRouter = Router();
 settingsRouter.use(authenticate);
@@ -37,11 +60,9 @@ settingsRouter.get(
         },
         {
           key: "payments",
-          name: "Payments (Paystack)",
-          live: isPaystackLive(),
-          detail: isPaystackLive()
-            ? `Live · ${config.payments.currency}`
-            : "Simulated — add PAYSTACK_SECRET_KEY to accept real payments",
+          name: paymentsIntegrationName(),
+          live: isOnlineLive(),
+          detail: paymentsIntegrationDetail(),
         },
         {
           key: "social",

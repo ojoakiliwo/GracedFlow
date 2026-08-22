@@ -125,7 +125,8 @@ needed. (CLI alternative: `npm i -g vercel && vercel && vercel --prod`.)
 | `JWT_SECRET` | Long random string |
 | `CRON_SECRET` | Long random string — required for the automation endpoints |
 | `APP_URL` | Your production URL, e.g. `https://your-app.vercel.app` |
-| `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY` | For live giving (optional) |
+| `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY`, `FLW_SECRET_HASH` | Flutterwave v4 live giving (optional) |
+| `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY` | Paystack giving (optional alternative) |
 | `SMS_PROVIDER=twilio`, `TWILIO_*` | For live SMS (optional) |
 | `EMAIL_PROVIDER=smtp`, `SMTP_*` | For live email (optional) |
 | `SOCIAL_CONNECTED` | Connected social platforms (optional) |
@@ -134,9 +135,12 @@ needed. (CLI alternative: `npm i -g vercel && vercel && vercel --prod`.)
 Click **Deploy**. On first request the API creates the schema and seeds demo data. Visit
 your URL — the public site and `/login` (admin@igc.church / Grace@2024) both work.
 
-### 5. Paystack webhook (if using live giving)
-In Paystack → **Settings → Webhooks**, set the URL to
-`https://<your-app>.vercel.app/api/webhooks/paystack`.
+### 5. Payment webhooks (if using live giving)
+- **Flutterwave v4:** Dashboard → Settings → Webhooks →
+  `https://<your-app>.vercel.app/api/webhooks/flutterwave`. Set a secret hash
+  and store the same value as `FLW_SECRET_HASH`.
+- **Paystack:** Settings → Webhooks →
+  `https://<your-app>.vercel.app/api/webhooks/paystack`.
 
 ### Automations on Vercel Cron
 `vercel.json` schedules three cron jobs (UTC): Sunday-service reminder (Sat 17:00),
@@ -171,6 +175,7 @@ Copy `server/.env.example` to `server/.env` to enable real integrations.
 | Auth | `JWT_SECRET`, `JWT_EXPIRES_IN` |
 | SMS (Twilio) | `SMS_PROVIDER=twilio`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` |
 | Email (SMTP) | `EMAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` |
+| Payments (Flutterwave v4) | `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY`, `FLW_SECRET_HASH`, `FLW_ENV`, `PAYMENT_CURRENCY`, `APP_URL` |
 | Payments (Paystack) | `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `PAYMENT_CURRENCY`, `APP_URL` |
 | Social | `SOCIAL_CONNECTED=facebook,twitter,...` |
 | Giving (bank) | `GIVING_BANK_NAME`, `GIVING_ACCOUNT_NAME`, `GIVING_ACCOUNT_NUMBER`, `GIVING_ONLINE_URL` |
@@ -185,12 +190,37 @@ send a test SMS/email.
 
 The adapters are already wired — you only add credentials.
 
+### Payments — Flutterwave v4 (Client ID / Client Secret / Encryption key)
+After Flutterwave upgrades an account, the dashboard shows **v4 Live API keys**
+instead of the old Public/Secret pair. Map them like this:
+
+| Flutterwave dashboard | Environment variable |
+| --- | --- |
+| Client ID | `FLW_CLIENT_ID` |
+| Client Secret | `FLW_CLIENT_SECRET` |
+| Encryption key | `FLW_ENCRYPTION_KEY` |
+| Webhook secret hash (you choose this) | `FLW_SECRET_HASH` |
+
+1. Copy the three keys from Flutterwave → **Settings → API Keys** (v4 Live).
+2. Set them on the server (`server/.env` locally, or Vercel → Environment Variables).
+   Also set `APP_URL` to your public site URL and `FLW_ENV=live`.
+   Restart the API. The **Card / Online** giving option now creates a real
+   Flutterwave hosted checkout; donors return to `/give/callback` which verifies
+   the charge.
+3. In Flutterwave → **Settings → Webhooks**, set the URL to
+   `https://<your-api-host>/api/webhooks/flutterwave`, choose a random secret hash,
+   and put that same value in `FLW_SECRET_HASH`. Incoming `charge.completed`
+   events are signature-verified (HMAC-SHA256) and auto-confirm the donation.
+
+The encryption key is stored for Flutterwave's AES-256-GCM card encryption. Hosted
+checkout (this app's giving page) never sends card data through our server, so
+OAuth (Client ID + Client Secret) is what actually activates live payments.
+
 ### Payments — Paystack
 1. Create a Paystack account and copy your keys from
    Dashboard → Settings → API Keys & Webhooks.
-2. Set `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, and `APP_URL` (your public site URL),
-   then restart the API. The **Card / Online** giving option now creates a real Paystack
-   checkout; donors are redirected back to `/give/callback` which verifies the payment.
+2. Set `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `PAYMENT_PROVIDER=paystack`,
+   and `APP_URL` (your public site URL), then restart the API.
 3. Add a webhook in Paystack pointing to `https://<your-api-host>/api/webhooks/paystack`.
    Incoming `charge.success` events are signature-verified (HMAC-SHA512) and auto-confirm
    the donation in the giving ledger.
