@@ -106,9 +106,14 @@ export interface VerifyResult {
   raw?: unknown;
 }
 
-export async function verifyTransaction(reference: string): Promise<VerifyResult> {
+export async function verifyTransaction(
+  reference: string,
+  extras: { chargeId?: string } = {},
+): Promise<VerifyResult> {
   if (isFlutterwaveLive()) {
-    return verifyFlutterwaveCharge(flutterwaveCredentials(), reference);
+    return verifyFlutterwaveCharge(flutterwaveCredentials(), reference, {
+      chargeId: extras.chargeId,
+    });
   }
 
   if (isPaystackLive()) {

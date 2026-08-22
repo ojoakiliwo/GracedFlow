@@ -156,8 +156,9 @@ export default function Settings() {
                 <li>
                   <strong>Payments (Flutterwave v4):</strong>{" "}
                   <code>FLW_CLIENT_ID</code>, <code>FLW_CLIENT_SECRET</code>,{" "}
-                  <code>FLW_ENCRYPTION_KEY</code>, <code>FLW_SECRET_HASH</code>,{" "}
-                  <code>FLW_ENV=live</code> (or Paystack:{" "}
+                  <code>FLW_ENCRYPTION_KEY</code>, <code>FLW_ENV=live</code>.
+                  Gifts confirm when the donor returns from checkout — a
+                  webhook is optional. (Or Paystack:{" "}
                   <code>PAYSTACK_SECRET_KEY</code>, <code>PAYSTACK_PUBLIC_KEY</code>)
                 </li>
                 <li>

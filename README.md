@@ -125,7 +125,7 @@ needed. (CLI alternative: `npm i -g vercel && vercel && vercel --prod`.)
 | `JWT_SECRET` | Long random string |
 | `CRON_SECRET` | Long random string — required for the automation endpoints |
 | `APP_URL` | Your production URL, e.g. `https://your-app.vercel.app` |
-| `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY`, `FLW_SECRET_HASH` | Flutterwave v4 live giving (optional) |
+| `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY` | Flutterwave v4 live giving (optional; webhook hash not required) |
 | `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY` | Paystack giving (optional alternative) |
 | `SMS_PROVIDER=twilio`, `TWILIO_*` | For live SMS (optional) |
 | `EMAIL_PROVIDER=smtp`, `SMTP_*` | For live email (optional) |
@@ -135,12 +135,14 @@ needed. (CLI alternative: `npm i -g vercel && vercel && vercel --prod`.)
 Click **Deploy**. On first request the API creates the schema and seeds demo data. Visit
 your URL — the public site and `/login` (admin@igc.church / Grace@2024) both work.
 
-### 5. Payment webhooks (if using live giving)
-- **Flutterwave v4:** Dashboard → Settings → Webhooks →
-  `https://<your-app>.vercel.app/api/webhooks/flutterwave`. Set a secret hash
-  and store the same value as `FLW_SECRET_HASH`.
-- **Paystack:** Settings → Webhooks →
-  `https://<your-app>.vercel.app/api/webhooks/paystack`.
+### 5. Payment confirmation
+Flutterwave gifts confirm when the donor is redirected back to `/give/callback` —
+the API re-queries the charge. A webhook is **not required**, so you can keep
+using the same Flutterwave account/webhook on another project.
+
+If this app *does* own the Flutterwave webhook later, point it at
+`https://<your-app>.vercel.app/api/webhooks/flutterwave` and set `FLW_SECRET_HASH`.
+Paystack (if used) still uses `https://<your-app>.vercel.app/api/webhooks/paystack`.
 
 ### Automations on Vercel Cron
 `vercel.json` schedules three cron jobs (UTC): Sunday-service reminder (Sat 17:00),
@@ -175,7 +177,7 @@ Copy `server/.env.example` to `server/.env` to enable real integrations.
 | Auth | `JWT_SECRET`, `JWT_EXPIRES_IN` |
 | SMS (Twilio) | `SMS_PROVIDER=twilio`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` |
 | Email (SMTP) | `EMAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` |
-| Payments (Flutterwave v4) | `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY`, `FLW_SECRET_HASH`, `FLW_ENV`, `PAYMENT_CURRENCY`, `APP_URL` |
+| Payments (Flutterwave v4) | `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY`, `FLW_ENV`, `PAYMENT_CURRENCY`, `APP_URL` |
 | Payments (Paystack) | `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `PAYMENT_CURRENCY`, `APP_URL` |
 | Social | `SOCIAL_CONNECTED=facebook,twitter,...` |
 | Giving (bank) | `GIVING_BANK_NAME`, `GIVING_ACCOUNT_NAME`, `GIVING_ACCOUNT_NUMBER`, `GIVING_ONLINE_URL` |
@@ -199,18 +201,20 @@ instead of the old Public/Secret pair. Map them like this:
 | Client ID | `FLW_CLIENT_ID` |
 | Client Secret | `FLW_CLIENT_SECRET` |
 | Encryption key | `FLW_ENCRYPTION_KEY` |
-| Webhook secret hash (you choose this) | `FLW_SECRET_HASH` |
 
 1. Copy the three keys from Flutterwave → **Settings → API Keys** (v4 Live).
 2. Set them on the server (`server/.env` locally, or Vercel → Environment Variables).
    Also set `APP_URL` to your public site URL and `FLW_ENV=live`.
    Restart the API. The **Card / Online** giving option now creates a real
-   Flutterwave hosted checkout; donors return to `/give/callback` which verifies
-   the charge.
-3. In Flutterwave → **Settings → Webhooks**, set the URL to
-   `https://<your-api-host>/api/webhooks/flutterwave`, choose a random secret hash,
-   and put that same value in `FLW_SECRET_HASH`. Incoming `charge.completed`
-   events are signature-verified (HMAC-SHA256) and auto-confirm the donation.
+   Flutterwave hosted checkout.
+3. After payment, Flutterwave sends the donor back to `/give/callback`. This app
+   then verifies the charge with Flutterwave's API and marks the gift confirmed.
+   **You do not need to change the webhook on a Flutterwave account that already
+   serves another project.**
+
+A webhook is only a backup (for bank transfer / USSD that finish after the donor
+leaves, or if they close the browser before redirect). Leave the other project's
+webhook in place.
 
 The encryption key is stored for Flutterwave's AES-256-GCM card encryption. Hosted
 checkout (this app's giving page) never sends card data through our server, so

@@ -173,9 +173,76 @@ describe("Flutterwave v4 helpers", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await verifyFlutterwaveCharge(creds, "IGC-GIFT-1");
+    const result = await verifyFlutterwaveCharge(creds, "IGC-GIFT-1", { delayMs: 0 });
     expect(result.status).toBe("success");
     expect(result.amountMajor).toBe(5000);
     expect(result.channel).toBe("card");
+  });
+
+  it("verifies by charge id from the checkout redirect", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("openid-connect/token")) {
+        return jsonResponse(200, { access_token: "tok_live", expires_in: 600 });
+      }
+      if (url.endsWith("/charges/chg_redirect")) {
+        return jsonResponse(200, {
+          status: "success",
+          data: { id: "chg_redirect", reference: "IGC-GIFT-9", status: "succeeded", amount: 2500 },
+        });
+      }
+      return jsonResponse(404, { message: `unexpected ${url}` });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await verifyFlutterwaveCharge(creds, "IGC-GIFT-9", {
+      chargeId: "chg_redirect",
+      delayMs: 0,
+    });
+    expect(result.status).toBe("success");
+    expect(result.amountMajor).toBe(2500);
+  });
+
+  it("retries until the charge appears after checkout redirect", async () => {
+    let lookups = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("openid-connect/token")) {
+        return jsonResponse(200, { access_token: "tok_live", expires_in: 600 });
+      }
+      if (url.includes("/charges?reference=")) {
+        lookups += 1;
+        if (lookups < 2) {
+          return jsonResponse(200, { status: "success", data: [] });
+        }
+        return jsonResponse(200, {
+          status: "success",
+          data: [{ id: "chg_late", reference: "IGC-LATE", status: "succeeded", amount: 1000 }],
+        });
+      }
+      return jsonResponse(404, { message: `unexpected ${url}` });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await verifyFlutterwaveCharge(creds, "IGC-LATE", { attempts: 3, delayMs: 0 });
+    expect(result.status).toBe("success");
+    expect(lookups).toBe(2);
+  });
+
+  it("returns pending (not failed) when no webhook fired and the charge is not listed yet", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("openid-connect/token")) {
+        return jsonResponse(200, { access_token: "tok_live", expires_in: 600 });
+      }
+      if (url.includes("/charges?reference=")) {
+        return jsonResponse(200, { status: "success", data: [] });
+      }
+      return jsonResponse(404, { message: `unexpected ${url}` });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await verifyFlutterwaveCharge(creds, "IGC-MISSING", { attempts: 2, delayMs: 0 });
+    expect(result.status).toBe("pending");
   });
 });

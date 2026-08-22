@@ -159,11 +159,12 @@ publicRouter.post(
   }),
 );
 
-// Called after returning from the Paystack checkout to confirm payment.
+// Called after returning from hosted checkout. Confirms the gift by querying
+// Flutterwave/Paystack directly — webhooks are optional.
 publicRouter.get(
   "/give/verify",
   asyncHandler(async (req, res) => {
-    const reference = String(req.query.reference ?? "");
+    const reference = String(req.query.reference ?? req.query.tx_ref ?? req.query.trxref ?? "");
     if (!reference) throw new HttpError(400, "Missing reference");
     const donation = await db.prepare("SELECT * FROM donations WHERE reference = ?")
       .get(reference) as { id: string; amount: number; type: string; status: string } | undefined;
@@ -173,7 +174,12 @@ publicRouter.get(
       return void res.json({ status: "success", amount: donation.amount, type: donation.type });
     }
 
-    const result = await verifyTransaction(reference);
+    const chargeId = String(
+      req.query.chargeId ?? req.query.id ?? req.query.transaction_id ?? req.query.charge_id ?? "",
+    );
+    const result = await verifyTransaction(reference, {
+      chargeId: chargeId || undefined,
+    });
     if (result.status === "success") {
       await db.prepare(
         "UPDATE donations SET status = 'confirmed', method = 'card', confirmed_at = ? WHERE id = ?",

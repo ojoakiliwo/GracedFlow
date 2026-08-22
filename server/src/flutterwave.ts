@@ -244,6 +244,19 @@ export interface FlutterwaveChargeView {
   raw?: unknown;
 }
 
+export interface VerifyFlutterwaveOptions {
+  /** Flutterwave charge id from the checkout redirect (`id`, `transaction_id`). */
+  chargeId?: string;
+  /** How many times to re-query Flutterwave. Default 3 — checkout can lag the redirect. */
+  attempts?: number;
+  /** Delay between attempts in ms. Use 0 in tests. */
+  delayMs?: number;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function mapChargeStatus(status?: string): FlutterwaveChargeView["status"] {
   const normalized = (status ?? "").toLowerCase();
   if (normalized === "succeeded" || normalized === "successful" || normalized === "success") {
@@ -270,14 +283,27 @@ function chargeFromUnknown(raw: unknown): FlutterwaveChargeView | undefined {
   };
 }
 
-export async function verifyFlutterwaveCharge(
+async function fetchChargeById(
+  creds: FlutterwaveCredentials,
+  chargeId: string,
+): Promise<FlutterwaveChargeView | undefined> {
+  const res = await flutterwaveFetch<{ data?: unknown }>(
+    creds,
+    `/charges/${encodeURIComponent(chargeId)}`,
+    { method: "GET" },
+  );
+  return chargeFromUnknown(res.body.data) ?? chargeFromUnknown(res.body);
+}
+
+async function fetchChargeByReference(
   creds: FlutterwaveCredentials,
   reference: string,
-): Promise<FlutterwaveChargeView> {
-  const listed = await flutterwaveFetch<{
-    data?: unknown;
-  }>(creds, `/charges?reference=${encodeURIComponent(reference)}`, { method: "GET" });
-
+): Promise<{ view?: FlutterwaveChargeView; raw: unknown }> {
+  const listed = await flutterwaveFetch<{ data?: unknown }>(
+    creds,
+    `/charges?reference=${encodeURIComponent(reference)}`,
+    { method: "GET" },
+  );
   const payload = listed.body.data;
   const rows = Array.isArray(payload)
     ? payload
@@ -291,9 +317,42 @@ export async function verifyFlutterwaveCharge(
       if (!row || typeof row !== "object") return false;
       return (row as { reference?: string }).reference === reference;
     }) ?? rows[0];
-  const viewed = chargeFromUnknown(match);
-  if (viewed) return viewed;
-  return { status: "failed", raw: listed.body };
+  return { view: chargeFromUnknown(match), raw: listed.body };
+}
+
+/**
+ * Confirms a gift by calling Flutterwave's Charges API — no webhook required.
+ * Used when the donor is redirected back to /give/callback.
+ */
+export async function verifyFlutterwaveCharge(
+  creds: FlutterwaveCredentials,
+  reference: string,
+  options: VerifyFlutterwaveOptions = {},
+): Promise<FlutterwaveChargeView> {
+  const attempts = Math.max(1, options.attempts ?? 3);
+  const delayMs = options.delayMs ?? 700;
+  let lastRaw: unknown;
+
+  for (let i = 0; i < attempts; i++) {
+    if (options.chargeId) {
+      const byId = await fetchChargeById(creds, options.chargeId);
+      if (byId?.status === "success") return byId;
+      if (byId?.status === "failed") return byId;
+      if (byId) lastRaw = byId.raw;
+    }
+
+    const byRef = await fetchChargeByReference(creds, reference);
+    lastRaw = byRef.raw;
+    if (byRef.view?.status === "success") return byRef.view;
+    if (byRef.view?.status === "failed") return byRef.view;
+    if (byRef.view?.status === "pending" && i === attempts - 1) return byRef.view;
+
+    if (i < attempts - 1 && delayMs > 0) await wait(delayMs);
+  }
+
+  // Charge not visible yet (or checkout abandoned). Treat as pending so the
+  // callback page can retry — do not mark a just-paid gift as failed.
+  return { status: "pending", raw: lastRaw };
 }
 
 /** HMAC-SHA256 (base64) of the raw webhook body using the dashboard secret hash. */

@@ -11,25 +11,65 @@ interface VerifyResult {
   type: string;
 }
 
+const CANCELLED = new Set(["cancelled", "canceled", "failed", "error"]);
+
+function firstParam(params: URLSearchParams, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = params.get(key);
+    if (value) return value;
+  }
+  return "";
+}
+
 export default function GiveCallback() {
   const [params] = useSearchParams();
-  const reference =
-    params.get("reference") ?? params.get("trxref") ?? params.get("tx_ref") ?? "";
+  const reference = firstParam(params, "reference", "trxref", "tx_ref");
+  const chargeId = firstParam(params, "id", "transaction_id", "charge_id", "chargeId");
+  const redirectHint = (params.get("status") ?? "").toLowerCase();
   const [state, setState] = useState<"loading" | VerifyResult["status"]>("loading");
   const [result, setResult] = useState<VerifyResult | null>(null);
+  const [checking, setChecking] = useState(false);
 
-  useEffect(() => {
+  async function confirm(attempt = 0): Promise<void> {
     if (!reference) {
       setState("failed");
       return;
     }
-    api<VerifyResult>(`/public/give/verify?reference=${encodeURIComponent(reference)}`)
-      .then((r) => {
-        setResult(r);
-        setState(r.status);
-      })
-      .catch(() => setState("failed"));
-  }, [reference]);
+    const qs = new URLSearchParams({ reference });
+    if (chargeId) qs.set("chargeId", chargeId);
+    try {
+      const r = await api<VerifyResult>(`/public/give/verify?${qs.toString()}`);
+      setResult(r);
+      if (r.status === "pending" && !CANCELLED.has(redirectHint) && attempt < 4) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return confirm(attempt + 1);
+      }
+      if (r.status === "pending" && CANCELLED.has(redirectHint)) {
+        setState("failed");
+        return;
+      }
+      setState(r.status);
+    } catch {
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return confirm(attempt + 1);
+      }
+      setState("failed");
+    }
+  }
+
+  useEffect(() => {
+    void confirm(0);
+    // Intentionally run once when the donor lands from checkout.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reference, chargeId]);
+
+  async function checkAgain() {
+    setChecking(true);
+    setState("loading");
+    await confirm(4);
+    setChecking(false);
+  }
 
   return (
     <section className="mx-auto flex min-h-[70vh] max-w-xl items-center px-6 py-14">
@@ -68,12 +108,15 @@ export default function GiveCallback() {
             </h2>
             <p className="mt-2 text-ink-500">
               {state === "pending"
-                ? "Your payment is still processing. You'll receive confirmation shortly."
-                : "If you were charged, please contact the church office with your reference."}
+                ? "Flutterwave is still finalizing this payment. If you completed checkout, tap Check again in a moment."
+                : "If you were charged, tap Check again or contact the church office with your reference."}
             </p>
             {reference && (
               <p className="mt-2 text-xs text-ink-400">Reference: {reference}</p>
             )}
+            <Button className="mt-4" variant="outline" loading={checking} onClick={checkAgain}>
+              Check again
+            </Button>
           </>
         )}
         <div className="mt-6 flex justify-center gap-2">

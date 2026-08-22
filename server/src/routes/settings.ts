@@ -19,7 +19,7 @@ function paymentsIntegrationName(): string {
 
 function paymentsIntegrationDetail(): string {
   if (isFlutterwaveLive()) {
-    return `Live · Flutterwave ${config.payments.flutterwaveEnv} · ${config.payments.currency}`;
+    return `Live · Flutterwave ${config.payments.flutterwaveEnv} · ${config.payments.currency} · confirms on checkout return`;
   }
   if (isPaystackLive()) {
     return `Live · ${config.payments.currency}`;
