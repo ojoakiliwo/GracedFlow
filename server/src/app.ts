@@ -1,6 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import { config } from "./config.js";
+import { pool } from "./db.js";
 import { ensureReady } from "./bootstrap.js";
 import { ensureProductionData } from "./seed.js";
 import { HttpError } from "./util.js";
@@ -39,11 +40,23 @@ export function createApp() {
 
   app.use(express.json({ limit: "2mb" }));
 
-  app.get("/api/health", (_req, res) => {
+  app.get("/api/health", async (_req, res) => {
+    let database = "unknown";
+    let databaseError: string | undefined;
+    try {
+      await pool.query("SELECT 1");
+      database = "connected";
+    } catch (e) {
+      database = "error";
+      databaseError = (e as Error).message;
+    }
     res.json({
       status: "ok",
       service: "gracedflow-api",
       church: config.church.name,
+      database,
+      databaseError,
+      databaseConfigured: !!(process.env.DATABASE_URL || process.env.POSTGRES_URL),
       commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
       time: new Date().toISOString(),
     });
