@@ -6,8 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.build.json",
-    "vercel-build": "tsc -p tsconfig.build.json && mkdir -p client/dist && printf '%s\\n' '<!doctype html><title>GracedFlow API</title>' > client/dist/index.html",
+    "build": "tsc -p tsconfig.build.json && mkdir -p client/dist && printf '%s\\n' '<!doctype html><title>GracedFlow API</title>' > client/dist/index.html",
+    "vercel-build": "npm run build",
     "start": "node dist/index.js",
     "seed": "tsx src/seed.ts",
     "test": "vitest run",
