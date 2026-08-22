@@ -98,5 +98,5 @@ export function createApp() {
   return app;
 }
 
-/** Vercel Express looks for a default export in `src/app.ts`. */
-export default createApp();
+const app = createApp();
+export default app;

@@ -1,11 +1,8 @@
-import { createApp } from "./app.js";
+import app from "./app.js";
 import { config } from "./config.js";
 import { ensureReady } from "./bootstrap.js";
 import { registerSchedules } from "./scheduler.js";
 
-const app = createApp();
-
-/** Vercel Express can also pick up `src/index.ts` as the application entry. */
 export default app;
 
 async function main() {
