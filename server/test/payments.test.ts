@@ -67,13 +67,22 @@ describe("Giving & payments", () => {
     expect(res.body.giving.accountNumber).toBeTruthy();
   });
 
-  it("rejects a webhook with an invalid signature", async () => {
+  it("rejects a Paystack webhook with an invalid signature", async () => {
     const res = await request(app)
       .post("/api/webhooks/paystack")
       .set("Content-Type", "application/json")
       .set("x-paystack-signature", "bogus")
       .send({ event: "charge.success", data: { reference: "x" } });
     // No secret key configured -> signature verification fails.
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a Flutterwave webhook with an invalid signature", async () => {
+    const res = await request(app)
+      .post("/api/webhooks/flutterwave")
+      .set("Content-Type", "application/json")
+      .set("flutterwave-signature", "bogus")
+      .send({ type: "charge.completed", data: { reference: "x", status: "succeeded" } });
     expect(res.status).toBe(401);
   });
 

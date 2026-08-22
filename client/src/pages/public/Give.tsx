@@ -9,6 +9,7 @@ interface GivingOptions {
   currency: string;
   online: boolean;
   onlineLive: boolean;
+  provider?: string;
   bank: {
     bankName: string;
     accountName: string;
@@ -126,7 +127,11 @@ export default function Give() {
                   onClick={() => setMethod("online")}
                   icon={<CreditCard className="h-5 w-5" />}
                   title="Card / Online"
-                  subtitle={options.onlineLive ? "Secured by Paystack" : "Instant & secure"}
+                  subtitle={
+                    options.onlineLive
+                      ? `Secured by ${options.provider ?? "our gateway"}`
+                      : "Instant & secure"
+                  }
                 />
                 <MethodTile
                   active={method === "transfer"}
