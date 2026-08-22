@@ -4,10 +4,36 @@ import { db } from "../db.js";
 import { authenticate, requireRole } from "../auth.js";
 import { assertCanManageDepartment } from "../access.js";
 import { HttpError, audit, newId, nowIso } from "../util.js";
+import { notifyTaskAssigned } from "../notify.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 
 export const tasksRouter = Router();
 tasksRouter.use(authenticate);
+
+async function notifyAssignee(
+  memberId: string,
+  title: string,
+  dueDate: string | null | undefined,
+  actor: { first_name: string; last_name: string },
+): Promise<void> {
+  const assignee = (await db
+    .prepare("SELECT first_name, email, phone FROM members WHERE id = ?")
+    .get(memberId)) as
+    | { first_name: string; email: string | null; phone: string | null }
+    | undefined;
+  if (!assignee) return;
+  try {
+    await notifyTaskAssigned({
+      assignee,
+      title,
+      dueDate,
+      assignerName: `${actor.first_name} ${actor.last_name}`.trim(),
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[notify] task assignment failed", err);
+  }
+}
 
 tasksRouter.get(
   "/",
@@ -78,6 +104,9 @@ tasksRouter.post(
       input.status,
     );
     audit("create", "task", id, req.user);
+    if (input.assignedTo) {
+      await notifyAssignee(input.assignedTo, input.title, input.dueDate, req.user!);
+    }
     res.status(201).json(await db.prepare("SELECT * FROM tasks WHERE id = ?").get(id));
   }),
 );
@@ -86,7 +115,7 @@ tasksRouter.put(
   "/:id",
   asyncHandler(async (req, res) => {
     const existing = (await db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id)) as
-      | { id: string; department_id: string | null; assigned_to: string | null }
+      | { id: string; title: string; department_id: string | null; assigned_to: string | null }
       | undefined;
     if (!existing) throw new HttpError(404, "Task not found");
     const isAssignee = existing.assigned_to === req.user!.id;
@@ -112,6 +141,16 @@ tasksRouter.put(
     sets.push("updated_at = @updatedAt");
     params.updatedAt = nowIso();
     await db.prepare(`UPDATE tasks SET ${sets.join(", ")} WHERE id = @id`).run(params);
+    const nextAssignee =
+      input.assignedTo !== undefined ? input.assignedTo || null : existing.assigned_to;
+    if (nextAssignee && nextAssignee !== existing.assigned_to) {
+      await notifyAssignee(
+        nextAssignee,
+        input.title ?? existing.title,
+        input.dueDate,
+        req.user!,
+      );
+    }
     res.json(await db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id));
   }),
 );

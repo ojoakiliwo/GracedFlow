@@ -8,7 +8,7 @@ import {
   verifyPassword,
   type AuthUser,
 } from "../auth.js";
-import { HttpError, audit, newId, nowIso } from "../util.js";
+import { HttpError, audit, newId, nowIso, phoneKey } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 import { configuredAdminEmail, getLedDepartments } from "../access.js";
 import { DEMO_MEMBER_EMAILS } from "../seed.js";
@@ -65,9 +65,45 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const input = parseBody(registerSchema, req.body);
     const email = input.email.toLowerCase();
-    const existing = await db.prepare("SELECT id FROM members WHERE email = ?")
-      .get(email);
-    if (existing) throw new HttpError(409, "An account with this email already exists");
+    const phone = input.phone?.trim() || null;
+    const byEmail = (await db.prepare("SELECT * FROM members WHERE lower(email) = ?").get(email)) as
+      | { id: string; email: string | null; role: string; first_name: string; last_name: string; password_hash: string | null; phone: string | null }
+      | undefined;
+    const key = phoneKey(phone);
+    const byPhone = !byEmail && key
+      ? ((await db
+          .prepare(
+            `SELECT * FROM members
+             WHERE right(regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g'), 10) = ?`,
+          )
+          .get(key)) as typeof byEmail)
+      : undefined;
+    const existing = byEmail ?? byPhone;
+    if (existing?.password_hash) {
+      throw new HttpError(409, "An account with this email or phone already exists. Sign in instead.");
+    }
+    if (existing && !existing.password_hash) {
+      await db
+        .prepare(
+          `UPDATE members SET
+             password_hash = ?,
+             email = coalesce(email, ?),
+             phone = coalesce(phone, ?),
+             account_status = 'active',
+             updated_at = now()
+           WHERE id = ?`,
+        )
+        .run(await hashPassword(input.password), email, phone, existing.id);
+      const user: AuthUser = {
+        id: existing.id,
+        email: existing.email || email,
+        role: existing.role,
+        first_name: existing.first_name,
+        last_name: existing.last_name,
+      };
+      audit("register-claim", "member", existing.id, user);
+      return res.status(201).json({ token: signToken(user), user, claimed: true });
+    }
 
     const configuredAdmin = configuredAdminEmail();
     const demoPh = DEMO_MEMBER_EMAILS.map(() => "?").join(", ");

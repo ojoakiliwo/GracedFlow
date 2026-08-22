@@ -2,7 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
 import { authenticate, hashPassword, requireRole } from "../auth.js";
-import { HttpError, audit, newId, nowIso } from "../util.js";
+import { HttpError, audit, newId, nowIso, phoneKey } from "../util.js";
+import { notifyMemberInvite } from "../notify.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 
 export const membersRouter = Router();
@@ -101,6 +102,16 @@ membersRouter.post(
       const dupe = await db.prepare("SELECT id FROM members WHERE email = ?").get(email);
       if (dupe) throw new HttpError(409, "A member with this email already exists");
     }
+    const phoneDigits = phoneKey(input.phone);
+    if (phoneDigits) {
+      const phoneDupe = await db
+        .prepare(
+          `SELECT id FROM members
+           WHERE right(regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g'), 10) = ?`,
+        )
+        .get(phoneDigits);
+      if (phoneDupe) throw new HttpError(409, "A member with this phone already exists");
+    }
     await db.prepare(
       `INSERT INTO members (id, first_name, last_name, gender, email, phone, password_hash, role,
         spiritual_class, membership_status, date_of_birth, wedding_anniversary, marital_status,
@@ -131,7 +142,16 @@ membersRouter.post(
       notes: input.notes ?? null,
     });
     audit("create", "member", id, req.user);
-    res.status(201).json(await db.prepare("SELECT * FROM members WHERE id = ?").get(id));
+    const created = await db.prepare("SELECT * FROM members WHERE id = ?").get(id);
+    notifyMemberInvite({
+      first_name: input.firstName,
+      email,
+      phone: input.phone ?? null,
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error("[notify] member invite failed", err);
+    });
+    res.status(201).json(created);
   }),
 );
 

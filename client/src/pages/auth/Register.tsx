@@ -45,7 +45,9 @@ export default function Register() {
         </Link>
         <h2 className="text-2xl text-ink-900">Create your account</h2>
         <p className="mt-1 text-sm text-ink-500">
-          The first account becomes the church administrator. Later signups join as workers.
+          If your pastor already added you, use that same email or phone. This opens
+          your existing record and does not create a second membership. New signups
+          without a church record join as workers.
         </p>
         <PreviewLockNotice />
 

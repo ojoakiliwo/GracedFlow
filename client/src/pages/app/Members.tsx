@@ -43,6 +43,7 @@ const emptyForm = {
   weddingAnniversary: "",
   maritalStatus: "",
   address: "",
+  password: "",
 };
 
 export default function Members() {
@@ -70,7 +71,10 @@ export default function Members() {
     e.preventDefault();
     setSaving(true);
     try {
-      await apiPost("/members", form);
+      await apiPost("/members", {
+        ...form,
+        password: form.password.trim() || undefined,
+      });
       notify("Member added successfully");
       setOpen(false);
       setForm(emptyForm);
@@ -190,6 +194,11 @@ export default function Members() {
 
       <Modal open={open} onClose={() => setOpen(false)} title="Add new member" wide>
         <form onSubmit={create} className="space-y-4">
+          <p className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-900">
+            This adds them to the church list. It does not log them in. They create a
+            password at Register using this same email or phone, and that opens this
+            record — it will not create a second membership.
+          </p>
           <div className="grid grid-cols-2 gap-4">
             <Field label="First name">
               <Input value={form.firstName} onChange={set("firstName")} required />
@@ -248,6 +257,17 @@ export default function Members() {
           </div>
           <Field label="Address">
             <Input value={form.address} onChange={set("address")} />
+          </Field>
+          <Field
+            label="Temporary password (optional)"
+            hint="Leave blank so they set their own password when they register."
+          >
+            <Input
+              type="password"
+              value={form.password}
+              onChange={set("password")}
+              minLength={6}
+            />
           </Field>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
