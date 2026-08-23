@@ -303,12 +303,12 @@ function currencyHint(method: "online" | "transfer", currency: string): string {
   if (currency === "NGN") {
     return "Naira checkout is for Nigerian cards. Paying from a dollar account? Switch to USD.";
   }
-  return "Dollar and other currencies go through Flutterwave. Paystack on this church account cannot take foreign cards.";
+  return "Dollar gifts go through Flutterwave (Apple Pay on iPhone or Mac). Paystack on this church account cannot take foreign cards.";
 }
 
 function onlineSubtitle(options: GivingOptions): string {
   if (!options.onlineLive) return "Instant & secure";
-  if (bothLive(options)) return "Naira: Paystack or Flutterwave. Dollars: Flutterwave.";
+  if (bothLive(options)) return "Naira: Paystack. Dollars: Flutterwave Apple Pay.";
   if (options.providers?.flutterwave) return "Secured by Flutterwave";
   if (options.providers?.paystack) return "Secured by Paystack";
   return "Instant & secure";
