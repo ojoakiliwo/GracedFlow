@@ -8,8 +8,10 @@ import {
 import { HttpError } from "./util.js";
 import {
   createFlutterwaveCheckoutSession,
+  createFlutterwaveRedirectCharge,
   flutterwaveCredentials,
   isFlutterwaveConfigured,
+  isMissingFlutterwaveCheckoutUrl,
   verifyFlutterwaveCharge,
   verifyFlutterwaveWebhookSignature as verifyFlwSig,
 } from "./flutterwave.js";
@@ -40,8 +42,8 @@ export function resolveCheckoutProvider(requested?: string | null): PaymentProvi
   if (requested === "paystack" && isPaystackLive()) return "paystack";
   if (requested === "dryrun") return "dryrun";
 
-  // Paystack hosted checkout is what donors can actually open. Flutterwave v4
-  // often creates a session without a public checkout URL.
+  // Paystack hosted checkout for Naira. Dollar / international gifts go to
+  // Flutterwave — this Paystack merchant is not enabled for foreign cards.
   if (config.payments.provider === "paystack" && isPaystackLive()) return "paystack";
   if (isPaystackLive()) return "paystack";
   if (config.payments.provider === "flutterwave" && isFlutterwaveLive()) return "flutterwave";
@@ -84,7 +86,7 @@ export async function initializeTransaction(params: {
     } else {
       throw new HttpError(
         400,
-        `${currency} is available on Flutterwave. Choose Flutterwave, or give in NGN, USD, GHS, KES or ZAR.`,
+        `${currency} cannot be collected on Paystack until international payments are enabled. Choose Flutterwave, or give in NGN.`,
       );
     }
   }
@@ -124,7 +126,8 @@ async function initializeFlutterwave(
   },
   currency: string,
 ): Promise<InitResult> {
-  const session = await createFlutterwaveCheckoutSession(flutterwaveCredentials(), {
+  const creds = flutterwaveCredentials();
+  const shared = {
     email: params.email,
     name: params.customerName,
     amountMajor: params.amountMajor,
@@ -132,12 +135,24 @@ async function initializeFlutterwave(
     reference: params.reference,
     redirectUrl: checkoutReturnUrl(params.reference, "flutterwave"),
     metadata: params.metadata,
-  });
-  return {
-    provider: "flutterwave",
-    authorizationUrl: session.checkoutUrl,
-    reference: session.reference,
   };
+  try {
+    const session = await createFlutterwaveCheckoutSession(creds, shared);
+    return {
+      provider: "flutterwave",
+      authorizationUrl: session.checkoutUrl,
+      reference: session.reference,
+    };
+  } catch (err) {
+    // NGN still falls through to Paystack. Other currencies use a hosted charge.
+    if (!isMissingFlutterwaveCheckoutUrl(err) || currency === "NGN") throw err;
+    const charge = await createFlutterwaveRedirectCharge(creds, shared);
+    return {
+      provider: "flutterwave",
+      authorizationUrl: charge.checkoutUrl,
+      reference: charge.reference,
+    };
+  }
 }
 
 async function initializePaystack(

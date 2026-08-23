@@ -15,8 +15,26 @@ export const GIVING_CURRENCIES = [
 
 export type GivingCurrency = (typeof GIVING_CURRENCIES)[number]["code"];
 
-/** Paystack collections typically support these; others go through Flutterwave. */
-export const PAYSTACK_CURRENCIES = new Set<string>(["NGN", "USD", "GHS", "KES", "ZAR"]);
+/**
+ * Currencies Paystack can collect when the dashboard has “Accept international
+ * payments” enabled. This church’s live Paystack account is Naira-only unless
+ * `PAYSTACK_INTERNATIONAL=true` is set after that dashboard switch.
+ */
+export const PAYSTACK_INTERNATIONAL_CURRENCIES = new Set<string>([
+  "NGN",
+  "USD",
+  "GHS",
+  "KES",
+  "ZAR",
+]);
+
+/** Default: NGN only — foreign cards otherwise hit “not enabled for international”. */
+export const PAYSTACK_CURRENCIES = new Set<string>(["NGN"]);
+
+export function paystackInternationalEnabled(): boolean {
+  const value = (process.env.PAYSTACK_INTERNATIONAL ?? "").trim().toLowerCase();
+  return value === "true" || value === "1" || value === "yes";
+}
 
 export function isGivingCurrency(code: string): code is GivingCurrency {
   return GIVING_CURRENCIES.some((c) => c.code === code);
@@ -38,5 +56,11 @@ export function toPaystackAmount(amountMajor: number, _currency: string): number
 }
 
 export function paystackSupportsCurrency(currency: string): boolean {
-  return PAYSTACK_CURRENCIES.has(currency);
+  if (currency === "NGN") return true;
+  if (!paystackInternationalEnabled()) return false;
+  return PAYSTACK_INTERNATIONAL_CURRENCIES.has(currency);
+}
+
+export function paystackCollectableCurrencies(): string[] {
+  return GIVING_CURRENCIES.map((c) => c.code).filter((code) => paystackSupportsCurrency(code));
 }

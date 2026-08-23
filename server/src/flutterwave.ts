@@ -112,6 +112,13 @@ async function parseJsonBody(res: Response): Promise<Record<string, unknown>> {
   }
 }
 
+export const FLUTTERWAVE_MISSING_CHECKOUT_URL =
+  "Flutterwave did not return a checkout page";
+
+export function isMissingFlutterwaveCheckoutUrl(err: unknown): boolean {
+  return err instanceof HttpError && /did not return a checkout page/i.test(err.message);
+}
+
 /** Hosted pay link from a checkout session. Live v4 often omits this field. */
 export function hostedCheckoutUrlFromSession(data: unknown): string | undefined {
   if (!data || typeof data !== "object") return undefined;
@@ -139,6 +146,38 @@ export function hostedCheckoutUrlFromSession(data: unknown): string | undefined 
 
 function isOwnCallbackUrl(url: string): boolean {
   return /\/give\/callback(?:\?|$)/i.test(url);
+}
+
+/** Hosted redirect from a v4 charge (`next_action.redirect_url.url`). */
+export function hostedRedirectUrlFromCharge(data: unknown): string | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const rec = data as Record<string, unknown>;
+  const nested =
+    rec.data && typeof rec.data === "object" ? (rec.data as Record<string, unknown>) : rec;
+  const next =
+    nested.next_action && typeof nested.next_action === "object"
+      ? (nested.next_action as Record<string, unknown>)
+      : undefined;
+  const redirect = next?.redirect_url ?? nested.redirect_url;
+  if (typeof redirect === "string" && /^https?:\/\//i.test(redirect) && !isOwnCallbackUrl(redirect)) {
+    return redirect;
+  }
+  if (redirect && typeof redirect === "object") {
+    const url = (redirect as { url?: unknown }).url;
+    if (typeof url === "string" && /^https?:\/\//i.test(url) && !isOwnCallbackUrl(url)) {
+      return url;
+    }
+  }
+  const meta =
+    nested.meta && typeof nested.meta === "object" ? (nested.meta as Record<string, unknown>) : undefined;
+  const auth =
+    meta?.authorization && typeof meta.authorization === "object"
+      ? (meta.authorization as Record<string, unknown>)
+      : undefined;
+  if (typeof auth?.redirect === "string" && /^https?:\/\//i.test(auth.redirect)) {
+    return auth.redirect;
+  }
+  return hostedCheckoutUrlFromSession(nested) ?? hostedCheckoutUrlFromSession(rec);
 }
 
 async function flutterwaveFetch<T>(
@@ -229,6 +268,76 @@ export interface FlutterwaveCheckoutResult {
   sessionId?: string;
 }
 
+/**
+ * Live v4 checkout sessions often have no public URL. Apple Pay charges return
+ * a hosted `next_action` page that can collect international (USD) payments.
+ */
+export async function createFlutterwaveRedirectCharge(
+  creds: FlutterwaveCredentials,
+  params: {
+    email: string;
+    name?: string;
+    amountMajor: number;
+    currency: string;
+    reference: string;
+    redirectUrl: string;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<FlutterwaveCheckoutResult> {
+  const customerId = await getOrCreateFlutterwaveCustomer(creds, {
+    email: params.email,
+    name: params.name,
+  });
+
+  const applepay =
+    params.name && params.name.trim()
+      ? { card_holder_name: params.name.trim().slice(0, 50) }
+      : undefined;
+  const method = await flutterwaveFetch<{ data?: { id?: string } }>(creds, "/payment-methods", {
+    method: "POST",
+    body: JSON.stringify(applepay ? { type: "applepay", applepay } : { type: "applepay" }),
+  });
+  if ((method.status !== 200 && method.status !== 201) || !method.body.data?.id) {
+    throw new HttpError(
+      502,
+      flutterwaveErrorMessage(method.body, "Flutterwave payment method failed"),
+    );
+  }
+
+  const charge = await flutterwaveFetch<{
+    data?: {
+      id?: string;
+      reference?: string;
+      next_action?: unknown;
+    };
+  }>(creds, "/charges", {
+    method: "POST",
+    body: JSON.stringify({
+      reference: params.reference,
+      currency: params.currency,
+      customer_id: customerId,
+      payment_method_id: method.body.data.id,
+      redirect_url: params.redirectUrl,
+      amount: params.amountMajor,
+      meta: { source: "gracedflow-give", ...(params.metadata ?? {}) },
+    }),
+  });
+
+  const url =
+    hostedRedirectUrlFromCharge(charge.body.data) ?? hostedRedirectUrlFromCharge(charge.body);
+  if ((charge.status === 200 || charge.status === 201) && url) {
+    return {
+      checkoutUrl: url,
+      reference: charge.body.data?.reference ?? params.reference,
+      sessionId: charge.body.data?.id,
+    };
+  }
+  throw new HttpError(
+    502,
+    flutterwaveErrorMessage(charge.body, "Flutterwave hosted charge failed"),
+  );
+}
+
 export async function createFlutterwaveCheckoutSession(
   creds: FlutterwaveCredentials,
   params: {
@@ -277,7 +386,7 @@ export async function createFlutterwaveCheckoutSession(
   if (created.status === 200 || created.status === 201) {
     throw new HttpError(
       502,
-      "Flutterwave did not return a checkout page. Pay with Paystack, or try again.",
+      `${FLUTTERWAVE_MISSING_CHECKOUT_URL}. Pay with Paystack, or try again.`,
     );
   }
   throw new HttpError(

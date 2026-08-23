@@ -40,6 +40,23 @@ describe("Giving & payments", () => {
       "KES",
       "ZAR",
     ]);
+    expect(res.body.paystackCurrencies).toEqual(["NGN"]);
+  });
+
+  it("treats Paystack as Naira-only unless international payments are enabled", async () => {
+    const { paystackSupportsCurrency } = await import("../src/currencies.js");
+    expect(paystackSupportsCurrency("NGN")).toBe(true);
+    expect(paystackSupportsCurrency("USD")).toBe(false);
+    const prev = process.env.PAYSTACK_INTERNATIONAL;
+    process.env.PAYSTACK_INTERNATIONAL = "true";
+    try {
+      expect(paystackSupportsCurrency("USD")).toBe(true);
+      expect(paystackSupportsCurrency("GBP")).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.PAYSTACK_INTERNATIONAL;
+      else process.env.PAYSTACK_INTERNATIONAL = prev;
+    }
+    expect(paystackSupportsCurrency("USD")).toBe(false);
   });
 
   it("starts an online gift and returns an authorization URL", async () => {
@@ -235,6 +252,89 @@ describe("Giving & payments", () => {
       });
       expect(result.provider).toBe("paystack");
       expect(result.authorizationUrl).toBe("https://checkout.paystack.com/fallback");
+    } finally {
+      config.payments.paystackSecretKey = prev.paystackSecretKey;
+      config.payments.flutterwaveClientId = prev.flutterwaveClientId;
+      config.payments.flutterwaveClientSecret = prev.flutterwaveClientSecret;
+      config.payments.provider = prev.provider;
+      resetCache();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("routes USD to Flutterwave and does not fall back to Paystack", async () => {
+    const { config } = await import("../src/config.js");
+    const { initializeTransaction } = await import("../src/payments.js");
+    const { resetFlutterwaveTokenCache: resetCache } = await import("../src/flutterwave.js");
+    const prev = {
+      paystackSecretKey: config.payments.paystackSecretKey,
+      flutterwaveClientId: config.payments.flutterwaveClientId,
+      flutterwaveClientSecret: config.payments.flutterwaveClientSecret,
+      provider: config.payments.provider,
+    };
+    config.payments.paystackSecretKey = "sk_test_usd";
+    config.payments.flutterwaveClientId = "flw-client";
+    config.payments.flutterwaveClientSecret = "flw-secret";
+    config.payments.provider = "paystack";
+    resetCache();
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const json = (status: number, body: unknown) =>
+        new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+      if (url.includes("openid-connect/token")) {
+        return json(200, { access_token: "tok_live", expires_in: 600 });
+      }
+      if (url.endsWith("/customers")) {
+        return json(201, { status: "success", data: { id: "cus_usd" } });
+      }
+      if (url.endsWith("/checkout/sessions")) {
+        return json(200, {
+          status: "success",
+          data: {
+            id: "che_usd",
+            redirect_url: "https://church.example/give/callback?provider=flutterwave",
+            reference: "IGC-USD",
+          },
+        });
+      }
+      if (url.endsWith("/payment-methods")) {
+        return json(201, { status: "success", data: { id: "pmd_apple", type: "applepay" } });
+      }
+      if (url.endsWith("/charges") && !url.includes("?")) {
+        return json(201, {
+          status: "success",
+          data: {
+            id: "chg_usd",
+            reference: "IGC-USD",
+            status: "pending",
+            next_action: {
+              type: "redirect_url",
+              redirect_url: { url: "https://coreflutterwaveprod.com/applepay/usd-gift" },
+            },
+          },
+        });
+      }
+      if (url.includes("/transaction/initialize")) {
+        return json(400, { status: false, message: "Currency not supported by merchant" });
+      }
+      return json(404, { message: url });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const result = await initializeTransaction({
+        email: "diaspora@example.com",
+        amountMajor: 25,
+        reference: "IGC-USD",
+        provider: "paystack",
+        currency: "USD",
+      });
+      expect(result.provider).toBe("flutterwave");
+      expect(result.authorizationUrl).toBe("https://coreflutterwaveprod.com/applepay/usd-gift");
+      expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/transaction/initialize"))).toBe(
+        false,
+      );
     } finally {
       config.payments.paystackSecretKey = prev.paystackSecretKey;
       config.payments.flutterwaveClientId = prev.flutterwaveClientId;

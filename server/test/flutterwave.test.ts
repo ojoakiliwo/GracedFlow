@@ -5,7 +5,9 @@ import {
   encryptFlutterwaveField,
   generateFlutterwaveNonce,
   getFlutterwaveAccessToken,
+  createFlutterwaveRedirectCharge,
   hostedCheckoutUrlFromSession,
+  hostedRedirectUrlFromCharge,
   resetFlutterwaveTokenCache,
   verifyFlutterwaveCharge,
   verifyFlutterwaveWebhookSignature,
@@ -198,6 +200,73 @@ describe("Flutterwave v4 helpers", () => {
         redirect_url: "https://infinitelygracedchurch.com/give/callback",
       }),
     ).toBeUndefined();
+  });
+
+  it("reads the hosted redirect URL from a v4 charge next_action", () => {
+    expect(
+      hostedRedirectUrlFromCharge({
+        next_action: {
+          type: "redirect_url",
+          redirect_url: { url: "https://coreflutterwaveprod.com/applepay/abc" },
+        },
+      }),
+    ).toBe("https://coreflutterwaveprod.com/applepay/abc");
+    expect(
+      hostedRedirectUrlFromCharge({
+        data: {
+          next_action: { redirect_url: { url: "https://church.example/give/callback" } },
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("creates an Apple Pay charge when a hosted redirect is needed", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("openid-connect/token")) {
+        return jsonResponse(200, { access_token: "tok_live", expires_in: 600 });
+      }
+      if (url.endsWith("/customers") && init?.method === "POST") {
+        return jsonResponse(201, { status: "success", data: { id: "cus_usd" } });
+      }
+      if (url.endsWith("/payment-methods")) {
+        const body = JSON.parse(String(init?.body));
+        expect(body.type).toBe("applepay");
+        return jsonResponse(201, { status: "success", data: { id: "pmd_ap", type: "applepay" } });
+      }
+      if (url.endsWith("/charges")) {
+        const body = JSON.parse(String(init?.body));
+        expect(body.customer_id).toBe("cus_usd");
+        expect(body.payment_method_id).toBe("pmd_ap");
+        expect(body.currency).toBe("USD");
+        expect(body.amount).toBe(25);
+        return jsonResponse(201, {
+          status: "success",
+          data: {
+            id: "chg_usd",
+            reference: "IGC-USD-1",
+            status: "pending",
+            next_action: {
+              type: "redirect_url",
+              redirect_url: { url: "https://coreflutterwaveprod.com/applepay/usd" },
+            },
+          },
+        });
+      }
+      return jsonResponse(404, { message: `unexpected ${url}` });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const charge = await createFlutterwaveRedirectCharge(creds, {
+      email: "diaspora@example.com",
+      name: "Diaspora Giver",
+      amountMajor: 25,
+      currency: "USD",
+      reference: "IGC-USD-1",
+      redirectUrl: "https://church.example/give/callback?reference=IGC-USD-1&provider=flutterwave",
+    });
+    expect(charge.checkoutUrl).toBe("https://coreflutterwaveprod.com/applepay/usd");
+    expect(charge.reference).toBe("IGC-USD-1");
   });
 
   it("maps a succeeded charge to a successful verification", async () => {

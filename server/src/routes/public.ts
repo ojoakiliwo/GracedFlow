@@ -12,7 +12,7 @@ import {
   resolveCheckoutProvider,
   verifyTransaction,
 } from "../payments.js";
-import { GIVING_CURRENCIES, normalizeGivingCurrency } from "../currencies.js";
+import { GIVING_CURRENCIES, normalizeGivingCurrency, paystackCollectableCurrencies } from "../currencies.js";
 
 export const publicRouter = Router();
 
@@ -98,6 +98,7 @@ publicRouter.get(
         flutterwave: providers.includes("flutterwave"),
         paystack: providers.includes("paystack"),
       },
+      paystackCurrencies: paystackCollectableCurrencies(),
       paystackPublicKey: config.payments.paystackPublicKey || null,
       bank: config.giving,
     });

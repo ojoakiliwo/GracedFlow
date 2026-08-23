@@ -14,6 +14,7 @@ interface GivingOptions {
   onlineLive: boolean;
   provider?: CheckoutProvider;
   providers?: { flutterwave: boolean; paystack: boolean };
+  paystackCurrencies?: string[];
   bank: {
     bankName: string;
     accountName: string;
@@ -62,7 +63,12 @@ export default function Give() {
         amount: Number(form.amount),
         currency: form.currency,
         method,
-        provider: method === "online" && checkout ? checkout : undefined,
+        provider:
+          method === "online"
+            ? paystackCanTake(options, form.currency)
+              ? checkout || undefined
+              : "flutterwave"
+            : undefined,
       });
       if (res.method === "online" && res.authorizationUrl) {
         // Hand off to Flutterwave / Paystack hosted checkout (or simulated callback).
@@ -154,7 +160,9 @@ export default function Give() {
                     />
                   )}
                 </div>
-                {method === "online" && bothLive(options) && (
+                {method === "online" &&
+                  bothLive(options) &&
+                  paystackCanTake(options, form.currency) && (
                   <div className="grid grid-cols-2 gap-3">
                     <MethodTile
                       active={checkout === "flutterwave" || (!checkout && options.provider !== "paystack")}
@@ -168,7 +176,7 @@ export default function Give() {
                       onClick={() => setCheckout("paystack")}
                       icon={<CreditCard className="h-5 w-5" />}
                       title="Paystack"
-                      subtitle="Cards & bank"
+                      subtitle="Nigerian cards & bank"
                     />
                   </div>
                 )}
@@ -203,11 +211,7 @@ export default function Give() {
               </div>
               <Field
                 label="Currency"
-                hint={
-                  method === "transfer"
-                    ? "Bank transfer is received in Nigerian Naira."
-                    : "Give in the currency that is easiest for you. Cards and international wallets are supported online."
-                }
+                hint={currencyHint(method, form.currency)}
               >
                 <Select
                   value={form.currency}
@@ -215,6 +219,7 @@ export default function Give() {
                     const currency = e.target.value;
                     setForm({ ...form, currency });
                     if (currency !== "NGN" && method === "transfer") setMethod("online");
+                    if (!paystackCanTake(options, currency)) setCheckout("flutterwave");
                   }}
                 >
                   {(options?.currencies?.length ? options.currencies : [...GIVING_CURRENCIES]).map(
@@ -287,9 +292,23 @@ function bothLive(options: GivingOptions): boolean {
   return !!options.providers?.flutterwave && !!options.providers?.paystack;
 }
 
+function paystackCanTake(options: GivingOptions | null | undefined, currency: string): boolean {
+  const allowed = options?.paystackCurrencies;
+  if (allowed && allowed.length > 0) return allowed.includes(currency);
+  return currency === "NGN";
+}
+
+function currencyHint(method: "online" | "transfer", currency: string): string {
+  if (method === "transfer") return "Bank transfer is received in Nigerian Naira.";
+  if (currency === "NGN") {
+    return "Naira checkout is for Nigerian cards. Paying from a dollar account? Switch to USD.";
+  }
+  return "Dollar and other currencies go through Flutterwave. Paystack on this church account cannot take foreign cards.";
+}
+
 function onlineSubtitle(options: GivingOptions): string {
   if (!options.onlineLive) return "Instant & secure";
-  if (bothLive(options)) return "Choose Flutterwave or Paystack";
+  if (bothLive(options)) return "Naira: Paystack or Flutterwave. Dollars: Flutterwave.";
   if (options.providers?.flutterwave) return "Secured by Flutterwave";
   if (options.providers?.paystack) return "Secured by Paystack";
   return "Instant & secure";
