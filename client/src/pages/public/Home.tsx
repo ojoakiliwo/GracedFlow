@@ -66,7 +66,7 @@ export default function Home() {
       </section>
 
       {/* Service times */}
-      <section className="mx-auto -mt-12 max-w-5xl px-6">
+      <section className="relative z-10 mx-auto -mt-12 max-w-5xl px-6">
         <div className="grid gap-4 sm:grid-cols-2">
           {SERVICE_TIMES.map((s) => (
             <Card key={s.name} className="p-6">
@@ -75,8 +75,8 @@ export default function Home() {
                   <CalendarDays className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-brand-800">{s.time}</p>
                   <h3 className="text-lg text-ink-900">{s.name}</h3>
+                  <p className="mt-1 text-base font-semibold text-brand-800">{s.time}</p>
                   <p className="mt-1 text-sm text-ink-500">{s.desc}</p>
                 </div>
               </div>
