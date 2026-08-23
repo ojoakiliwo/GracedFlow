@@ -494,13 +494,13 @@ export async function seed(): Promise<void> {
   await db
     .prepare(
       `INSERT INTO events (id, title, description, type, starts_at, location, is_public, recurrence)
-     VALUES (?, 'Sunday Celebration Service', 'Come and encounter His grace.', 'service', date_trunc('day', now() + interval '3 days') + interval '9 hours', 'Main Auditorium', 1, 'weekly')`,
+     VALUES (?, 'Sunday Celebration Service', 'Come and encounter His grace.', 'service', date_trunc('day', now() + interval '3 days') + interval '8 hours', 'Main Auditorium', 1, 'weekly')`,
     )
     .run(newId("evt"));
   await db
     .prepare(
       `INSERT INTO events (id, title, description, type, starts_at, location, is_public, recurrence)
-     VALUES (?, 'Wednesday Prayer Meeting', 'Corporate prayer and the Word.', 'prayer', date_trunc('day', now() + interval '1 day') + interval '17 hours 30 minutes', 'Prayer Hall', 1, 'weekly')`,
+     VALUES (?, 'Wednesday Prayer Meeting', 'Corporate prayer and the Word.', 'prayer', date_trunc('day', now() + interval '1 day') + interval '16 hours', 'Prayer Hall', 1, 'weekly')`,
     )
     .run(newId("evt"));
 

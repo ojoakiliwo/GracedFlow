@@ -38,6 +38,15 @@ describe("Infinitely Graced Church API", () => {
     expect(res.body.church).toContain("Infinitely Graced");
   });
 
+  it("publishes Sunday 8:00 AM and Wednesday 4:00 PM service times", async () => {
+    const res = await request(app).get("/api/public/info");
+    expect(res.status).toBe(200);
+    expect(res.body.services).toEqual([
+      { name: "Sunday Service", time: "Sundays, 8:00 AM" },
+      { name: "Wednesday Prayer Meeting", time: "Wednesdays, 4:00 PM" },
+    ]);
+  });
+
   it("logs in the seeded admin and rejects bad passwords", async () => {
     expect(token).toBeTruthy();
     const bad = await request(app)

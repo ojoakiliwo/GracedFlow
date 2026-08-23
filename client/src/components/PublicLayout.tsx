@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { Menu, X } from "lucide-react";
 import { Button } from "./ui";
 import { BrandLogo } from "./BrandLogo";
+import { SERVICE_TIMES } from "../lib/services";
 
 const links = [
   { to: "/", label: "Home", end: true },
@@ -101,8 +102,9 @@ export default function PublicLayout() {
           <div>
             <p className="mb-3 text-sm font-semibold text-white">Service Times</p>
             <ul className="space-y-1.5 text-sm text-brand-300">
-              <li>Sunday Service — 9:00 AM</li>
-              <li>Wednesday Prayer — 5:30 PM</li>
+              {SERVICE_TIMES.map((s) => (
+                <li key={s.shortName}>{s.footer}</li>
+              ))}
             </ul>
           </div>
           <div>

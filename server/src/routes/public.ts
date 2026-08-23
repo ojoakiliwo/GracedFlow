@@ -27,8 +27,8 @@ publicRouter.get(
         onlineUrl: config.giving.onlineUrl,
       },
       services: [
-        { name: "Sunday Service", time: "Sundays, 9:00 AM" },
-        { name: "Wednesday Prayer Meeting", time: "Wednesdays, 5:30 PM" },
+        { name: "Sunday Service", time: "Sundays, 8:00 AM" },
+        { name: "Wednesday Prayer Meeting", time: "Wednesdays, 4:00 PM" },
       ],
     });
   }),
