@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
 import { authenticate, requireRole } from "../auth.js";
-import { assertCanManageDepartment, isChurchManager } from "../access.js";
+import { assertCanManageDepartment, isShepherd } from "../access.js";
 import { HttpError, audit, newId } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 
@@ -63,7 +63,7 @@ meetingsRouter.get(
          JOIN members m ON m.id = ma.member_id WHERE ma.meeting_id = ?`,
       )
       .all(req.params.id);
-    const reviews = isChurchManager(req.user!.role)
+    const reviews = isShepherd(req.user!.role)
       ? await db.prepare(
             `SELECT r.*, m.first_name AS author_first, m.last_name AS author_last
              FROM meeting_reviews r

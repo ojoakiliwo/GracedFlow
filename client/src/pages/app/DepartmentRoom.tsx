@@ -30,7 +30,7 @@ interface RoomMessage {
 
 export default function DepartmentRoom() {
   const { id } = useParams();
-  const { user, hasRole } = useAuth();
+  const { user } = useAuth();
   const { data: dept, loading, reload } = useApi<RoomData>(`/departments/${id}`);
   const { data: messages, reload: reloadMessages } = useApi<RoomMessage[]>(`/departments/${id}/room`);
   const [body, setBody] = useState("");
@@ -154,7 +154,7 @@ export default function DepartmentRoom() {
                 {["leader", "hod", "head", "chairman"].includes(m.position.toLowerCase()) && (
                   <Badge color="gold">Leader</Badge>
                 )}
-                {hasRole("pastor") &&
+                {user?.role === "super_admin" &&
                   !["leader", "hod", "head", "chairman"].includes(m.position.toLowerCase()) && (
                     <button
                       className="text-xs font-medium text-brand-700 hover:underline"

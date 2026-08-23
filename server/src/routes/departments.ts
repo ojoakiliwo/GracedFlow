@@ -2,7 +2,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
 import { authenticate, requireRole } from "../auth.js";
-import { assertCanManageDepartment, isChurchManager, isLeaderPosition } from "../access.js";
+import {
+  assertCanAppointDepartmentLeader,
+  assertCanManageDepartment,
+  isLeaderPosition,
+  syncDepartmentMembership,
+} from "../access.js";
 import { HttpError, audit, newId } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 
@@ -57,7 +62,7 @@ const deptSchema = z.object({
 
 departmentsRouter.post(
   "/",
-  requireRole("pastor"),
+  requireRole("admin"),
   asyncHandler(async (req, res) => {
     const input = parseBody(deptSchema, req.body);
     const id = newId("dpt");
@@ -78,31 +83,12 @@ departmentsRouter.post(
   "/:id/members",
   asyncHandler(async (req, res) => {
     const input = parseBody(memberSchema, req.body);
-    const makingLeader = isLeaderPosition(input.position);
-    if (makingLeader && !isChurchManager(req.user!.role)) {
-      throw new HttpError(403, "Only pastors and administrators can appoint a department leader");
-    }
-    await assertCanManageDepartment(req.user!, req.params.id);
-    if (makingLeader) {
-      await db
-        .prepare(
-          `UPDATE department_members SET position = 'member'
-           WHERE department_id = ? AND lower(position) IN ('leader','hod','head','chairman')`,
-        )
-        .run(req.params.id);
-    }
-    const existing = await db.prepare("SELECT id FROM department_members WHERE department_id = ? AND member_id = ?")
-      .get(req.params.id, input.memberId);
-    if (existing) {
-      await db.prepare("UPDATE department_members SET position = ? WHERE id = ?").run(
-        input.position,
-        (existing as { id: string }).id,
-      );
+    if (isLeaderPosition(input.position)) {
+      assertCanAppointDepartmentLeader(req.user!.role);
     } else {
-      await db.prepare(
-        "INSERT INTO department_members (id, department_id, member_id, position) VALUES (?, ?, ?, ?)",
-      ).run(newId("dmb"), req.params.id, input.memberId, input.position);
+      await assertCanManageDepartment(req.user!, req.params.id);
     }
+    await syncDepartmentMembership(req.params.id, input.memberId, input.position);
     res.status(201).json({ ok: true });
   }),
 );

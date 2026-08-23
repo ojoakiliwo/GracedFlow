@@ -61,13 +61,13 @@ const groups: NavGroup[] = [
     title: "Communication",
     items: [
       { to: "/app/messages", label: "Messages (SMS/Email)", icon: Send, min: "pastor" },
-      { to: "/app/automations", label: "Automations", icon: CalendarClock, min: "pastor" },
-      { to: "/app/social", label: "Social Broadcast", icon: Share2, min: "pastor" },
+      { to: "/app/automations", label: "Automations", icon: CalendarClock, min: "admin" },
+      { to: "/app/social", label: "Social Broadcast", icon: Share2, min: "admin" },
     ],
   },
   {
     title: "Finance",
-    items: [{ to: "/app/giving", label: "Giving & Donations", icon: HandCoins, min: "pastor" }],
+    items: [{ to: "/app/giving", label: "Giving & Donations", icon: HandCoins, min: "admin" }],
   },
   {
     title: "Administration",

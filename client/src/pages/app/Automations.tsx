@@ -84,7 +84,7 @@ export default function Automations() {
                 {s.cadence}
               </Badge>
               <p className="mt-3 flex-1 text-sm text-ink-500">{s.description}</p>
-              {hasRole("pastor") && (
+              {hasRole("admin") && (
                 <Button
                   variant="secondary"
                   className="mt-4"

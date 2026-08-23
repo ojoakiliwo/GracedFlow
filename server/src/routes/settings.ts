@@ -32,6 +32,7 @@ settingsRouter.use(authenticate);
 // Live-vs-simulated status for every external integration.
 settingsRouter.get(
   "/integrations",
+  requireRole("admin"),
   asyncHandler(async (_req, res) => {
     res.json({
       church: config.church,

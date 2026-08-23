@@ -25,6 +25,8 @@ interface AuthState {
   register: (input: RegisterInput) => Promise<void>;
   logout: () => void;
   hasRole: (min: Role) => boolean;
+  isSuperAdmin: boolean;
+  canManageChurch: boolean;
   leadsDepartment: (departmentId?: string | null) => boolean;
 }
 
@@ -97,10 +99,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const isSuperAdmin = user?.role === "super_admin";
+  const canManageChurch = hasRole("admin");
+
   const leadsDepartment = useCallback(
     (departmentId?: string | null) => {
       if (!user) return false;
-      if (RANK[user.role as Role] >= RANK.pastor) return true;
+      if (RANK[user.role as Role] >= RANK.admin) return true;
       const led = user.ledDepartments ?? [];
       if (!departmentId) return led.some((d) => d.slug === "all-workers");
       return led.some((d) => d.id === departmentId);
@@ -109,8 +114,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, hasRole, leadsDepartment }),
-    [user, loading, login, register, logout, hasRole, leadsDepartment],
+    () => ({
+      user,
+      loading,
+      login,
+      register,
+      logout,
+      hasRole,
+      isSuperAdmin,
+      canManageChurch,
+      leadsDepartment,
+    }),
+    [user, loading, login, register, logout, hasRole, isSuperAdmin, canManageChurch, leadsDepartment],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

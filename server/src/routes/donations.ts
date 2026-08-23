@@ -10,7 +10,7 @@ donationsRouter.use(authenticate);
 
 donationsRouter.get(
   "/",
-  requireRole("pastor"),
+  requireRole("admin"),
   asyncHandler(async (req, res) => {
     const { status, type } = req.query as Record<string, string>;
     const clauses: string[] = [];
@@ -59,7 +59,7 @@ const recordSchema = z.object({
 
 donationsRouter.post(
   "/",
-  requireRole("pastor"),
+  requireRole("admin"),
   asyncHandler(async (req, res) => {
     const input = parseBody(recordSchema, req.body);
     const id = newId("don");
@@ -90,7 +90,7 @@ donationsRouter.post(
 
 donationsRouter.post(
   "/:id/confirm",
-  requireRole("pastor"),
+  requireRole("admin"),
   asyncHandler(async (req, res) => {
     const existing = await db.prepare("SELECT id FROM donations WHERE id = ?").get(req.params.id);
     if (!existing) throw new HttpError(404, "Donation not found");

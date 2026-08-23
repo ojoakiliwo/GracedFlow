@@ -79,9 +79,9 @@ export default function App() {
         <Route path="tasks" element={<Tasks />} />
         <Route path="events" element={<RoleGate min="pastor"><Events /></RoleGate>} />
         <Route path="messages" element={<RoleGate min="pastor"><Messages /></RoleGate>} />
-        <Route path="automations" element={<RoleGate min="pastor"><Automations /></RoleGate>} />
-        <Route path="social" element={<RoleGate min="pastor"><Social /></RoleGate>} />
-        <Route path="giving" element={<RoleGate min="pastor"><Giving /></RoleGate>} />
+        <Route path="automations" element={<RoleGate min="admin"><Automations /></RoleGate>} />
+        <Route path="social" element={<RoleGate min="admin"><Social /></RoleGate>} />
+        <Route path="giving" element={<RoleGate min="admin"><Giving /></RoleGate>} />
         <Route path="prayer" element={<RoleGate min="pastor"><PrayerRequests /></RoleGate>} />
         <Route path="settings" element={<RoleGate min="admin"><Settings /></RoleGate>} />
       </Route>

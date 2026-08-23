@@ -57,7 +57,7 @@ export default function Departments() {
         title="Rooms & Departments"
         subtitle="Ministry arms, worker rooms and meeting spaces."
         actions={
-          hasRole("pastor") && (
+          hasRole("admin") && (
             <Button onClick={() => setOpen(true)}>
               <Plus className="h-4 w-4" /> New department
             </Button>

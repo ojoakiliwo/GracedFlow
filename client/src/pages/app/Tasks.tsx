@@ -53,7 +53,9 @@ const PRIORITY_COLOR: Record<string, "red" | "amber" | "gray"> = {
 export default function Tasks() {
   const { data, loading, reload } = useApi<Task[]>("/tasks");
   const { data: depts } = useApi<Dept[]>("/departments");
-  const { data: members } = useApi<Member[]>("/members");
+  const { hasRole, user } = useAuth();
+  const canCreate = hasRole("admin") || (user?.ledDepartments?.length ?? 0) > 0;
+  const { data: members } = useApi<Member[]>(canCreate ? "/members" : null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -65,8 +67,6 @@ export default function Tasks() {
   });
   const [saving, setSaving] = useState(false);
   const { notify } = useToast();
-  const { hasRole, user } = useAuth();
-  const canCreate = hasRole("pastor") || (user?.ledDepartments?.length ?? 0) > 0;
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -194,7 +194,10 @@ export default function Tasks() {
                 onChange={(e) => setForm({ ...form, departmentId: e.target.value })}
               >
                 <option value="">None</option>
-                {depts?.map((d) => (
+                {(hasRole("admin")
+                  ? depts
+                  : depts?.filter((d) => user?.ledDepartments?.some((led) => led.id === d.id))
+                )?.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
                   </option>

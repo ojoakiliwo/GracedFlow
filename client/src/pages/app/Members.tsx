@@ -16,7 +16,8 @@ import {
   Select,
   Spinner,
 } from "../../components/ui";
-import { classLabel, roleLabel, ROLES, SPIRITUAL_CLASSES } from "../../lib/format";
+import { classLabel, roleLabel, SPIRITUAL_CLASSES } from "../../lib/format";
+import { assignableOffices, officeFor } from "../../lib/offices";
 import { useToast } from "../../components/toast";
 import { useAuth } from "../../lib/auth";
 
@@ -61,7 +62,8 @@ export default function Members() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const { notify } = useToast();
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
+  const roleOptions = assignableOffices(user?.role);
 
   const set = (k: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
@@ -128,7 +130,7 @@ export default function Members() {
           </Select>
           <Select value={role} onChange={(e) => setRole(e.target.value)} className="w-40">
             <option value="">All roles</option>
-            {ROLES.map((r) => (
+            {assignableOffices("super_admin").map((r) => (
               <option key={r.value} value={r.value}>
                 {r.label}
               </option>
@@ -235,9 +237,9 @@ export default function Members() {
                 ))}
               </Select>
             </Field>
-            <Field label="Role">
+            <Field label="Office / role" hint={officeFor(form.role).summary}>
               <Select value={form.role} onChange={set("role")}>
-                {ROLES.map((r) => (
+                {roleOptions.map((r) => (
                   <option key={r.value} value={r.value}>
                     {r.label}
                   </option>

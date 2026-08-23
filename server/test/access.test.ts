@@ -172,4 +172,159 @@ describe("Roles, admin promotion and department leaders", () => {
       true,
     );
   });
+
+  it("does not give a pastor church-wide access, even if they also lead a department", async () => {
+    const { db } = await import("../src/db.js");
+    const { hashPassword } = await import("../src/auth.js");
+    const { newId } = await import("../src/util.js");
+    const pastorId = newId("mbr");
+    await db
+      .prepare(
+        `INSERT INTO members (id, first_name, last_name, email, password_hash, role, spiritual_class, membership_status, account_status, join_date)
+         VALUES (?, 'Paul', 'Shepherd', 'pastor.leader@igc.test', ?, 'pastor', 'leader', 'active', 'active', ?)`,
+      )
+      .run(pastorId, await hashPassword("PastorPass1"), "2026-08-22");
+    const choir = (await db.prepare("SELECT id FROM departments WHERE slug = 'choir'").get()) as {
+      id: string;
+    };
+    const ushering = (await db.prepare("SELECT id FROM departments WHERE slug = 'ushering'").get()) as {
+      id: string;
+    };
+    await db
+      .prepare("INSERT INTO department_members (id, department_id, member_id, position) VALUES (?, ?, ?, ?)")
+      .run(newId("dmb"), choir.id, pastorId, "leader");
+
+    const login = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "pastor.leader@igc.test", password: "PastorPass1" });
+    const token = login.body.token;
+
+    const promote = await request(app)
+      .post("/api/members")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ firstName: "Elevated", lastName: "Person", role: "pastor" });
+    expect(promote.status).toBe(403);
+
+    const workerOk = await request(app)
+      .post("/api/members")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        firstName: "New",
+        lastName: "Convert",
+        email: "new.convert.access@igc.test",
+        role: "worker",
+      });
+    expect(workerOk.status).toBe(201);
+
+    const otherDept = await request(app)
+      .post("/api/meetings")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        title: "Usher briefing",
+        scheduledAt: new Date().toISOString(),
+        departmentId: ushering.id,
+      });
+    expect(otherDept.status).toBe(403);
+
+    const ownDept = await request(app)
+      .post("/api/meetings")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        title: "Choir pastoral check-in",
+        scheduledAt: new Date().toISOString(),
+        departmentId: choir.id,
+      });
+    expect(ownDept.status).toBe(201);
+
+    const giving = await request(app)
+      .get("/api/donations")
+      .set("Authorization", `Bearer ${token}`);
+    expect(giving.status).toBe(403);
+
+    const settings = await request(app)
+      .get("/api/settings/integrations")
+      .set("Authorization", `Bearer ${token}`);
+    expect(settings.status).toBe(403);
+
+    const appoint = await request(app)
+      .post(`/api/departments/${ushering.id}/members`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ memberId: workerOk.body.id, position: "leader" });
+    expect(appoint.status).toBe(403);
+  });
+
+  it("lets only the super admin change office, and the new position attaches access immediately", async () => {
+    const { db } = await import("../src/db.js");
+    const { hashPassword } = await import("../src/auth.js");
+    const { newId } = await import("../src/util.js");
+    const workerId = newId("mbr");
+    await db
+      .prepare(
+        `INSERT INTO members (id, first_name, last_name, email, password_hash, role, spiritual_class, membership_status, account_status, join_date)
+         VALUES (?, 'Ruth', 'Worker', 'ruth.office@igc.test', ?, 'worker', 'worker', 'active', 'active', ?)`,
+      )
+      .run(workerId, await hashPassword("WorkerPass1"), "2026-08-22");
+    const choir = (await db.prepare("SELECT id FROM departments WHERE slug = 'choir'").get()) as {
+      id: string;
+    };
+
+    const workerLogin = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "ruth.office@igc.test", password: "WorkerPass1" });
+    const before = await request(app)
+      .post("/api/meetings")
+      .set("Authorization", `Bearer ${workerLogin.body.token}`)
+      .send({
+        title: "Should fail before promotion",
+        scheduledAt: new Date().toISOString(),
+        departmentId: choir.id,
+      });
+    expect(before.status).toBe(403);
+
+    const pastorLogin = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "pastor.leader@igc.test", password: "PastorPass1" });
+    const pastorDenied = await request(app)
+      .put(`/api/members/${workerId}/office`)
+      .set("Authorization", `Bearer ${pastorLogin.body.token}`)
+      .send({ role: "pastor" });
+    expect(pastorDenied.status).toBe(403);
+
+    const adminLogin = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "ugbede39@gmail.com", password: "TestAdmin-2026" });
+    const upgraded = await request(app)
+      .put(`/api/members/${workerId}/office`)
+      .set("Authorization", `Bearer ${adminLogin.body.token}`)
+      .send({
+        role: "worker",
+        departments: [{ departmentId: choir.id, position: "leader" }],
+      });
+    expect(upgraded.status).toBe(200);
+    expect(upgraded.body.office.value).toBe("worker");
+    expect(upgraded.body.departments.some((d: { position: string }) => d.position === "leader")).toBe(
+      true,
+    );
+
+    const afterLogin = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "ruth.office@igc.test", password: "WorkerPass1" });
+    const after = await request(app)
+      .post("/api/meetings")
+      .set("Authorization", `Bearer ${afterLogin.body.token}`)
+      .send({
+        title: "Choir after promotion",
+        scheduledAt: new Date().toISOString(),
+        departmentId: choir.id,
+      });
+    expect(after.status).toBe(201);
+
+    const toPastor = await request(app)
+      .put(`/api/members/${workerId}/office`)
+      .set("Authorization", `Bearer ${adminLogin.body.token}`)
+      .send({ role: "pastor" });
+    expect(toPastor.status).toBe(200);
+    expect(toPastor.body.role).toBe("pastor");
+    expect(toPastor.body.office.grants.length).toBeGreaterThan(0);
+  });
 });

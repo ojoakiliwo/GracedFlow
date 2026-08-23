@@ -54,8 +54,8 @@ export default function Meetings() {
   const { data: reviews, reload: reloadReviews } = useApi<Review[]>(
     hasRole("pastor") ? "/meetings/reviews" : null,
   );
-  const canSchedule = hasRole("pastor") || (user?.ledDepartments?.length ?? 0) > 0;
-  const scheduleDepts = hasRole("pastor")
+  const canSchedule = hasRole("admin") || (user?.ledDepartments?.length ?? 0) > 0;
+  const scheduleDepts = hasRole("admin")
     ? depts
     : depts?.filter((d) => leadsDepartment(d.id));
   const [open, setOpen] = useState(false);
@@ -238,7 +238,7 @@ export default function Meetings() {
               value={form.departmentId}
               onChange={(e) => setForm({ ...form, departmentId: e.target.value })}
             >
-              {hasRole("pastor") && <option value="">All workers (general)</option>}
+              {hasRole("admin") && <option value="">All workers (general)</option>}
               {scheduleDepts?.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}

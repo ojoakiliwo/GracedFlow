@@ -12,7 +12,7 @@ socialRouter.use(authenticate);
 
 socialRouter.get(
   "/",
-  requireRole("pastor"),
+  requireRole("admin"),
   asyncHandler(async (_req, res) => {
     const posts = (await db
       .prepare("SELECT * FROM social_posts ORDER BY created_at DESC LIMIT 100")
@@ -39,7 +39,7 @@ const postSchema = z.object({
 // Compose a post and distribute it to every selected social platform.
 socialRouter.post(
   "/",
-  requireRole("pastor"),
+  requireRole("admin"),
   asyncHandler(async (req, res) => {
     const input = parseBody(postSchema, req.body);
     const id = newId("post");
