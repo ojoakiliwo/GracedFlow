@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { BrandLogo } from "./BrandLogo";
 import clsx from "clsx";
 import {
   LayoutDashboard,
@@ -91,19 +92,16 @@ export default function Layout() {
         )}
       >
         <div className="flex items-center gap-3 px-5 py-5">
-          <img
-            src="/brand/igc-logo.png"
-            alt="IGC"
-            className="h-11 w-11 rounded-full bg-white/95 object-contain p-0.5 ring-1 ring-white/20"
-          />
-          <div>
-            <p className="font-display text-lg font-semibold leading-tight text-white">
-              Infinitely Graced
-            </p>
-            <p className="text-xs text-brand-300">Ministry Portal</p>
-          </div>
+          <BrandLogo size="md" className="min-w-0 flex-1" onNavigate={() => setMobileOpen(false)}>
+            <div className="min-w-0">
+              <p className="font-display text-lg font-semibold leading-tight text-white">
+                Infinitely Graced
+              </p>
+              <p className="text-xs text-brand-300">Church homepage</p>
+            </div>
+          </BrandLogo>
           <button
-            className="ml-auto text-brand-300 lg:hidden"
+            className="ml-auto shrink-0 text-brand-300 lg:hidden"
             onClick={() => setMobileOpen(false)}
           >
             <X className="h-5 w-5" />
@@ -150,7 +148,7 @@ export default function Layout() {
             href="/"
             className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-brand-200 hover:bg-brand-900 hover:text-white"
           >
-            <DoorOpen className="h-[18px] w-[18px]" /> View public site
+            <DoorOpen className="h-[18px] w-[18px]" /> Church homepage
           </a>
         </div>
       </aside>

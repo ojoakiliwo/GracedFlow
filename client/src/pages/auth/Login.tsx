@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { Button, Field, Input } from "../../components/ui";
 import { PreviewLockNotice } from "../../components/PreviewLockNotice";
+import { BrandLogo } from "../../components/BrandLogo";
 
 export default function Login() {
   const { login } = useAuth();
@@ -29,16 +30,11 @@ export default function Login() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="relative hidden grace-gradient lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <Link to="/" className="flex items-center gap-3">
-          <img
-            src="/brand/igc-logo.png"
-            alt="IGC"
-            className="h-12 w-12 rounded-full bg-white/95 object-contain p-0.5"
-          />
+        <BrandLogo size="md">
           <span className="font-display text-xl font-semibold text-white">
             Infinitely Graced Church
           </span>
-        </Link>
+        </BrandLogo>
         <div>
           <h1 className="max-w-md font-display text-4xl font-semibold leading-tight text-white">
             Shepherd every soul with grace and excellence.
@@ -54,11 +50,11 @@ export default function Login() {
       <div className="flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-sm">
           <div className="mb-8 lg:hidden">
-            <img
-              src="/brand/igc-logo.png"
-              alt="IGC"
-              className="h-14 w-14 object-contain"
-            />
+            <BrandLogo size="lg">
+              <span className="font-display text-lg font-semibold text-brand-900">
+                Infinitely Graced Church
+              </span>
+            </BrandLogo>
           </div>
           <h2 className="text-2xl text-ink-900">Welcome back</h2>
           <p className="mt-1 text-sm text-ink-500">

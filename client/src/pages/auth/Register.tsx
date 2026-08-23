@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { Button, Field, Input } from "../../components/ui";
 import { PreviewLockNotice } from "../../components/PreviewLockNotice";
+import { BrandLogo } from "../../components/BrandLogo";
 
 export default function Register() {
   const { register } = useAuth();
@@ -37,12 +38,11 @@ export default function Register() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-ink-50 p-6">
       <div className="w-full max-w-md rounded-2xl border border-ink-100 bg-white p-8 card-shadow">
-        <Link to="/" className="mb-6 flex items-center gap-3">
-          <img src="/brand/igc-logo.png" alt="IGC" className="h-12 w-12 object-contain" />
+        <BrandLogo size="md" className="mb-6">
           <span className="font-display text-lg font-semibold text-brand-900">
             Infinitely Graced Church
           </span>
-        </Link>
+        </BrandLogo>
         <h2 className="text-2xl text-ink-900">Create your account</h2>
         <p className="mt-1 text-sm text-ink-500">
           If your pastor already added you, use that same email or phone. This opens
