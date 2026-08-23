@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api, apiPost, getToken, setToken } from "./api";
+import { api, apiPost, getToken, setToken, ApiError } from "./api";
 
 export interface User {
   id: string;
@@ -60,7 +60,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     api<User>("/auth/me")
       .then((u) => setUser(u))
-      .catch(() => setToken(null))
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 401) {
+          setToken(null);
+          setUser(null);
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 

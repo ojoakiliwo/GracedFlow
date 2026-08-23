@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { Button, Field, Input } from "../../components/ui";
 import { PreviewLockNotice } from "../../components/PreviewLockNotice";
 import { BrandLogo } from "../../components/BrandLogo";
 
 export default function Register() {
-  const { register } = useAuth();
+  const { register, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
     firstName: "",
@@ -34,6 +34,9 @@ export default function Register() {
       setLoading(false);
     }
   }
+
+  if (authLoading) return null;
+  if (user) return <Navigate to="/app" replace />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-ink-50 p-6">

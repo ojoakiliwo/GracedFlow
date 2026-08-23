@@ -5,6 +5,7 @@ import { Menu, X } from "lucide-react";
 import { Button } from "./ui";
 import { BrandLogo } from "./BrandLogo";
 import { SERVICE_TIMES } from "../lib/services";
+import { useAuth } from "../lib/auth";
 
 const links = [
   { to: "/", label: "Home", end: true },
@@ -15,6 +16,7 @@ const links = [
 
 export default function PublicLayout() {
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <header className="sticky top-0 z-40 border-b border-ink-100 bg-white/85 backdrop-blur-md">
@@ -48,9 +50,15 @@ export default function PublicLayout() {
                 {l.label}
               </NavLink>
             ))}
-            <Link to="/login" className="ml-2">
-              <Button size="sm">Member Login</Button>
-            </Link>
+            {user ? (
+              <Link to="/app" className="ml-2">
+                <Button size="sm">Open portal</Button>
+              </Link>
+            ) : (
+              <Link to="/login" className="ml-2">
+                <Button size="sm">Member Login</Button>
+              </Link>
+            )}
           </nav>
 
           <button
@@ -73,11 +81,19 @@ export default function PublicLayout() {
                 {l.label}
               </NavLink>
             ))}
-            <Link to="/login" onClick={() => setOpen(false)}>
-              <Button size="sm" className="mt-2 w-full">
-                Member Login
-              </Button>
-            </Link>
+            {user ? (
+              <Link to="/app" onClick={() => setOpen(false)}>
+                <Button size="sm" className="mt-2 w-full">
+                  Open portal
+                </Button>
+              </Link>
+            ) : (
+              <Link to="/login" onClick={() => setOpen(false)}>
+                <Button size="sm" className="mt-2 w-full">
+                  Member Login
+                </Button>
+              </Link>
+            )}
           </div>
         )}
       </header>

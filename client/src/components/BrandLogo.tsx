@@ -10,20 +10,22 @@ const SIZES = {
 
 export function BrandLogo({
   size = "md",
+  to = "/",
   className,
   onNavigate,
   children,
 }: {
   size?: keyof typeof SIZES;
+  to?: string;
   className?: string;
   onNavigate?: () => void;
   children?: ReactNode;
 }) {
   return (
     <Link
-      to="/"
-      title="Go to homepage"
-      aria-label="Go to homepage"
+      to={to}
+      title={to === "/app" ? "Go to ministry portal" : "Go to homepage"}
+      aria-label={to === "/app" ? "Go to ministry portal" : "Go to homepage"}
       onClick={onNavigate}
       className={clsx("group flex min-w-0 items-center gap-3", className)}
     >

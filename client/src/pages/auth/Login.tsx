@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { Button, Field, Input } from "../../components/ui";
 import { PreviewLockNotice } from "../../components/PreviewLockNotice";
 import { BrandLogo } from "../../components/BrandLogo";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,6 +26,9 @@ export default function Login() {
       setLoading(false);
     }
   }
+
+  if (authLoading) return null;
+  if (user) return <Navigate to="/app" replace />;
 
   return (
     <div className="grid min-h-screen lg:grid-cols-2">

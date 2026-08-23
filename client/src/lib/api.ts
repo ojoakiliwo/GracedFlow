@@ -1,4 +1,4 @@
-import { formatApiError, isVercelProtectionPayload } from "./apiError";
+import { formatApiError } from "./apiError";
 
 const TOKEN_KEY = "igc_token";
 
@@ -43,9 +43,6 @@ export async function api<T = unknown>(
   if (res.status === 204) return undefined as T;
 
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && token && !isVercelProtectionPayload(data)) {
-    setToken(null);
-  }
   if (!res.ok) {
     throw new ApiError(res.status, formatApiError(data, res.status));
   }

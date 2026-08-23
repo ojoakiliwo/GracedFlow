@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import { BrandLogo } from "./BrandLogo";
 import clsx from "clsx";
 import {
@@ -92,12 +92,12 @@ export default function Layout() {
         )}
       >
         <div className="flex items-center gap-3 px-5 py-5">
-          <BrandLogo size="md" className="min-w-0 flex-1" onNavigate={() => setMobileOpen(false)}>
+          <BrandLogo to="/app" size="md" className="min-w-0 flex-1" onNavigate={() => setMobileOpen(false)}>
             <div className="min-w-0">
               <p className="font-display text-lg font-semibold leading-tight text-white">
                 Infinitely Graced
               </p>
-              <p className="text-xs text-brand-300">Church homepage</p>
+              <p className="text-xs text-brand-300">Ministry portal</p>
             </div>
           </BrandLogo>
           <button
@@ -144,12 +144,13 @@ export default function Layout() {
         </nav>
 
         <div className="border-t border-white/10 p-3">
-          <a
-            href="/"
+          <Link
+            to="/"
+            onClick={() => setMobileOpen(false)}
             className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-brand-200 hover:bg-brand-900 hover:text-white"
           >
-            <DoorOpen className="h-[18px] w-[18px]" /> Church homepage
-          </a>
+            <DoorOpen className="h-[18px] w-[18px]" /> Church website
+          </Link>
         </div>
       </aside>
 
