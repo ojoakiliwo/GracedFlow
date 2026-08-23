@@ -126,7 +126,8 @@ membersRouter.post(
         .get(phoneDigits);
       if (phoneDupe) throw new HttpError(409, "A member with this phone already exists");
     }
-    assertCanChangeMemberRole(req.user!.role, "member", input.role);
+    const role = input.role ?? "member";
+    assertCanChangeMemberRole(req.user!.role, "member", role);
     await db.prepare(
       `INSERT INTO members (id, first_name, last_name, gender, email, phone, password_hash, role,
         spiritual_class, membership_status, date_of_birth, wedding_anniversary, marital_status,
@@ -142,7 +143,7 @@ membersRouter.post(
       email,
       phone: input.phone ?? null,
       passwordHash: input.password ? await hashPassword(input.password) : null,
-      role: input.role,
+      role,
       spiritualClass: input.spiritualClass,
       membershipStatus: input.membershipStatus,
       dateOfBirth: input.dateOfBirth || null,

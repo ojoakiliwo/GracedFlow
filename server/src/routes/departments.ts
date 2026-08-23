@@ -88,7 +88,7 @@ departmentsRouter.post(
     } else {
       await assertCanManageDepartment(req.user!, req.params.id);
     }
-    await syncDepartmentMembership(req.params.id, input.memberId, input.position);
+    await syncDepartmentMembership(req.params.id ?? "", input.memberId, input.position ?? "member");
     res.status(201).json({ ok: true });
   }),
 );
