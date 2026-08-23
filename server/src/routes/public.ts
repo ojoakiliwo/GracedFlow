@@ -9,6 +9,7 @@ import {
   initializeTransaction,
   isOnlineLive,
   livePaymentProviders,
+  resolveCheckoutProvider,
   verifyTransaction,
 } from "../payments.js";
 import { GIVING_CURRENCIES, normalizeGivingCurrency } from "../currencies.js";
@@ -92,7 +93,7 @@ publicRouter.get(
       currencies: GIVING_CURRENCIES,
       online: true,
       onlineLive: isOnlineLive(),
-      provider: config.payments.provider,
+      provider: resolveCheckoutProvider(),
       providers: {
         flutterwave: providers.includes("flutterwave"),
         paystack: providers.includes("paystack"),
@@ -134,7 +135,7 @@ publicRouter.post(
     )}`;
     if (input.method === "online") {
       const init = await initializeTransaction({
-        email: input.donorEmail || "giving@infinitelygraced.church",
+        email: input.donorEmail || "giving@infinitelygracedchurch.com",
         amountMajor: input.amount,
         reference,
         customerName: input.donorName,

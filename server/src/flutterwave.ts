@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { config } from "./config.js";
-import { newId } from "./util.js";
+import { HttpError, newId } from "./util.js";
 
 const TOKEN_URL =
   "https://idp.flutterwave.com/realms/flutterwave/protocol/openid-connect/token";
@@ -50,7 +50,8 @@ export function resetFlutterwaveTokenCache(): void {
 }
 
 function headerKey(): string {
-  return newId("flw").replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
+  const key = newId("flw").replace(/[^a-zA-Z0-9]/g, "");
+  return key.length >= 12 ? key.slice(0, 40) : `${key}${crypto.randomBytes(8).toString("hex")}`;
 }
 
 export async function getFlutterwaveAccessToken(
@@ -70,15 +71,17 @@ export async function getFlutterwaveAccessToken(
       grant_type: "client_credentials",
     }),
   });
-  const data = (await res.json()) as {
+  const data = (await parseJsonBody(res)) as {
     access_token?: string;
     expires_in?: number;
     error?: string;
     error_description?: string;
+    message?: string;
   };
   if (!res.ok || !data.access_token) {
-    throw new Error(
-      data.error_description || data.error || "Flutterwave OAuth token request failed",
+    throw new HttpError(
+      502,
+      data.error_description || data.error || data.message || "Flutterwave OAuth token request failed",
     );
   }
   tokenCache.set(creds.clientId, {
@@ -99,6 +102,45 @@ function flutterwaveErrorMessage(body: FlutterwaveErrorBody, fallback: string): 
   return body.error?.message || body.message || fallback;
 }
 
+async function parseJsonBody(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  if (!text.trim()) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { message: text.slice(0, 180) || `Flutterwave returned HTTP ${res.status}` };
+  }
+}
+
+/** Hosted pay link from a checkout session. Live v4 often omits this field. */
+export function hostedCheckoutUrlFromSession(data: unknown): string | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const rec = data as Record<string, unknown>;
+  const nested =
+    rec.data && typeof rec.data === "object" ? (rec.data as Record<string, unknown>) : undefined;
+  const candidates = [
+    rec.checkout_url,
+    rec.checkoutUrl,
+    rec.hosted_link,
+    rec.link,
+    rec.url,
+    nested?.checkout_url,
+    nested?.checkoutUrl,
+    nested?.hosted_link,
+    nested?.link,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && /^https?:\/\//i.test(value) && !isOwnCallbackUrl(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function isOwnCallbackUrl(url: string): boolean {
+  return /\/give\/callback(?:\?|$)/i.test(url);
+}
+
 async function flutterwaveFetch<T>(
   creds: FlutterwaveCredentials,
   path: string,
@@ -116,7 +158,7 @@ async function flutterwaveFetch<T>(
     ...init,
     headers,
   });
-  const body = (await res.json()) as T & FlutterwaveErrorBody;
+  const body = (await parseJsonBody(res)) as T & FlutterwaveErrorBody;
   return { status: res.status, body };
 }
 
@@ -175,7 +217,10 @@ export async function getOrCreateFlutterwaveCustomer(
     const existing = await findCustomerIdByEmail(creds, params.email);
     if (existing) return existing;
   }
-  throw new Error(flutterwaveErrorMessage(created.body, "Flutterwave customer create failed"));
+  throw new HttpError(
+    502,
+    flutterwaveErrorMessage(created.body, "Flutterwave customer create failed"),
+  );
 }
 
 export interface FlutterwaveCheckoutResult {
@@ -202,7 +247,13 @@ export async function createFlutterwaveCheckoutSession(
   });
 
   const created = await flutterwaveFetch<{
-    data?: { checkout_url?: string; id?: string; reference?: string };
+    data?: {
+      checkout_url?: string;
+      checkoutUrl?: string;
+      link?: string;
+      id?: string;
+      reference?: string;
+    };
   }>(creds, "/checkout/sessions", {
     method: "POST",
     body: JSON.stringify({
@@ -211,12 +262,11 @@ export async function createFlutterwaveCheckoutSession(
       reference: params.reference,
       customer_id: customerId,
       redirect_url: params.redirectUrl,
-      session_duration: 60,
-      meta: stringifyMeta(params.metadata),
+      session_duration: 30,
     }),
   });
 
-  const url = created.body.data?.checkout_url;
+  const url = hostedCheckoutUrlFromSession(created.body.data) ?? hostedCheckoutUrlFromSession(created.body);
   if ((created.status === 200 || created.status === 201) && url) {
     return {
       checkoutUrl: url,
@@ -224,17 +274,16 @@ export async function createFlutterwaveCheckoutSession(
       sessionId: created.body.data?.id,
     };
   }
-  throw new Error(flutterwaveErrorMessage(created.body, "Flutterwave checkout session failed"));
-}
-
-function stringifyMeta(meta?: Record<string, unknown>): Record<string, string> | undefined {
-  if (!meta) return undefined;
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(meta)) {
-    if (value === undefined || value === null) continue;
-    out[key] = typeof value === "string" ? value : JSON.stringify(value);
+  if (created.status === 200 || created.status === 201) {
+    throw new HttpError(
+      502,
+      "Flutterwave did not return a checkout page. Pay with Paystack, or try again.",
+    );
   }
-  return out;
+  throw new HttpError(
+    502,
+    flutterwaveErrorMessage(created.body, "Flutterwave checkout session failed"),
+  );
 }
 
 export interface FlutterwaveChargeView {

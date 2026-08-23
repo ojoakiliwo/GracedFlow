@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import crypto from "node:crypto";
 import type { Express } from "express";
@@ -172,5 +172,76 @@ describe("Giving & payments", () => {
     const sig = crypto.createHmac("sha512", secret).update(body).digest("hex");
     const good = crypto.createHmac("sha512", secret).update(body).digest("hex");
     expect(sig).toBe(good);
+  });
+
+  it("falls back to Paystack when Flutterwave creates a session without a checkout URL", async () => {
+    const { config } = await import("../src/config.js");
+    const { initializeTransaction } = await import("../src/payments.js");
+    const { resetFlutterwaveTokenCache: resetCache } = await import("../src/flutterwave.js");
+    const prev = {
+      paystackSecretKey: config.payments.paystackSecretKey,
+      flutterwaveClientId: config.payments.flutterwaveClientId,
+      flutterwaveClientSecret: config.payments.flutterwaveClientSecret,
+      provider: config.payments.provider,
+    };
+    config.payments.paystackSecretKey = "sk_test_fallback";
+    config.payments.flutterwaveClientId = "flw-client";
+    config.payments.flutterwaveClientSecret = "flw-secret";
+    config.payments.provider = "flutterwave";
+    resetCache();
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const json = (status: number, body: unknown) =>
+        new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+      if (url.includes("openid-connect/token")) {
+        return json(200, { access_token: "tok_live", expires_in: 600 });
+      }
+      if (url.endsWith("/customers")) {
+        return json(201, { status: "success", data: { id: "cus_1" } });
+      }
+      if (url.endsWith("/checkout/sessions")) {
+        return json(200, {
+          status: "success",
+          message: "Checkout session created",
+          data: {
+            id: "che_1",
+            redirect_url: "https://church.example/give/callback",
+            reference: "IGC-FALLBACK",
+          },
+        });
+      }
+      if (url.includes("/transaction/initialize")) {
+        return json(200, {
+          status: true,
+          data: {
+            authorization_url: "https://checkout.paystack.com/fallback",
+            access_code: "ac_1",
+            reference: "IGC-FALLBACK",
+          },
+        });
+      }
+      return json(404, { message: url });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const result = await initializeTransaction({
+        email: "giver@example.com",
+        amountMajor: 2500,
+        reference: "IGC-FALLBACK",
+        provider: "flutterwave",
+        currency: "NGN",
+      });
+      expect(result.provider).toBe("paystack");
+      expect(result.authorizationUrl).toBe("https://checkout.paystack.com/fallback");
+    } finally {
+      config.payments.paystackSecretKey = prev.paystackSecretKey;
+      config.payments.flutterwaveClientId = prev.flutterwaveClientId;
+      config.payments.flutterwaveClientSecret = prev.flutterwaveClientSecret;
+      config.payments.provider = prev.provider;
+      resetCache();
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -5,6 +5,7 @@ import {
   encryptFlutterwaveField,
   generateFlutterwaveNonce,
   getFlutterwaveAccessToken,
+  hostedCheckoutUrlFromSession,
   resetFlutterwaveTokenCache,
   verifyFlutterwaveCharge,
   verifyFlutterwaveWebhookSignature,
@@ -147,6 +148,56 @@ describe("Flutterwave v4 helpers", () => {
       redirectUrl: "https://church.example/give/callback?reference=IGC-2",
     });
     expect(session.checkoutUrl).toContain("/pay/repeat");
+  });
+
+  it("throws a gateway error when a live session has no hosted checkout URL", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("openid-connect/token")) {
+        return jsonResponse(200, { access_token: "tok_live", expires_in: 600 });
+      }
+      if (url.endsWith("/customers")) {
+        return jsonResponse(201, { status: "success", data: { id: "cus_1" } });
+      }
+      if (url.endsWith("/checkout/sessions")) {
+        return jsonResponse(200, {
+          status: "success",
+          message: "Checkout session created",
+          data: {
+            id: "che_no_url",
+            redirect_url: "https://church.example/give/callback",
+            reference: "IGC-3",
+          },
+        });
+      }
+      return jsonResponse(404, { message: `unexpected ${url}` });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      createFlutterwaveCheckoutSession(creds, {
+        email: "faith@example.com",
+        amountMajor: 1000,
+        currency: "NGN",
+        reference: "IGC-3",
+        redirectUrl: "https://church.example/give/callback?reference=IGC-3",
+      }),
+    ).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringMatching(/checkout page/i),
+    });
+  });
+
+  it("reads a hosted checkout URL and ignores the church callback URL", () => {
+    expect(
+      hostedCheckoutUrlFromSession({ checkout_url: "https://checkout.flutterwave.com/pay/abc" }),
+    ).toBe("https://checkout.flutterwave.com/pay/abc");
+    expect(
+      hostedCheckoutUrlFromSession({
+        id: "che_1",
+        redirect_url: "https://infinitelygracedchurch.com/give/callback",
+      }),
+    ).toBeUndefined();
   });
 
   it("maps a succeeded charge to a successful verification", async () => {

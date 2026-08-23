@@ -40,10 +40,12 @@ export function resolveCheckoutProvider(requested?: string | null): PaymentProvi
   if (requested === "paystack" && isPaystackLive()) return "paystack";
   if (requested === "dryrun") return "dryrun";
 
+  // Paystack hosted checkout is what donors can actually open. Flutterwave v4
+  // often creates a session without a public checkout URL.
   if (config.payments.provider === "paystack" && isPaystackLive()) return "paystack";
+  if (isPaystackLive()) return "paystack";
   if (config.payments.provider === "flutterwave" && isFlutterwaveLive()) return "flutterwave";
   if (isFlutterwaveLive()) return "flutterwave";
-  if (isPaystackLive()) return "paystack";
   return "dryrun";
 }
 
@@ -86,58 +88,102 @@ export async function initializeTransaction(params: {
       );
     }
   }
-  const callbackUrl = checkoutReturnUrl(params.reference, provider);
 
   if (provider === "flutterwave") {
-    const session = await createFlutterwaveCheckoutSession(flutterwaveCredentials(), {
-      email: params.email,
-      name: params.customerName,
-      amountMajor: params.amountMajor,
-      currency,
-      reference: params.reference,
-      redirectUrl: callbackUrl,
-      metadata: params.metadata,
-    });
-    return {
-      provider: "flutterwave",
-      authorizationUrl: session.checkoutUrl,
-      reference: session.reference,
-    };
+    try {
+      return await initializeFlutterwave(params, currency);
+    } catch (err) {
+      if (isPaystackLive() && paystackSupportsCurrency(currency)) {
+        // eslint-disable-next-line no-console
+        console.error("[payments] Flutterwave checkout unavailable, using Paystack", (err as Error).message);
+        return initializePaystack(params, currency);
+      }
+      throw toGatewayError(err, "Flutterwave checkout failed. Try again, or give by bank transfer.");
+    }
   }
 
   if (provider === "paystack") {
-    const res = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.payments.paystackSecretKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email: params.email,
-        amount: toPaystackAmount(params.amountMajor, currency),
-        currency,
-        reference: params.reference,
-        callback_url: callbackUrl,
-        metadata: params.metadata ?? {},
-      }),
-    });
-    const data = (await res.json()) as {
-      status: boolean;
-      message: string;
-      data?: { authorization_url: string; access_code: string; reference: string };
-    };
-    if (!res.ok || !data.status || !data.data) {
-      throw new Error(data.message || "Paystack initialization failed");
+    try {
+      return await initializePaystack(params, currency);
+    } catch (err) {
+      throw toGatewayError(err, "Paystack checkout failed. Try again, or give by bank transfer.");
     }
-    return {
-      provider: "paystack",
-      authorizationUrl: data.data.authorization_url,
-      reference: data.data.reference,
-      accessCode: data.data.access_code,
-    };
   }
 
+  const callbackUrl = checkoutReturnUrl(params.reference, "dryrun");
   return { provider: "dryrun", authorizationUrl: `${callbackUrl}&simulated=1`, reference: params.reference };
+}
+
+async function initializeFlutterwave(
+  params: {
+    email: string;
+    amountMajor: number;
+    reference: string;
+    customerName?: string;
+    metadata?: Record<string, unknown>;
+  },
+  currency: string,
+): Promise<InitResult> {
+  const session = await createFlutterwaveCheckoutSession(flutterwaveCredentials(), {
+    email: params.email,
+    name: params.customerName,
+    amountMajor: params.amountMajor,
+    currency,
+    reference: params.reference,
+    redirectUrl: checkoutReturnUrl(params.reference, "flutterwave"),
+    metadata: params.metadata,
+  });
+  return {
+    provider: "flutterwave",
+    authorizationUrl: session.checkoutUrl,
+    reference: session.reference,
+  };
+}
+
+async function initializePaystack(
+  params: {
+    email: string;
+    amountMajor: number;
+    reference: string;
+    metadata?: Record<string, unknown>;
+  },
+  currency: string,
+): Promise<InitResult> {
+  const callbackUrl = checkoutReturnUrl(params.reference, "paystack");
+  const res = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.payments.paystackSecretKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: params.email,
+      amount: toPaystackAmount(params.amountMajor, currency),
+      currency,
+      reference: params.reference,
+      callback_url: callbackUrl,
+      metadata: params.metadata ?? {},
+    }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    status: boolean;
+    message: string;
+    data?: { authorization_url: string; access_code: string; reference: string };
+  };
+  if (!res.ok || !data.status || !data.data) {
+    throw new HttpError(502, data.message || "Paystack initialization failed");
+  }
+  return {
+    provider: "paystack",
+    authorizationUrl: data.data.authorization_url,
+    reference: data.data.reference,
+    accessCode: data.data.access_code,
+  };
+}
+
+function toGatewayError(err: unknown, fallback: string): HttpError {
+  if (err instanceof HttpError) return err;
+  return new HttpError(502, err instanceof Error && err.message ? err.message : fallback);
 }
 
 export interface VerifyResult {
