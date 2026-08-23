@@ -75,10 +75,8 @@ export default function Home() {
                   <CalendarDays className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="inline-flex rounded-full bg-gold-50 px-2.5 py-0.5 text-xs font-semibold text-gold-800">
-                    {s.time}
-                  </p>
-                  <h3 className="mt-1.5 text-lg text-ink-900">{s.name}</h3>
+                  <p className="text-sm font-semibold text-brand-800">{s.time}</p>
+                  <h3 className="text-lg text-ink-900">{s.name}</h3>
                   <p className="mt-1 text-sm text-ink-500">{s.desc}</p>
                 </div>
               </div>
