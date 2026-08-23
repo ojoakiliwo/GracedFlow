@@ -1,3 +1,5 @@
+import { money } from "./currencies";
+
 export function fullName(first?: string | null, last?: string | null): string {
   return [first, last].filter(Boolean).join(" ").trim() || "Unknown";
 }
@@ -7,12 +9,7 @@ export function initials(first?: string | null, last?: string | null): string {
 }
 
 export function naira(amount?: number | null): string {
-  const value = amount ?? 0;
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return money(amount, "NGN");
 }
 
 export function formatDate(value?: string | null): string {

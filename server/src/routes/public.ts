@@ -11,6 +11,7 @@ import {
   livePaymentProviders,
   verifyTransaction,
 } from "../payments.js";
+import { GIVING_CURRENCIES, normalizeGivingCurrency } from "../currencies.js";
 
 export const publicRouter = Router();
 
@@ -87,7 +88,8 @@ publicRouter.get(
   asyncHandler(async (_req, res) => {
     const providers = livePaymentProviders();
     res.json({
-      currency: config.payments.currency,
+      currency: config.payments.currency || "NGN",
+      currencies: GIVING_CURRENCIES,
       online: true,
       onlineLive: isOnlineLive(),
       provider: config.payments.provider,
@@ -109,6 +111,7 @@ const giveSchema = z.object({
   donorPhone: z.string().optional(),
   type: z.string().default("offering"),
   amount: z.number().positive(),
+  currency: z.string().optional(),
   method: z.enum(["online", "transfer"]).default("online"),
   provider: z.enum(["flutterwave", "paystack", "dryrun"]).optional(),
   note: z.string().optional(),
@@ -118,6 +121,13 @@ publicRouter.post(
   "/give",
   asyncHandler(async (req, res) => {
     const input = parseBody(giveSchema, req.body);
+    const currency = normalizeGivingCurrency(input.currency);
+    if (input.method === "transfer" && currency !== "NGN") {
+      throw new HttpError(
+        400,
+        "Bank transfer is in Nigerian Naira. Use Card / Online to give in another currency.",
+      );
+    }
     const id = newId("don");
     const reference = `IGC-${Date.now().toString(36).toUpperCase()}-${Math.floor(
       Math.random() * 1000,
@@ -129,7 +139,8 @@ publicRouter.post(
         reference,
         customerName: input.donorName,
         provider: input.provider,
-        metadata: { donationId: id, type: input.type, donorName: input.donorName },
+        currency,
+        metadata: { donationId: id, type: input.type, donorName: input.donorName, currency },
       });
       await db.prepare(
         `INSERT INTO donations (id, donor_name, donor_email, donor_phone, type, amount, currency, method, reference, status, note, provider, created_at)
@@ -141,7 +152,7 @@ publicRouter.post(
         input.donorPhone ?? null,
         input.type,
         input.amount,
-        config.payments.currency,
+        currency,
         input.method,
         reference,
         input.note ?? null,
@@ -152,6 +163,7 @@ publicRouter.post(
         id,
         reference,
         method: "online",
+        currency,
         provider: init.provider,
         authorizationUrl: init.authorizationUrl,
       });
@@ -167,7 +179,7 @@ publicRouter.post(
       input.donorPhone ?? null,
       input.type,
       input.amount,
-      config.payments.currency,
+      currency,
       input.method,
       reference,
       input.note ?? null,
@@ -179,6 +191,7 @@ publicRouter.post(
       id,
       reference,
       method: "transfer",
+      currency,
       giving: config.giving,
       message:
         "Thank you for your generosity! Use the reference and account details to complete your gift.",
@@ -199,12 +212,18 @@ publicRouter.get(
         amount: number;
         type: string;
         status: string;
+        currency?: string | null;
         provider?: string | null;
       } | undefined;
     if (!donation) throw new HttpError(404, "Donation not found");
 
     if (donation.status === "confirmed") {
-      return void res.json({ status: "success", amount: donation.amount, type: donation.type });
+      return void res.json({
+        status: "success",
+        amount: donation.amount,
+        type: donation.type,
+        currency: donation.currency ?? "NGN",
+      });
     }
 
     const chargeId = String(
@@ -220,6 +239,11 @@ publicRouter.get(
         "UPDATE donations SET status = 'confirmed', method = 'card', confirmed_at = ? WHERE id = ?",
       ).run(nowIso(), donation.id);
     }
-    res.json({ status: result.status, amount: donation.amount, type: donation.type });
+    res.json({
+      status: result.status,
+      amount: donation.amount,
+      type: donation.type,
+      currency: donation.currency ?? "NGN",
+    });
   }),
 );

@@ -26,6 +26,7 @@ import {
   Textarea,
 } from "../../components/ui";
 import { classLabel, formatDate, naira, roleLabel } from "../../lib/format";
+import { money } from "../../lib/currencies";
 import { DEPARTMENT_POSITIONS, officeFor } from "../../lib/offices";
 import { useAuth } from "../../lib/auth";
 import { useToast } from "../../components/toast";
@@ -49,7 +50,7 @@ interface MemberDetailData {
   growth: { id: string; type: string; title: string; description: string | null; date: string }[];
   support: { id: string; type: string; description: string | null; amount: number | null; date: string }[];
   departments: { id: string; name: string; position: string }[];
-  donations: { id: string; type: string; amount: number; status: string; created_at: string }[];
+  donations: { id: string; type: string; amount: number; currency?: string; status: string; created_at: string }[];
 }
 
 export default function MemberDetail() {
@@ -212,7 +213,7 @@ export default function MemberDetail() {
                       <p className="text-xs text-ink-500">{formatDate(d.created_at)}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{naira(d.amount)}</span>
+                      <span className="text-sm font-medium">{money(d.amount, d.currency)}</span>
                       <Badge color={d.status === "confirmed" ? "green" : "amber"}>
                         {d.status}
                       </Badge>

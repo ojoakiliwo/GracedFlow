@@ -1,6 +1,12 @@
 import crypto from "node:crypto";
 import { config } from "./config.js";
 import {
+  normalizeGivingCurrency,
+  paystackSupportsCurrency,
+  toPaystackAmount,
+} from "./currencies.js";
+import { HttpError } from "./util.js";
+import {
   createFlutterwaveCheckoutSession,
   flutterwaveCredentials,
   isFlutterwaveConfigured,
@@ -61,13 +67,25 @@ function checkoutReturnUrl(reference: string, provider: PaymentProvider): string
  */
 export async function initializeTransaction(params: {
   email: string;
-  amountMajor: number; // in Naira (major units)
+  amountMajor: number;
   reference: string;
   customerName?: string;
   provider?: string | null;
+  currency?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<InitResult> {
-  const provider = resolveCheckoutProvider(params.provider);
+  const currency = normalizeGivingCurrency(params.currency ?? config.payments.currency);
+  let provider = resolveCheckoutProvider(params.provider);
+  if (provider === "paystack" && !paystackSupportsCurrency(currency)) {
+    if (isFlutterwaveLive()) {
+      provider = "flutterwave";
+    } else {
+      throw new HttpError(
+        400,
+        `${currency} is available on Flutterwave. Choose Flutterwave, or give in NGN, USD, GHS, KES or ZAR.`,
+      );
+    }
+  }
   const callbackUrl = checkoutReturnUrl(params.reference, provider);
 
   if (provider === "flutterwave") {
@@ -75,7 +93,7 @@ export async function initializeTransaction(params: {
       email: params.email,
       name: params.customerName,
       amountMajor: params.amountMajor,
-      currency: config.payments.currency,
+      currency,
       reference: params.reference,
       redirectUrl: callbackUrl,
       metadata: params.metadata,
@@ -96,8 +114,8 @@ export async function initializeTransaction(params: {
       },
       body: JSON.stringify({
         email: params.email,
-        amount: Math.round(params.amountMajor * 100), // kobo
-        currency: config.payments.currency,
+        amount: toPaystackAmount(params.amountMajor, currency),
+        currency,
         reference: params.reference,
         callback_url: callbackUrl,
         metadata: params.metadata ?? {},

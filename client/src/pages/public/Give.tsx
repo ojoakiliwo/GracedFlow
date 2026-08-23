@@ -3,12 +3,13 @@ import { HandCoins, CheckCircle2, Landmark, CreditCard } from "lucide-react";
 import { apiPost } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import { Button, Card, Field, Input, Select, Spinner } from "../../components/ui";
-import { naira } from "../../lib/format";
+import { GIVING_CURRENCIES, money } from "../../lib/currencies";
 
 type CheckoutProvider = "paystack" | "flutterwave" | "dryrun";
 
 interface GivingOptions {
   currency: string;
+  currencies?: { code: string; name: string; symbol: string }[];
   online: boolean;
   onlineLive: boolean;
   provider?: CheckoutProvider;
@@ -45,6 +46,7 @@ export default function Give() {
     donorPhone: "",
     type: "tithe",
     amount: "",
+    currency: "NGN",
   });
   const [result, setResult] = useState<GiveResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -58,6 +60,7 @@ export default function Give() {
       const res = await apiPost<GiveResult>("/public/give", {
         ...form,
         amount: Number(form.amount),
+        currency: form.currency,
         method,
         provider: method === "online" && checkout ? checkout : undefined,
       });
@@ -96,7 +99,10 @@ export default function Give() {
             <p className="mt-2 text-ink-500">
               Please complete your{" "}
               <span className="font-semibold capitalize">{form.type}</span> of{" "}
-              <span className="font-semibold">{naira(Number(form.amount))}</span> using the
+              <span className="font-semibold">
+                {money(Number(form.amount), form.currency)}
+              </span>{" "}
+              using the
               details below.
             </p>
             <div className="mx-auto mt-6 max-w-sm rounded-2xl bg-brand-50 p-6 text-left">
@@ -136,9 +142,12 @@ export default function Give() {
                     subtitle={onlineSubtitle(options)}
                   />
                   {hasBankDetails(options) && (
-                    <MethodTile
-                      active={method === "transfer"}
-                      onClick={() => setMethod("transfer")}
+                  <MethodTile
+                    active={method === "transfer"}
+                    onClick={() => {
+                      setMethod("transfer");
+                      setForm((f) => ({ ...f, currency: "NGN" }));
+                    }}
                       icon={<Landmark className="h-5 w-5" />}
                       title="Bank transfer"
                       subtitle="Get account details"
@@ -180,17 +189,43 @@ export default function Give() {
                     ))}
                   </Select>
                 </Field>
-                <Field label="Amount (₦)">
+                <Field label="Amount">
                   <Input
                     type="number"
                     min="1"
+                    step={form.currency === "NGN" ? "1" : "0.01"}
                     value={form.amount}
                     onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                    placeholder="5000"
+                    placeholder={form.currency === "NGN" ? "5000" : "25"}
                     required
                   />
                 </Field>
               </div>
+              <Field
+                label="Currency"
+                hint={
+                  method === "transfer"
+                    ? "Bank transfer is received in Nigerian Naira."
+                    : "Give in the currency that is easiest for you. Cards and international wallets are supported online."
+                }
+              >
+                <Select
+                  value={form.currency}
+                  onChange={(e) => {
+                    const currency = e.target.value;
+                    setForm({ ...form, currency });
+                    if (currency !== "NGN" && method === "transfer") setMethod("online");
+                  }}
+                >
+                  {(options?.currencies?.length ? options.currencies : [...GIVING_CURRENCIES]).map(
+                    (c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} — {c.name}
+                      </option>
+                    ),
+                  )}
+                </Select>
+              </Field>
               <Field label="Full name">
                 <Input
                   value={form.donorName}
@@ -228,7 +263,7 @@ export default function Give() {
                 className="w-full"
               >
                 {method === "online" ? "Give securely" : "Continue"}{" "}
-                {form.amount && naira(Number(form.amount))}
+                {form.amount && money(Number(form.amount), form.currency)}
               </Button>
               {method === "online" && !options?.onlineLive && (
                 <p className="text-center text-xs text-ink-400">

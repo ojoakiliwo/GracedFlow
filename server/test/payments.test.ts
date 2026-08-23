@@ -30,6 +30,16 @@ describe("Giving & payments", () => {
     expect(res.body.onlineLive).toBe(false);
     expect(res.body.provider).toBe("dryrun");
     expect(res.body.providers).toEqual({ flutterwave: false, paystack: false });
+    expect(res.body.currencies.map((c: { code: string }) => c.code)).toEqual([
+      "NGN",
+      "USD",
+      "GBP",
+      "EUR",
+      "CAD",
+      "GHS",
+      "KES",
+      "ZAR",
+    ]);
   });
 
   it("starts an online gift and returns an authorization URL", async () => {
@@ -97,6 +107,43 @@ describe("Giving & payments", () => {
     });
     expect(res.body.method).toBe("transfer");
     expect(res.body.giving).toBeTruthy();
+  });
+
+  it("lets a donor choose USD and stores that currency", async () => {
+    const res = await request(app).post("/api/public/give").send({
+      donorName: "Diaspora Giver",
+      donorEmail: "diaspora@example.com",
+      type: "offering",
+      amount: 50,
+      currency: "USD",
+      method: "online",
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.currency).toBe("USD");
+    const { db } = await import("../src/db.js");
+    const row = (await db
+      .prepare("SELECT amount, currency FROM donations WHERE reference = ?")
+      .get(res.body.reference)) as { amount: number; currency: string };
+    expect(Number(row.amount)).toBe(50);
+    expect(row.currency).toBe("USD");
+  });
+
+  it("rejects an unsupported currency and naira-only bank transfer in USD", async () => {
+    const bad = await request(app).post("/api/public/give").send({
+      type: "tithe",
+      amount: 20,
+      currency: "JPY",
+      method: "online",
+    });
+    expect(bad.status).toBe(400);
+
+    const transfer = await request(app).post("/api/public/give").send({
+      type: "tithe",
+      amount: 20,
+      currency: "GBP",
+      method: "transfer",
+    });
+    expect(transfer.status).toBe(400);
   });
 
   it("rejects a webhook with an invalid signature", async () => {

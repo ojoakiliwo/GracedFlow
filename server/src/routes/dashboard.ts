@@ -26,9 +26,14 @@ dashboardRouter.get(
       .all();
     const givingConfirmed = await db
       .prepare(
-        "SELECT COALESCE(SUM(amount),0) AS total, COUNT(*)::int AS count FROM donations WHERE status = 'confirmed'",
+        `SELECT currency, COALESCE(SUM(amount),0) AS total, COUNT(*)::int AS count
+         FROM donations WHERE status = 'confirmed' GROUP BY currency`,
       )
-      .get();
+      .all();
+    const givingConfirmedCount = givingConfirmed.reduce(
+      (sum, row) => sum + Number((row as { count: number }).count),
+      0,
+    );
     const givingPending = await count(
       "SELECT COUNT(*)::int AS c FROM donations WHERE status = 'pending'",
     );
@@ -107,7 +112,7 @@ dashboardRouter.get(
         openTasks,
         newPrayers,
         givingPending,
-        givingConfirmed,
+        givingConfirmed: { count: givingConfirmedCount, byCurrency: givingConfirmed },
       },
       projectsByStatus,
       membersByClass,

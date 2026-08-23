@@ -4,6 +4,7 @@ import { db } from "../db.js";
 import { authenticate, requireRole } from "../auth.js";
 import { HttpError, audit, newId, nowIso } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
+import { normalizeGivingCurrency } from "../currencies.js";
 
 export const donationsRouter = Router();
 donationsRouter.use(authenticate);
@@ -34,8 +35,8 @@ donationsRouter.get(
       .all(...params);
 
     const totals = await db.prepare(
-        `SELECT type, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total
-         FROM donations WHERE status = 'confirmed' GROUP BY type`,
+        `SELECT type, currency, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total
+         FROM donations WHERE status = 'confirmed' GROUP BY type, currency`,
       )
       .all();
     res.json({ donations: rows, totals });
@@ -62,6 +63,7 @@ donationsRouter.post(
   requireRole("admin"),
   asyncHandler(async (req, res) => {
     const input = parseBody(recordSchema, req.body);
+    const currency = normalizeGivingCurrency(input.currency);
     const id = newId("don");
     await db.prepare(
       `INSERT INTO donations (id, member_id, donor_name, donor_email, donor_phone, type, amount, currency, method, project_id, reference, status, note, recorded_by, confirmed_at)
@@ -74,7 +76,7 @@ donationsRouter.post(
       donorPhone: input.donorPhone ?? null,
       type: input.type,
       amount: input.amount,
-      currency: input.currency,
+      currency,
       method: input.method,
       projectId: input.projectId || null,
       reference: input.reference ?? null,

@@ -3,12 +3,13 @@ import { Link, useSearchParams } from "react-router-dom";
 import { CheckCircle2, XCircle, Clock } from "lucide-react";
 import { api } from "../../lib/api";
 import { Button, Card, Spinner } from "../../components/ui";
-import { naira } from "../../lib/format";
+import { money } from "../../lib/currencies";
 
 interface VerifyResult {
   status: "success" | "failed" | "pending";
   amount: number;
   type: string;
+  currency?: string;
 }
 
 const CANCELLED = new Set(["cancelled", "canceled", "failed", "error"]);
@@ -92,7 +93,9 @@ export default function GiveCallback() {
             <p className="mt-2 text-ink-500">
               Thank you for your{" "}
               <span className="font-semibold capitalize">{result?.type}</span> of{" "}
-              <span className="font-semibold">{naira(result?.amount)}</span>. May God bless
+              <span className="font-semibold">
+                {money(result?.amount, result?.currency)}
+              </span>. May God bless
               you richly.
             </p>
             <p className="mt-2 text-xs text-ink-400">Reference: {reference}</p>
