@@ -163,6 +163,31 @@ export default function Home() {
         </section>
       )}
 
+      {/* Founder */}
+      <section className="mx-auto max-w-6xl px-6 pb-8">
+        <Card className="flex flex-col items-start gap-4 p-8 sm:flex-row sm:items-center">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full grace-gradient">
+            <span className="font-display text-xl font-semibold text-gold-300">MU</span>
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-semibold uppercase tracking-widest text-gold-600">
+              Founding President
+            </p>
+            <h2 className="mt-1 text-xl text-ink-900">Prophet Michael Ugbede</h2>
+            <p className="mt-1 text-sm text-ink-500">
+              Prophet, author, counselor, coach, songwriter and singer — leading this
+              house to make Jesus necessary, not optional.
+            </p>
+          </div>
+          <Link
+            to="/founder"
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-800"
+          >
+            His story <ArrowRight className="h-4 w-4" />
+          </Link>
+        </Card>
+      </section>
+
       {/* CTA */}
       <section className="mx-auto max-w-6xl px-6 pb-20">
         <div className="grace-gradient-gold flex flex-col items-center gap-4 rounded-3xl px-8 py-14 text-center">

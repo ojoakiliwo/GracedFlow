@@ -7,6 +7,7 @@ import { Button } from "./ui";
 const links = [
   { to: "/", label: "Home", end: true },
   { to: "/about", label: "About" },
+  { to: "/founder", label: "Founder" },
   { to: "/give", label: "Give" },
   { to: "/prayer", label: "Prayer" },
 ];
@@ -117,6 +118,16 @@ export default function PublicLayout() {
           <div>
             <p className="mb-3 text-sm font-semibold text-white">Quick Links</p>
             <ul className="space-y-1.5 text-sm text-brand-300">
+              <li>
+                <Link to="/about" className="hover:text-white">
+                  About the Church
+                </Link>
+              </li>
+              <li>
+                <Link to="/founder" className="hover:text-white">
+                  Founding President
+                </Link>
+              </li>
               <li>
                 <Link to="/give" className="hover:text-white">
                   Give / Tithe

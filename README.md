@@ -61,8 +61,8 @@ Built as an npm-workspaces monorepo:
 - Admin giving ledger with totals by type and one-click confirmation.
 
 ### Public website
-- Elegant landing page, About, **Give**, and **Prayer request** pages, live service
-  times, public events and projects.
+- Elegant landing page, About the church, **About the Founding President**, **Give**,
+  and **Prayer request** pages, live service times, public events and projects.
 
 ### Security & roles
 - JWT authentication; roles ranked **member → worker → pastor → admin → super_admin**,
@@ -92,7 +92,7 @@ Built as an npm-workspaces monorepo:
    ```
 
 4. Open **http://localhost:5173** in your browser.
-   - Public site: `/`, `/about`, `/give`, `/prayer`.
+   - Public site: `/`, `/about`, `/founder`, `/give`, `/prayer`.
    - Ministry portal: click **Member Login** (or go to `/login`).
 
 **Demo login:** `admin@igc.church` / `Grace@2024`

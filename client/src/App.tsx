@@ -7,6 +7,7 @@ import PublicLayout from "./components/PublicLayout";
 
 import Home from "./pages/public/Home";
 import About from "./pages/public/About";
+import Founder from "./pages/public/Founder";
 import Give from "./pages/public/Give";
 import GiveCallback from "./pages/public/GiveCallback";
 import Prayer from "./pages/public/Prayer";
@@ -47,6 +48,8 @@ export default function App() {
       <Route element={<PublicLayout />}>
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
+        <Route path="/founder" element={<Founder />} />
+        <Route path="/founding-president" element={<Founder />} />
         <Route path="/give" element={<Give />} />
         <Route path="/give/callback" element={<GiveCallback />} />
         <Route path="/prayer" element={<Prayer />} />

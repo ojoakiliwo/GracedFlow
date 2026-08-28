@@ -1,4 +1,6 @@
-import { Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowRight, Sparkles } from "lucide-react";
+import { Card } from "../../components/ui";
 
 export default function About() {
   return (
@@ -14,37 +16,118 @@ export default function About() {
       </section>
 
       <section className="mx-auto max-w-4xl px-6 py-16">
-        <div className="prose prose-lg max-w-none text-ink-600">
-          <h2 className="font-display text-3xl text-ink-900">Our Mission</h2>
-          <p className="mt-3">
-            To raise a generation of grace-filled disciples who love God, love people, and
-            impact their world through the finished works of Christ. We are committed to
-            sound teaching, genuine worship, and compassionate service.
-          </p>
+        <h2 className="font-display text-3xl text-ink-900">Who we are</h2>
+        <p className="mt-3 text-ink-600">
+          We are a family flowing in His infinite grace — reaching lives, building
+          people, and transforming our community for Christ. This house exists so
+          that people who have questions about Jesus can find answers, and people
+          who already believe can grow into the fullness of who God created them
+          to be.
+        </p>
+        <p className="mt-4 text-ink-600">
+          Infinitely Graced Church was founded in February 2025 by{" "}
+          <Link to="/founder" className="font-medium text-brand-700 hover:underline">
+            Prophet Michael Ugbede
+          </Link>
+          , our Founding President and Lead Pastor. The church is the living
+          expression of a message he has carried since childhood: Jesus is not
+          optional. He is necessary.
+        </p>
 
-          <h2 className="mt-10 font-display text-3xl text-ink-900">Our Vision</h2>
-          <p className="mt-3">
-            To be a spiritual home where every person — from the first-time visitor to the
-            seasoned worker — grows into the fullness of who God created them to be, and is
-            equipped to carry His grace everywhere they go.
-          </p>
+        <h2 className="mt-12 font-display text-3xl text-ink-900">Our Mission</h2>
+        <p className="mt-3 text-ink-600">
+          To raise a generation of grace-filled disciples who love God, love people,
+          and impact their world through the finished works of Christ. We are
+          committed to sound teaching, genuine worship, and compassionate service.
+        </p>
 
-          <div className="mt-10 grid gap-4 sm:grid-cols-3">
-            {[
-              ["Worship", "Encountering God in spirit and truth."],
-              ["Discipleship", "Growing believers into maturity."],
-              ["Community", "Doing life together in love."],
-            ].map(([t, d]) => (
-              <div
-                key={t}
-                className="rounded-2xl border border-ink-100 bg-white p-6 card-shadow"
-              >
-                <Sparkles className="h-6 w-6 text-gold-500" />
-                <h3 className="mt-3 text-lg text-ink-900">{t}</h3>
-                <p className="mt-1 text-sm text-ink-500">{d}</p>
+        <h2 className="mt-10 font-display text-3xl text-ink-900">Our Vision</h2>
+        <p className="mt-3 text-ink-600">
+          To be a spiritual home where every person — from the first-time visitor to
+          the seasoned worker — grows into the fullness of who God created them to
+          be, and is equipped to carry His grace everywhere they go.
+        </p>
+
+        <h2 className="mt-10 font-display text-3xl text-ink-900">What we believe</h2>
+        <p className="mt-3 text-ink-600">
+          Our teaching rests on the gospel Prophet Ugbede unfolds in{" "}
+          <em>Is Jesus Necessary?</em> — that humanity fell, authority was lost,
+          and only a sinless Saviour could restore us to God.
+        </p>
+        <ul className="mt-4 space-y-3 text-ink-600">
+          <li>
+            <strong className="text-ink-800">Jesus is fully God and fully man</strong>{" "}
+            — the only mediator who can reconcile us to the Father.
+          </li>
+          <li>
+            <strong className="text-ink-800">Salvation is by grace through faith</strong>{" "}
+            — not by religious performance. His death and resurrection are a
+            finished work we receive.
+          </li>
+          <li>
+            <strong className="text-ink-800">The whole person is being restored</strong>{" "}
+            — body, soul and spirit brought back under the lordship of Christ.
+          </li>
+          <li>
+            <strong className="text-ink-800">This gospel is for every human being</strong>{" "}
+            — every culture, every background, every previous belief.
+          </li>
+        </ul>
+
+        <div className="mt-10 grid gap-4 sm:grid-cols-3">
+          {[
+            ["Worship", "Encountering God in spirit and truth."],
+            ["Discipleship", "Growing believers into maturity."],
+            ["Community", "Doing life together in love."],
+          ].map(([t, d]) => (
+            <div
+              key={t}
+              className="rounded-2xl border border-ink-100 bg-white p-6 card-shadow"
+            >
+              <Sparkles className="h-6 w-6 text-gold-500" />
+              <h3 className="mt-3 text-lg text-ink-900">{t}</h3>
+              <p className="mt-1 text-sm text-ink-500">{d}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="bg-ink-50 py-16">
+        <div className="mx-auto max-w-5xl px-6">
+          <Card className="overflow-hidden">
+            <div className="grid md:grid-cols-[1fr_auto]">
+              <div className="p-8 sm:p-10">
+                <p className="text-sm font-semibold uppercase tracking-widest text-gold-600">
+                  Leadership
+                </p>
+                <h2 className="mt-2 font-display text-3xl text-ink-900">
+                  About the Founding President
+                </h2>
+                <p className="mt-4 max-w-xl text-ink-600">
+                  Prophet Michael Ugbede is a prophet, author, counselor, coach,
+                  songwriter and singer. He leads this commission as Head Pastor —
+                  and his own story, from a village crusade at seven to the writing
+                  of <em>Is Jesus Necessary?</em>, is the heart behind this house.
+                </p>
+                <Link
+                  to="/founder"
+                  className="mt-6 inline-flex items-center gap-2 font-medium text-brand-700 hover:text-brand-900"
+                >
+                  Read his story <ArrowRight className="h-4 w-4" />
+                </Link>
               </div>
-            ))}
-          </div>
+              <div className="flex items-center justify-center bg-brand-950 px-10 py-12">
+                <div className="text-center">
+                  <p className="font-display text-5xl font-semibold text-gold-300">
+                    MU
+                  </p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-brand-200">
+                    Prophet Michael Ugbede
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Card>
         </div>
       </section>
     </div>
