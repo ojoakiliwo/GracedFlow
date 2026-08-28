@@ -57,16 +57,14 @@ const books = [
     title: "Is Jesus Necessary?",
     blurb:
       "Why the birth, death and resurrection of Jesus were not optional. Written so anyone — including a sincere seeker from another faith — can reason through the gospel and receive Christ.",
-    amazon:
-      "https://www.amazon.com/s?k=Is+Jesus+Necessary+Ugbede+Michael",
+    amazon: "https://a.co/d/eHEdkBR",
     accent: "Why He had to come.",
   },
   {
     title: "Science and Spirituality",
     blurb:
       "A companion volume for those who will not separate the God who made the universe from the God who reveals Himself — faith that can sit with reason, and reason that must bow to revelation.",
-    amazon:
-      "https://www.amazon.com/s?k=Science+and+Spirituality+Ugbede+Michael",
+    amazon: "https://a.co/d/5MhpFY6",
     accent: "Faith meeting the created world.",
   },
 ];
