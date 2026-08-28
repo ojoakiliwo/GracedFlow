@@ -2,19 +2,35 @@ import { Link } from "react-router-dom";
 import {
   ArrowRight,
   BookOpen,
+  ExternalLink,
   HeartHandshake,
   Music,
-  PenLine,
   Quote,
   Sparkles,
 } from "lucide-react";
 import { Card } from "../../components/ui";
 
 const roles = [
-  { icon: Sparkles, title: "Prophet", body: "A voice calling people to reason with God and walk in His light." },
-  { icon: BookOpen, title: "Author", body: "Writer of Is Jesus Necessary? — a reasoned case for the gospel." },
-  { icon: HeartHandshake, title: "Counselor & Coach", body: "Walking with people as they recover identity, purpose, and peace in Christ." },
-  { icon: Music, title: "Songwriter & Singer", body: "Worship that carries the same message he teaches: Jesus is enough." },
+  {
+    icon: Sparkles,
+    title: "Prophet",
+    body: "A voice called in 2003 to set men free — through which God still heals and delivers people and communities.",
+  },
+  {
+    icon: BookOpen,
+    title: "Author",
+    body: "Writer of Is Jesus Necessary? and Science and Spirituality, both available on Amazon.",
+  },
+  {
+    icon: HeartHandshake,
+    title: "Counselor & Coach",
+    body: "Walking with people as they recover identity, purpose, and peace in Christ.",
+  },
+  {
+    icon: Music,
+    title: "Songwriter & Singer",
+    body: "Worship that carries the same message he teaches: Jesus is enough.",
+  },
 ];
 
 const pillars = [
@@ -33,6 +49,25 @@ const pillars = [
   {
     title: "A gospel for every person",
     body: "Jesus is for the whole world — including those raised in other faiths. Descent from Abraham is not enough; faith in the promised Messiah is.",
+  },
+];
+
+const books = [
+  {
+    title: "Is Jesus Necessary?",
+    blurb:
+      "Why the birth, death and resurrection of Jesus were not optional. Written so anyone — including a sincere seeker from another faith — can reason through the gospel and receive Christ.",
+    amazon:
+      "https://www.amazon.com/s?k=Is+Jesus+Necessary+Ugbede+Michael",
+    accent: "Why He had to come.",
+  },
+  {
+    title: "Science and Spirituality",
+    blurb:
+      "A companion volume for those who will not separate the God who made the universe from the God who reveals Himself — faith that can sit with reason, and reason that must bow to revelation.",
+    amazon:
+      "https://www.amazon.com/s?k=Science+and+Spirituality+Ugbede+Michael",
+    accent: "Faith meeting the created world.",
   },
 ];
 
@@ -57,9 +92,9 @@ export default function Founder() {
               Founding President &amp; Lead Pastor
             </p>
             <p className="mx-auto mt-5 max-w-2xl text-brand-100 lg:mx-0">
-              Prophet, author, counselor, coach, songwriter and singer — raised to
-              help people see why Jesus is not merely a figure of faith, but the
-              essential answer to the human condition.
+              Prophet, author, counselor, coach, songwriter and singer. In 2003 he
+              encountered God — and since then the Lord has healed and delivered
+              people and communities through him.
             </p>
           </div>
         </div>
@@ -69,14 +104,15 @@ export default function Founder() {
         <div className="rounded-3xl border border-gold-200 bg-gold-50/60 p-6 sm:p-8">
           <Quote className="h-8 w-8 text-gold-500" />
           <p className="mt-3 font-display text-xl leading-relaxed text-ink-800 sm:text-2xl">
-            “Jesus is not just necessary; He is everything.”
+            “If God was real, then He would reveal Himself to me.”
           </p>
           <p className="mt-3 text-sm text-ink-500">
-            From <em>Is Jesus Necessary?</em> — Ugbede Michael
+            The desire that led to a nine-hour prayer in 2003 — and an encounter
+            that began the true journey.
           </p>
         </div>
 
-        <h2 className="mt-14 font-display text-3xl text-ink-900">The call</h2>
+        <h2 className="mt-14 font-display text-3xl text-ink-900">The hunger</h2>
         <div className="mt-4 space-y-4 text-ink-600">
           <p>
             Prophet Michael Ugbede grew up in a Christian home. His family helped
@@ -98,11 +134,38 @@ export default function Founder() {
             opened a well of questions: Why must we go through Jesus? Why pray in
             His name? Why didn’t God just make everything perfect? Those questions
             did not drive him from the faith. They drove him to understand it — and
-            to help others who leave Christianity, or never enter it, because Jesus
-            has never been made to make sense.
+            they fed a deeper desire: not only to know about God, but to experience
+            Him.
+          </p>
+        </div>
+
+        <h2 className="mt-14 font-display text-3xl text-ink-900">
+          The encounter — 2003
+        </h2>
+        <div className="mt-4 space-y-4 text-ink-600">
+          <p>
+            In 2003, after praying for about nine hours, he encountered God. What
+            led to that prayer was the desire to experience God. He felt that if God
+            was real, then God would reveal Himself to him.
           </p>
           <p>
-            That burden became a book, a pulpit, and a commission:{" "}
+            After exhaustion from the prayer, all of a sudden his spirit seemed to
+            come out of his body. He could see his body bent over his lap, while his
+            spirit seemed to be seated straight, viewing his body from behind. In
+            that moment he could see beyond the walls, and hear thoughts.
+          </p>
+          <p>
+            He saw Someone who had the shape of a man, but whose countenance was
+            like the sun. Even though he could not look at Him, he could still see
+            Him. He told him how he would be used to set men free — among many other
+            things.
+          </p>
+          <p>
+            That is where, and when, the true journey started. Since then, God has
+            healed and delivered people and communities through him.
+          </p>
+          <p>
+            That calling later became books, a pulpit, and a commission:{" "}
             <Link to="/about" className="font-medium text-brand-700 hover:underline">
               Infinitely Graced Church
             </Link>
@@ -137,8 +200,8 @@ export default function Founder() {
           The message he carries
         </h2>
         <p className="mx-auto mt-2 max-w-2xl text-center text-ink-500">
-          Drawn from years of questioning, studying, and writing so that belief in
-          Jesus would rest on both Scripture and sound reason.
+          Drawn from an encounter with God, years of questioning, and writing so
+          that belief in Jesus would rest on both Scripture and sound reason.
         </p>
         <div className="mt-10 grid gap-5 md:grid-cols-2">
           {pillars.map((p) => (
@@ -151,47 +214,43 @@ export default function Founder() {
       </section>
 
       <section className="bg-brand-50/70 py-16">
-        <div className="mx-auto grid max-w-5xl items-center gap-8 px-6 md:grid-cols-[1fr_auto]">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-widest text-gold-600">
-              The book
-            </p>
-            <h2 className="mt-2 font-display text-3xl text-ink-900">
-              Is Jesus Necessary?
-            </h2>
-            <p className="mt-4 max-w-xl text-ink-600">
-              A walk through the fall of man, the fracture of body, soul and
-              spirit, the authority lost to the prince of this world, and why the
-              birth, death and resurrection of Jesus were not optional — they were
-              required. Written so that anyone, including a sincere seeker from
-              another faith, can reason through the gospel and receive Christ.
-            </p>
-            <ul className="mt-5 space-y-2 text-sm text-ink-600">
-              {[
-                "Who Jesus is — fully God, fully man, Saviour of the world",
-                "What the fall actually cost humanity",
-                "How believing in Jesus saves — in plain, logical terms",
-                "How to receive Him: repentance, faith, confession, new life",
-              ].map((item) => (
-                <li key={item} className="flex items-start gap-2">
-                  <PenLine className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="mx-auto flex h-64 w-44 flex-col justify-between rounded-xl grace-gradient p-5 text-white shadow-lg ring-1 ring-white/20">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-gold-300">
-              Ugbede Michael
-            </p>
-            <div>
-              <p className="font-display text-2xl font-semibold leading-tight">
-                Is Jesus Necessary?
-              </p>
-              <p className="mt-3 text-xs text-brand-100">
-                Why His birth, death and resurrection had to happen.
-              </p>
-            </div>
+        <div className="mx-auto max-w-5xl px-6">
+          <p className="text-center text-sm font-semibold uppercase tracking-widest text-gold-600">
+            The books
+          </p>
+          <h2 className="mt-2 text-center font-display text-3xl text-ink-900">
+            Written so the calling can travel
+          </h2>
+          <p className="mx-auto mt-3 max-w-2xl text-center text-ink-500">
+            Both titles are available on Amazon, under the name Ugbede Michael.
+          </p>
+          <div className="mt-10 grid gap-6 md:grid-cols-2">
+            {books.map((book) => (
+              <Card key={book.title} className="flex flex-col p-0 overflow-hidden">
+                <div className="grace-gradient px-6 py-8 text-white">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-gold-300">
+                    Ugbede Michael
+                  </p>
+                  <p className="mt-3 font-display text-2xl font-semibold leading-tight">
+                    {book.title}
+                  </p>
+                  <p className="mt-2 text-xs text-brand-100">{book.accent}</p>
+                </div>
+                <div className="flex flex-1 flex-col p-6">
+                  <p className="flex-1 text-sm leading-relaxed text-ink-600">
+                    {book.blurb}
+                  </p>
+                  <a
+                    href={book.amazon}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-brand-700 hover:text-brand-900"
+                  >
+                    Find on Amazon <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+              </Card>
+            ))}
           </div>
         </div>
       </section>

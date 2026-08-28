@@ -177,8 +177,8 @@ export default function Home() {
             </p>
             <h2 className="mt-1 text-xl text-ink-900">Prophet Michael Ugbede</h2>
             <p className="mt-1 text-sm text-ink-500">
-              Prophet, author, counselor, coach, songwriter and singer — leading this
-              house to make Jesus necessary, not optional.
+              Prophet, author, counselor, coach, songwriter and singer — encountered
+              by God in 2003, and still used to heal and deliver.
             </p>
           </div>
           <Link

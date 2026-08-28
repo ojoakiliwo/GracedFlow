@@ -30,8 +30,8 @@ export default function About() {
             Prophet Michael Ugbede
           </Link>
           , our Founding President and Lead Pastor. The church is the living
-          expression of a message he has carried since childhood: Jesus is not
-          optional. He is necessary.
+          expression of a calling that began in 2003, when he encountered God:
+          Jesus is not optional. He is necessary.
         </p>
 
         <h2 className="mt-12 font-display text-3xl text-ink-900">Our Mission</h2>
@@ -52,7 +52,9 @@ export default function About() {
         <p className="mt-3 text-ink-600">
           Our teaching rests on the gospel Prophet Ugbede unfolds in{" "}
           <em>Is Jesus Necessary?</em> — that humanity fell, authority was lost,
-          and only a sinless Saviour could restore us to God.
+          and only a sinless Saviour could restore us to God — and on the work of{" "}
+          <em>Science and Spirituality</em>, that the God who made the universe is
+          the same God who reveals Himself.
         </p>
         <ul className="mt-4 space-y-3 text-ink-600">
           <li>
@@ -105,9 +107,10 @@ export default function About() {
                 </h2>
                 <p className="mt-4 max-w-xl text-ink-600">
                   Prophet Michael Ugbede is a prophet, author, counselor, coach,
-                  songwriter and singer. He leads this commission as Head Pastor —
-                  and his own story, from a village crusade at seven to the writing
-                  of <em>Is Jesus Necessary?</em>, is the heart behind this house.
+                  songwriter and singer. In 2003, after nine hours of prayer, he
+                  encountered God — and since then the Lord has healed and delivered
+                  people and communities through him. He is the author of{" "}
+                  <em>Is Jesus Necessary?</em> and <em>Science and Spirituality</em>.
                 </p>
                 <Link
                   to="/founder"
