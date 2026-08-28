@@ -342,5 +342,20 @@ export async function initSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_support_member ON support_records(member_id);
     CREATE INDEX IF NOT EXISTS idx_msg_recipients_msg ON message_recipients(message_id);
     CREATE INDEX IF NOT EXISTS idx_room_messages_dept ON room_messages(department_id);
+
+    ALTER TABLE donations ADD COLUMN IF NOT EXISTS provider TEXT;
+
+    CREATE TABLE IF NOT EXISTS meeting_reviews (
+      id TEXT PRIMARY KEY,
+      meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+      department_id TEXT REFERENCES departments(id) ON DELETE SET NULL,
+      author_id TEXT REFERENCES members(id) ON DELETE SET NULL,
+      attendance_present INTEGER NOT NULL DEFAULT 0,
+      attendance_absent INTEGER NOT NULL DEFAULT 0,
+      review TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_meeting_reviews_meeting ON meeting_reviews(meeting_id);
   `);
 }

@@ -10,6 +10,7 @@ import {
 import { useApi } from "../../lib/useApi";
 import { Card } from "../../components/ui";
 import { formatDateTime } from "../../lib/format";
+import { SERVICE_TIMES } from "../../lib/services";
 
 interface PublicProject {
   id: string;
@@ -65,20 +66,17 @@ export default function Home() {
       </section>
 
       {/* Service times */}
-      <section className="mx-auto -mt-12 max-w-5xl px-6">
+      <section className="relative z-10 mx-auto -mt-12 max-w-5xl px-6">
         <div className="grid gap-4 sm:grid-cols-2">
-          {[
-            { name: "Sunday Celebration Service", time: "Sundays · 9:00 AM", desc: "A time of worship, the Word and testimonies." },
-            { name: "Wednesday Prayer Meeting", time: "Wednesdays · 5:30 PM", desc: "Corporate prayer and encounter." },
-          ].map((s) => (
+          {SERVICE_TIMES.map((s) => (
             <Card key={s.name} className="p-6">
               <div className="flex items-start gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
                   <CalendarDays className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-gold-600">{s.time}</p>
                   <h3 className="text-lg text-ink-900">{s.name}</h3>
+                  <p className="mt-1 text-base font-semibold text-brand-800">{s.time}</p>
                   <p className="mt-1 text-sm text-ink-500">{s.desc}</p>
                 </div>
               </div>

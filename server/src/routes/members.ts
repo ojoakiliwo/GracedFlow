@@ -2,7 +2,16 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db.js";
 import { authenticate, hashPassword, requireRole } from "../auth.js";
-import { HttpError, audit, newId, nowIso } from "../util.js";
+import {
+  assertCanChangeMemberRole,
+  assertNotLastSuperAdmin,
+  canViewMemberDirectory,
+  requireSuperAdmin,
+  syncDepartmentMembership,
+} from "../access.js";
+import { officeFor } from "../offices.js";
+import { HttpError, audit, newId, nowIso, phoneKey } from "../util.js";
+import { notifyMemberInvite } from "../notify.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 
 export const membersRouter = Router();
@@ -33,6 +42,9 @@ const memberSchema = z.object({
 membersRouter.get(
   "/",
   asyncHandler(async (req, res) => {
+    if (!(await canViewMemberDirectory(req.user!))) {
+      throw new HttpError(403, "You do not have permission to view the member directory");
+    }
     const { q, spiritualClass, role, department, status } = req.query as Record<
       string,
       string
@@ -73,6 +85,9 @@ membersRouter.get(
 membersRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
+    if (req.params.id !== req.user!.id && !(await canViewMemberDirectory(req.user!))) {
+      throw new HttpError(403, "You do not have permission to view this member");
+    }
     const member = await db.prepare("SELECT * FROM members WHERE id = ?").get(req.params.id);
     if (!member) throw new HttpError(404, "Member not found");
     const growth = await db.prepare("SELECT * FROM growth_records WHERE member_id = ? ORDER BY date DESC, created_at DESC")
@@ -92,7 +107,7 @@ membersRouter.get(
 
 membersRouter.post(
   "/",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
     const input = parseBody(memberSchema, req.body);
     const id = newId("mbr");
@@ -101,6 +116,18 @@ membersRouter.post(
       const dupe = await db.prepare("SELECT id FROM members WHERE email = ?").get(email);
       if (dupe) throw new HttpError(409, "A member with this email already exists");
     }
+    const phoneDigits = phoneKey(input.phone);
+    if (phoneDigits) {
+      const phoneDupe = await db
+        .prepare(
+          `SELECT id FROM members
+           WHERE right(regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g'), 10) = ?`,
+        )
+        .get(phoneDigits);
+      if (phoneDupe) throw new HttpError(409, "A member with this phone already exists");
+    }
+    const role = input.role ?? "member";
+    assertCanChangeMemberRole(req.user!.role, "member", role);
     await db.prepare(
       `INSERT INTO members (id, first_name, last_name, gender, email, phone, password_hash, role,
         spiritual_class, membership_status, date_of_birth, wedding_anniversary, marital_status,
@@ -116,7 +143,7 @@ membersRouter.post(
       email,
       phone: input.phone ?? null,
       passwordHash: input.password ? await hashPassword(input.password) : null,
-      role: input.role,
+      role,
       spiritualClass: input.spiritualClass,
       membershipStatus: input.membershipStatus,
       dateOfBirth: input.dateOfBirth || null,
@@ -131,17 +158,32 @@ membersRouter.post(
       notes: input.notes ?? null,
     });
     audit("create", "member", id, req.user);
-    res.status(201).json(await db.prepare("SELECT * FROM members WHERE id = ?").get(id));
+    const created = await db.prepare("SELECT * FROM members WHERE id = ?").get(id);
+    notifyMemberInvite({
+      first_name: input.firstName,
+      email,
+      phone: input.phone ?? null,
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error("[notify] member invite failed", err);
+    });
+    res.status(201).json(created);
   }),
 );
 
 membersRouter.put(
   "/:id",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
-    const existing = await db.prepare("SELECT * FROM members WHERE id = ?").get(req.params.id);
+    const existing = (await db.prepare("SELECT * FROM members WHERE id = ?").get(req.params.id)) as
+      | { id: string; role: string }
+      | undefined;
     if (!existing) throw new HttpError(404, "Member not found");
     const input = parseBody(memberSchema.partial(), req.body);
+    if (input.role) {
+      assertCanChangeMemberRole(req.user!.role, existing.role, input.role);
+      await assertNotLastSuperAdmin(existing.id, input.role);
+    }
     const map: Record<string, string> = {
       firstName: "first_name",
       lastName: "last_name",
@@ -185,9 +227,61 @@ membersRouter.put(
   }),
 );
 
+const officeSchema = z.object({
+  role: z.enum(["super_admin", "admin", "pastor", "worker", "member"]).optional(),
+  departments: z
+    .array(
+      z.object({
+        departmentId: z.string().min(1),
+        position: z.string().min(1),
+      }),
+    )
+    .optional(),
+});
+
+membersRouter.put(
+  "/:id/office",
+  requireSuperAdmin(),
+  asyncHandler(async (req, res) => {
+    const existing = (await db.prepare("SELECT * FROM members WHERE id = ?").get(req.params.id)) as
+      | { id: string; role: string }
+      | undefined;
+    if (!existing) throw new HttpError(404, "Member not found");
+    const input = parseBody(officeSchema, req.body);
+    const nextRole = input.role ?? existing.role;
+    await assertNotLastSuperAdmin(existing.id, nextRole);
+    if (input.role && input.role !== existing.role) {
+      await db
+        .prepare("UPDATE members SET role = ?, updated_at = ? WHERE id = ?")
+        .run(input.role, nowIso(), existing.id);
+    }
+    if (input.departments) {
+      for (const dept of input.departments) {
+        const found = await db.prepare("SELECT id FROM departments WHERE id = ?").get(dept.departmentId);
+        if (!found) throw new HttpError(404, "Department not found");
+        await syncDepartmentMembership(dept.departmentId, existing.id, dept.position);
+      }
+    }
+    audit("update-office", "member", existing.id, req.user);
+    const member = await db.prepare("SELECT * FROM members WHERE id = ?").get(existing.id);
+    const departments = await db
+      .prepare(
+        `SELECT d.id, d.name, dm.position FROM departments d
+         JOIN department_members dm ON dm.department_id = d.id WHERE dm.member_id = ?`,
+      )
+      .all(existing.id);
+    const office = officeFor(nextRole);
+    res.json({
+      ...(member as object),
+      departments,
+      office,
+    });
+  }),
+);
+
 membersRouter.delete(
   "/:id",
-  requireRole("admin"),
+  requireSuperAdmin(),
   asyncHandler(async (req, res) => {
     await db.prepare("DELETE FROM members WHERE id = ?").run(req.params.id);
     audit("delete", "member", req.params.id, req.user);
@@ -204,7 +298,7 @@ const growthSchema = z.object({
 });
 membersRouter.post(
   "/:id/growth",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
     const input = parseBody(growthSchema, req.body);
     const id = newId("grw");
@@ -233,7 +327,7 @@ const supportSchema = z.object({
 });
 membersRouter.post(
   "/:id/support",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
     const input = parseBody(supportSchema, req.body);
     const id = newId("sup");

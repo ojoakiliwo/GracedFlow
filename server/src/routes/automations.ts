@@ -52,7 +52,7 @@ const triggerSchema = z.object({
 // Manual trigger (for testing / ad-hoc broadcasts).
 automationsRouter.post(
   "/run",
-  requireRole("pastor"),
+  requireRole("admin"),
   asyncHandler(async (req, res) => {
     const { job, date } = parseBody(triggerSchema, req.body);
     if (job === "sunday_reminder") return void res.json(await runSundayReminder());

@@ -1,6 +1,9 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import { config } from "./config.js";
+import { pool } from "./db.js";
+import { ensureReady } from "./bootstrap.js";
+import { ensureProductionData } from "./seed.js";
 import { HttpError } from "./util.js";
 import { authRouter } from "./routes/auth.js";
 import { membersRouter } from "./routes/members.js";
@@ -24,18 +27,55 @@ export function createApp() {
   const app = express();
   app.use(cors());
 
+  // Any Vercel/Express entry (default export or api handler) must init schema
+  // before routes run — not only the Node `listen()` boot path.
+  app.use((_req, _res, next) => {
+    ensureReady()
+      .then(() => next())
+      .catch(next);
+  });
+
   // Webhooks need the raw body for signature verification, so mount before json.
   app.use("/api/webhooks", webhooksRouter);
 
   app.use(express.json({ limit: "2mb" }));
 
-  app.get("/api/health", (_req, res) => {
+  app.get("/api/health", async (_req, res) => {
+    let database = "unknown";
+    let databaseError: string | undefined;
+    try {
+      await pool.query("SELECT 1");
+      database = "connected";
+    } catch (e) {
+      database = "error";
+      databaseError = (e as Error).message;
+    }
     res.json({
       status: "ok",
       service: "gracedflow-api",
       church: config.church.name,
+      database,
+      databaseError,
+      databaseConfigured: !!(process.env.DATABASE_URL || process.env.POSTGRES_URL),
+      commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
       time: new Date().toISOString(),
     });
+  });
+
+  // Opening the site (or any API route) strips leftover sample-church rows so
+  // production never keeps Choir Rehearsal / fake members after a deploy.
+  app.use((req, _res, next) => {
+    if (req.path === "/api/health" || req.path.startsWith("/api/webhooks")) {
+      next();
+      return;
+    }
+    ensureProductionData()
+      .then(() => next())
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error("[prepare] demo purge failed", err);
+        next();
+      });
   });
 
   app.use("/api/public", publicRouter);
@@ -71,3 +111,6 @@ export function createApp() {
 
   return app;
 }
+
+const app = createApp();
+export default app;

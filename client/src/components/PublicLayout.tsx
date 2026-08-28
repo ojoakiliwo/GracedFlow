@@ -3,6 +3,9 @@ import { useState } from "react";
 import clsx from "clsx";
 import { Menu, X } from "lucide-react";
 import { Button } from "./ui";
+import { BrandLogo } from "./BrandLogo";
+import { SERVICE_TIMES } from "../lib/services";
+import { useAuth } from "../lib/auth";
 
 const links = [
   { to: "/", label: "Home", end: true },
@@ -14,16 +17,12 @@ const links = [
 
 export default function PublicLayout() {
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <header className="sticky top-0 z-40 border-b border-ink-100 bg-white/85 backdrop-blur-md">
         <div className="mx-auto flex h-18 max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link to="/" className="flex items-center gap-3">
-            <img
-              src="/brand/igc-logo.png"
-              alt="Infinitely Graced Church"
-              className="h-11 w-11 object-contain"
-            />
+          <BrandLogo size="md">
             <div className="leading-tight">
               <p className="font-display text-lg font-semibold text-brand-900">
                 Infinitely Graced
@@ -32,7 +31,7 @@ export default function PublicLayout() {
                 Church
               </p>
             </div>
-          </Link>
+          </BrandLogo>
 
           <nav className="hidden items-center gap-1 md:flex">
             {links.map((l) => (
@@ -52,9 +51,15 @@ export default function PublicLayout() {
                 {l.label}
               </NavLink>
             ))}
-            <Link to="/login" className="ml-2">
-              <Button size="sm">Member Login</Button>
-            </Link>
+            {user ? (
+              <Link to="/app" className="ml-2">
+                <Button size="sm">Open portal</Button>
+              </Link>
+            ) : (
+              <Link to="/login" className="ml-2">
+                <Button size="sm">Member Login</Button>
+              </Link>
+            )}
           </nav>
 
           <button
@@ -77,11 +82,19 @@ export default function PublicLayout() {
                 {l.label}
               </NavLink>
             ))}
-            <Link to="/login" onClick={() => setOpen(false)}>
-              <Button size="sm" className="mt-2 w-full">
-                Member Login
-              </Button>
-            </Link>
+            {user ? (
+              <Link to="/app" onClick={() => setOpen(false)}>
+                <Button size="sm" className="mt-2 w-full">
+                  Open portal
+                </Button>
+              </Link>
+            ) : (
+              <Link to="/login" onClick={() => setOpen(false)}>
+                <Button size="sm" className="mt-2 w-full">
+                  Member Login
+                </Button>
+              </Link>
+            )}
           </div>
         )}
       </header>
@@ -93,16 +106,11 @@ export default function PublicLayout() {
       <footer className="mt-16 border-t border-ink-100 bg-brand-950 text-brand-200">
         <div className="mx-auto grid max-w-6xl gap-8 px-6 py-12 sm:grid-cols-2 lg:grid-cols-4">
           <div className="sm:col-span-2">
-            <div className="flex items-center gap-3">
-              <img
-                src="/brand/igc-logo.png"
-                alt="IGC"
-                className="h-12 w-12 rounded-full bg-white/95 object-contain p-0.5"
-              />
+            <BrandLogo size="md">
               <p className="font-display text-xl font-semibold text-white">
                 Infinitely Graced Church
               </p>
-            </div>
+            </BrandLogo>
             <p className="mt-4 max-w-sm text-sm text-brand-300">
               A family flowing in His infinite grace — reaching lives, building people,
               and transforming our community for Christ.
@@ -111,8 +119,9 @@ export default function PublicLayout() {
           <div>
             <p className="mb-3 text-sm font-semibold text-white">Service Times</p>
             <ul className="space-y-1.5 text-sm text-brand-300">
-              <li>Sunday Service — 9:00 AM</li>
-              <li>Wednesday Prayer — 5:30 PM</li>
+              {SERVICE_TIMES.map((s) => (
+                <li key={s.shortName}>{s.footer}</li>
+              ))}
             </ul>
           </div>
           <div>

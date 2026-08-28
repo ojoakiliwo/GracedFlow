@@ -37,6 +37,22 @@ export function audit(
     });
 }
 
+/** Last 10 digits so +2348012345678 and 08012345678 match. */
+export function phoneKey(phone: string | null | undefined): string {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  const local = digits.startsWith("234") ? digits.slice(3) : digits.startsWith("0") ? digits.slice(1) : digits;
+  return local.slice(-10);
+}
+
+export function toE164(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (phone.trim().startsWith("+")) return `+${digits}`;
+  if (digits.startsWith("234")) return `+${digits}`;
+  if (digits.startsWith("0") && digits.length === 11) return `+234${digits.slice(1)}`;
+  return digits ? `+${digits}` : "";
+}
+
 export class HttpError extends Error {
   constructor(
     public status: number,

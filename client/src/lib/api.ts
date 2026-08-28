@@ -1,3 +1,5 @@
+import { formatApiError } from "./apiError";
+
 const TOKEN_KEY = "igc_token";
 
 export function getToken(): string | null {
@@ -28,15 +30,21 @@ export async function api<T = unknown>(
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401 && token) {
-    setToken(null);
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, {
+      ...options,
+      headers,
+      credentials: options.credentials ?? "include",
+    });
+  } catch {
+    throw new ApiError(0, formatApiError(null, 0));
   }
   if (res.status === 204) return undefined as T;
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(res.status, (data as { error?: string }).error ?? "Request failed");
+    throw new ApiError(res.status, formatApiError(data, res.status));
   }
   return data as T;
 }

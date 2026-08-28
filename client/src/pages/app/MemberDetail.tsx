@@ -11,7 +11,7 @@ import {
   HandCoins,
   Plus,
 } from "lucide-react";
-import { apiPost } from "../../lib/api";
+import { apiPost, apiPut } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import {
   Avatar,
@@ -26,6 +26,9 @@ import {
   Textarea,
 } from "../../components/ui";
 import { classLabel, formatDate, naira, roleLabel } from "../../lib/format";
+import { money } from "../../lib/currencies";
+import { DEPARTMENT_POSITIONS, officeFor } from "../../lib/offices";
+import { useAuth } from "../../lib/auth";
 import { useToast } from "../../components/toast";
 
 interface MemberDetailData {
@@ -47,7 +50,7 @@ interface MemberDetailData {
   growth: { id: string; type: string; title: string; description: string | null; date: string }[];
   support: { id: string; type: string; description: string | null; amount: number | null; date: string }[];
   departments: { id: string; name: string; position: string }[];
-  donations: { id: string; type: string; amount: number; status: string; created_at: string }[];
+  donations: { id: string; type: string; amount: number; currency?: string; status: string; created_at: string }[];
 }
 
 export default function MemberDetail() {
@@ -116,10 +119,17 @@ export default function MemberDetail() {
               </div>
             </div>
           )}
+
+          <OfficeAccessNote role={data.role} />
         </Card>
 
         {/* Growth, support, giving */}
         <div className="space-y-6 lg:col-span-2">
+          <OfficeEditor
+            key={`${data.id}-${data.role}-${data.departments.map((d) => `${d.id}:${d.position}`).join(",")}`}
+            member={data}
+            onSaved={reload}
+          />
           <Card className="p-6">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -203,7 +213,7 @@ export default function MemberDetail() {
                       <p className="text-xs text-ink-500">{formatDate(d.created_at)}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{naira(d.amount)}</span>
+                      <span className="text-sm font-medium">{money(d.amount, d.currency)}</span>
                       <Badge color={d.status === "confirmed" ? "green" : "amber"}>
                         {d.status}
                       </Badge>
@@ -229,6 +239,124 @@ export default function MemberDetail() {
         onSaved={reload}
       />
     </div>
+  );
+}
+
+function OfficeAccessNote({ role }: { role: string }) {
+  const office = officeFor(role);
+  return (
+    <div className="mt-6 rounded-xl bg-ink-50 p-3 text-left">
+      <p className="text-xs font-semibold uppercase text-ink-400">Access with this office</p>
+      <p className="mt-1 text-sm text-ink-600">{office.summary}</p>
+    </div>
+  );
+}
+
+function OfficeEditor({
+  member,
+  onSaved,
+}: {
+  member: MemberDetailData;
+  onSaved: () => void;
+}) {
+  const { isSuperAdmin } = useAuth();
+  const { data: depts } = useApi<{ id: string; name: string }[]>("/departments");
+  const office = officeFor(member.role);
+  const [role, setRole] = useState(member.role);
+  const [positions, setPositions] = useState<Record<string, string>>(() => {
+    const next: Record<string, string> = {};
+    member.departments.forEach((d) => {
+      next[d.id] = d.position;
+    });
+    return next;
+  });
+  const [saving, setSaving] = useState(false);
+  const { notify } = useToast();
+
+  if (!isSuperAdmin) return null;
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await apiPut(`/members/${member.id}/office`, {
+        role,
+        departments: (depts ?? []).map((d) => ({
+          departmentId: d.id,
+          position: positions[d.id] || "none",
+        })),
+      });
+      notify("Office updated. Matching access is now attached.");
+      onSaved();
+    } catch (err) {
+      notify((err as Error).message, "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const preview = officeFor(role);
+
+  return (
+    <Card className="p-6">
+      <h3 className="text-lg text-ink-900">Office & access</h3>
+      <p className="mt-1 text-sm text-ink-500">
+        Only the super admin can change anyone’s position. The access for that
+        office attaches automatically.
+      </p>
+      <form onSubmit={save} className="mt-4 space-y-4">
+        <Field label="Church office">
+          <Select value={role} onChange={(e) => setRole(e.target.value)}>
+            {["member", "worker", "pastor", "admin", "super_admin"].map((value) => (
+              <option key={value} value={value}>
+                {officeFor(value).label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <div className="rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-900">
+          <p className="font-medium">{preview.label}</p>
+          <p className="mt-0.5">{preview.summary}</p>
+          <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs">
+            {preview.grants.map((g) => (
+              <li key={g}>{g}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-medium text-ink-700">Department positions</p>
+          <div className="space-y-2">
+            {(depts ?? []).map((d) => (
+              <div key={d.id} className="grid grid-cols-[1fr_auto] items-center gap-3">
+                <span className="text-sm text-ink-700">{d.name}</span>
+                <Select
+                  value={positions[d.id] || "none"}
+                  onChange={(e) =>
+                    setPositions((prev) => ({ ...prev, [d.id]: e.target.value }))
+                  }
+                  className="w-52"
+                >
+                  {DEPARTMENT_POSITIONS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-ink-400">
+            Leader, HOD, Head, or Chairman immediately gives that department’s
+            meeting and task access. Current office: {office.label}.
+          </p>
+        </div>
+        <div className="flex justify-end">
+          <Button type="submit" loading={saving}>
+            Update office
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }
 

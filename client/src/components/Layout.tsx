@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
+import { BrandLogo } from "./BrandLogo";
 import clsx from "clsx";
 import {
   LayoutDashboard,
@@ -43,40 +44,40 @@ const groups: NavGroup[] = [
   {
     title: "People",
     items: [
-      { to: "/app/members", label: "Members", icon: Users },
+      { to: "/app/members", label: "Members", icon: Users, min: "pastor" },
       { to: "/app/departments", label: "Rooms & Departments", icon: DoorOpen },
-      { to: "/app/prayer", label: "Prayer Requests", icon: HeartHandshake },
+      { to: "/app/prayer", label: "Prayer Requests", icon: HeartHandshake, min: "pastor" },
     ],
   },
   {
     title: "Ministry",
     items: [
-      { to: "/app/projects", label: "Projects & Visions", icon: FolderKanban },
+      { to: "/app/projects", label: "Projects & Visions", icon: FolderKanban, min: "pastor" },
       { to: "/app/meetings", label: "Meetings", icon: CalendarDays },
       { to: "/app/tasks", label: "Tasks", icon: ListChecks },
-      { to: "/app/events", label: "Events", icon: CalendarRange },
+      { to: "/app/events", label: "Events", icon: CalendarRange, min: "pastor" },
     ],
   },
   {
     title: "Communication",
     items: [
-      { to: "/app/messages", label: "Messages (SMS/Email)", icon: Send },
-      { to: "/app/automations", label: "Automations", icon: CalendarClock },
-      { to: "/app/social", label: "Social Broadcast", icon: Share2 },
+      { to: "/app/messages", label: "Messages (SMS/Email)", icon: Send, min: "pastor" },
+      { to: "/app/automations", label: "Automations", icon: CalendarClock, min: "admin" },
+      { to: "/app/social", label: "Social Broadcast", icon: Share2, min: "admin" },
     ],
   },
   {
     title: "Finance",
-    items: [{ to: "/app/giving", label: "Giving & Donations", icon: HandCoins }],
+    items: [{ to: "/app/giving", label: "Giving & Donations", icon: HandCoins, min: "admin" }],
   },
   {
     title: "Administration",
-    items: [{ to: "/app/settings", label: "Settings & Integrations", icon: Settings2 }],
+    items: [{ to: "/app/settings", label: "Settings & Integrations", icon: Settings2, min: "admin" }],
   },
 ];
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasRole } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -91,19 +92,16 @@ export default function Layout() {
         )}
       >
         <div className="flex items-center gap-3 px-5 py-5">
-          <img
-            src="/brand/igc-logo.png"
-            alt="IGC"
-            className="h-11 w-11 rounded-full bg-white/95 object-contain p-0.5 ring-1 ring-white/20"
-          />
-          <div>
-            <p className="font-display text-lg font-semibold leading-tight text-white">
-              Infinitely Graced
-            </p>
-            <p className="text-xs text-brand-300">Ministry Portal</p>
-          </div>
+          <BrandLogo to="/app" size="md" className="min-w-0 flex-1" onNavigate={() => setMobileOpen(false)}>
+            <div className="min-w-0">
+              <p className="font-display text-lg font-semibold leading-tight text-white">
+                Infinitely Graced
+              </p>
+              <p className="text-xs text-brand-300">Ministry portal</p>
+            </div>
+          </BrandLogo>
           <button
-            className="ml-auto text-brand-300 lg:hidden"
+            className="ml-auto shrink-0 text-brand-300 lg:hidden"
             onClick={() => setMobileOpen(false)}
           >
             <X className="h-5 w-5" />
@@ -111,13 +109,16 @@ export default function Layout() {
         </div>
 
         <nav className="no-scrollbar flex-1 space-y-6 overflow-y-auto px-3 pb-6">
-          {groups.map((group) => (
+          {groups.map((group) => {
+            const items = group.items.filter((item) => !item.min || hasRole(item.min));
+            if (!items.length) return null;
+            return (
             <div key={group.title}>
               <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-brand-400">
                 {group.title}
               </p>
               <div className="space-y-0.5">
-                {group.items.map((item) => (
+                {items.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
@@ -138,16 +139,18 @@ export default function Layout() {
                 ))}
               </div>
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div className="border-t border-white/10 p-3">
-          <a
-            href="/"
+          <Link
+            to="/"
+            onClick={() => setMobileOpen(false)}
             className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-brand-200 hover:bg-brand-900 hover:text-white"
           >
-            <DoorOpen className="h-[18px] w-[18px]" /> View public site
-          </a>
+            <DoorOpen className="h-[18px] w-[18px]" /> Church website
+          </Link>
         </div>
       </aside>
 

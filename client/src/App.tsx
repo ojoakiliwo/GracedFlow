@@ -42,6 +42,12 @@ function Protected({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function RoleGate({ min, children }: { min: "worker" | "pastor" | "admin"; children: ReactNode }) {
+  const { hasRole } = useAuth();
+  if (!hasRole(min)) return <Navigate to="/app" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -67,20 +73,20 @@ export default function App() {
         }
       >
         <Route index element={<Dashboard />} />
-        <Route path="members" element={<Members />} />
-        <Route path="members/:id" element={<MemberDetail />} />
+        <Route path="members" element={<RoleGate min="pastor"><Members /></RoleGate>} />
+        <Route path="members/:id" element={<RoleGate min="pastor"><MemberDetail /></RoleGate>} />
         <Route path="departments" element={<Departments />} />
         <Route path="departments/:id" element={<DepartmentRoom />} />
-        <Route path="projects" element={<Projects />} />
+        <Route path="projects" element={<RoleGate min="pastor"><Projects /></RoleGate>} />
         <Route path="meetings" element={<Meetings />} />
         <Route path="tasks" element={<Tasks />} />
-        <Route path="events" element={<Events />} />
-        <Route path="messages" element={<Messages />} />
-        <Route path="automations" element={<Automations />} />
-        <Route path="social" element={<Social />} />
-        <Route path="giving" element={<Giving />} />
-        <Route path="prayer" element={<PrayerRequests />} />
-        <Route path="settings" element={<Settings />} />
+        <Route path="events" element={<RoleGate min="pastor"><Events /></RoleGate>} />
+        <Route path="messages" element={<RoleGate min="pastor"><Messages /></RoleGate>} />
+        <Route path="automations" element={<RoleGate min="admin"><Automations /></RoleGate>} />
+        <Route path="social" element={<RoleGate min="admin"><Social /></RoleGate>} />
+        <Route path="giving" element={<RoleGate min="admin"><Giving /></RoleGate>} />
+        <Route path="prayer" element={<RoleGate min="pastor"><PrayerRequests /></RoleGate>} />
+        <Route path="settings" element={<RoleGate min="admin"><Settings /></RoleGate>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

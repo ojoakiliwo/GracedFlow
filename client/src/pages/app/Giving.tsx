@@ -13,7 +13,8 @@ import {
   Select,
   Spinner,
 } from "../../components/ui";
-import { formatDate, naira } from "../../lib/format";
+import { formatDate } from "../../lib/format";
+import { GIVING_CURRENCIES, money } from "../../lib/currencies";
 import { useToast } from "../../components/toast";
 
 interface Donation {
@@ -23,6 +24,7 @@ interface Donation {
   member_last: string | null;
   type: string;
   amount: number;
+  currency?: string;
   method: string;
   status: string;
   reference: string | null;
@@ -30,7 +32,7 @@ interface Donation {
 }
 interface GivingData {
   donations: Donation[];
-  totals: { type: string; count: number; total: number }[];
+  totals: { type: string; currency?: string; count: number; total: number }[];
 }
 
 const TYPES = ["tithe", "offering", "seed", "building", "missions", "donation", "welfare"];
@@ -42,6 +44,7 @@ export default function Giving() {
     donorName: "",
     type: "offering",
     amount: "",
+    currency: "NGN",
     method: "cash",
   });
   const [saving, setSaving] = useState(false);
@@ -58,7 +61,7 @@ export default function Giving() {
       });
       notify("Donation recorded");
       setOpen(false);
-      setForm({ donorName: "", type: "offering", amount: "", method: "cash" });
+      setForm({ donorName: "", type: "offering", amount: "", currency: "NGN", method: "cash" });
       reload();
     } catch (e) {
       notify((e as Error).message, "error");
@@ -73,7 +76,11 @@ export default function Giving() {
     reload();
   }
 
-  const grandTotal = data?.totals.reduce((s, t) => s + t.total, 0) ?? 0;
+  const totalsByCurrency = (data?.totals ?? []).reduce<Record<string, number>>((acc, t) => {
+    const code = t.currency || "NGN";
+    acc[code] = (acc[code] ?? 0) + Number(t.total);
+    return acc;
+  }, {});
 
   return (
     <div>
@@ -99,7 +106,13 @@ export default function Giving() {
                 <HandCoins className="h-6 w-6" />
               </div>
               <p className="mt-4 font-display text-2xl font-semibold text-ink-900">
-                {naira(grandTotal)}
+                {Object.keys(totalsByCurrency).length === 0
+                  ? money(0)
+                  : Object.entries(totalsByCurrency).map(([code, total]) => (
+                      <span key={code} className="mr-3 last:mr-0">
+                        {money(total, code)}
+                      </span>
+                    ))}
               </p>
               <p className="text-sm text-ink-500">Total confirmed</p>
             </Card>
@@ -109,7 +122,7 @@ export default function Giving() {
                   {t.type}
                 </Badge>
                 <p className="mt-3 font-display text-2xl font-semibold text-ink-900">
-                  {naira(t.total)}
+                  {money(t.total, t.currency)}
                 </p>
                 <p className="text-sm text-ink-500">{t.count} gift(s)</p>
               </Card>
@@ -145,7 +158,7 @@ export default function Giving() {
                       </td>
                       <td className="px-5 py-3 capitalize text-ink-600">{d.type}</td>
                       <td className="px-5 py-3 font-medium text-ink-800">
-                        {naira(d.amount)}
+                        {money(d.amount, d.currency)}
                       </td>
                       <td className="px-5 py-3 capitalize text-ink-600">{d.method}</td>
                       <td className="px-5 py-3 text-ink-500">{formatDate(d.created_at)}</td>
@@ -211,15 +224,30 @@ export default function Giving() {
               </Select>
             </Field>
           </div>
-          <Field label="Amount (₦)">
-            <Input
-              type="number"
-              min="1"
-              value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              required
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Amount">
+              <Input
+                type="number"
+                min="1"
+                step={form.currency === "NGN" ? "1" : "0.01"}
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                required
+              />
+            </Field>
+            <Field label="Currency">
+              <Select
+                value={form.currency}
+                onChange={(e) => setForm({ ...form, currency: e.target.value })}
+              >
+                {GIVING_CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} — {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
