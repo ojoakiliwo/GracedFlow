@@ -9,6 +9,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Card } from "../../components/ui";
+import { SERVICE_TIMES } from "../../lib/services";
 
 const roles = [
   {
@@ -295,7 +296,7 @@ export default function Founder() {
             Sit with us this week
           </h2>
           <p className="max-w-lg text-sm text-brand-100">
-            Sundays 9:00 AM · Wednesday prayer 5:30 PM
+            {SERVICE_TIMES.map((s) => s.footer).join(" · ")}
           </p>
           <div className="mt-2 flex flex-wrap justify-center gap-3">
             <Link
