@@ -1,3 +1,5 @@
+import { CHURCH_TIME_ZONE } from "./format";
+
 export interface ChurchProgram {
   id: string;
   title: string;
@@ -29,10 +31,14 @@ export function programTimeLabel(program: ChurchProgram): string {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
+    timeZone: CHURCH_TIME_ZONE,
   });
   const end = program.ends_at ? new Date(program.ends_at) : null;
-  const multiDay = !!end && !Number.isNaN(end.getTime()) && start.toDateString() !== end.toDateString();
-  return multiDay ? `${time} daily` : time;
+  const startDay = start.toLocaleDateString("en-GB", { timeZone: CHURCH_TIME_ZONE });
+  const endDay = end && !Number.isNaN(end.getTime())
+    ? end.toLocaleDateString("en-GB", { timeZone: CHURCH_TIME_ZONE })
+    : startDay;
+  return endDay !== startDay ? `${time} daily` : time;
 }
 
 export function programIsUpcoming(program: ChurchProgram, now = Date.now()): boolean {

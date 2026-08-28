@@ -12,6 +12,8 @@ export function naira(amount?: number | null): string {
   return money(amount, "NGN");
 }
 
+export const CHURCH_TIME_ZONE = "Africa/Lagos";
+
 export function formatDate(value?: string | null): string {
   if (!value) return "—";
   const d = new Date(value);
@@ -20,6 +22,7 @@ export function formatDate(value?: string | null): string {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: CHURCH_TIME_ZONE,
   });
 }
 
@@ -33,6 +36,7 @@ export function formatDateTime(value?: string | null): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: CHURCH_TIME_ZONE,
   });
 }
 
@@ -41,31 +45,28 @@ export function formatDateRange(start?: string | null, end?: string | null): str
   const from = new Date(start);
   if (Number.isNaN(from.getTime())) return start;
   const to = end ? new Date(end) : null;
-  const sameDay = to && !Number.isNaN(to.getTime()) && from.toDateString() === to.toDateString();
-  if (!to || Number.isNaN(to.getTime()) || sameDay) {
-    return from.toLocaleDateString("en-GB", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }
-  const sameMonth = from.getMonth() === to.getMonth() && from.getFullYear() === to.getFullYear();
+  const dayFmt: Intl.DateTimeFormatOptions = {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: CHURCH_TIME_ZONE,
+  };
+  const fromDay = from.toLocaleDateString("en-GB", dayFmt);
+  if (!to || Number.isNaN(to.getTime())) return fromDay;
+  const toDay = to.toLocaleDateString("en-GB", dayFmt);
+  if (fromDay === toDay) return fromDay;
+  const sameMonth =
+    from.toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: CHURCH_TIME_ZONE }) ===
+    to.toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: CHURCH_TIME_ZONE });
   if (sameMonth) {
-    return `${from.getDate()}–${to.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    })}`;
+    const fromDate = from.toLocaleDateString("en-GB", { day: "numeric", timeZone: CHURCH_TIME_ZONE });
+    return `${fromDate}–${toDay}`;
   }
   return `${from.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
-  })} – ${to.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  })}`;
+    timeZone: CHURCH_TIME_ZONE,
+  })} – ${toDay}`;
 }
 
 export const SPIRITUAL_CLASSES = [

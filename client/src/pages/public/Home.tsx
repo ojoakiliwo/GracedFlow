@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useApi } from "../../lib/useApi";
 import { Card } from "../../components/ui";
-import { formatDateTime } from "../../lib/format";
+import { formatDateRange, formatDateTime } from "../../lib/format";
 import { SERVICE_TIMES } from "../../lib/services";
 import {
   mergePrograms,
@@ -195,7 +195,9 @@ export default function Home() {
                         {programTypeLabel(program.type)}
                       </p>
                       <h3 className="mt-1 text-lg text-ink-900">{program.title}</h3>
-                      <p className="mt-1 text-sm text-ink-500">{formatDateTime(program.starts_at)}</p>
+                      <p className="mt-1 text-sm text-ink-500">
+                        {formatDateRange(program.starts_at, program.ends_at)}
+                      </p>
                       {program.location && (
                         <p className="text-sm text-ink-500">{program.location}</p>
                       )}
