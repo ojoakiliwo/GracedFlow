@@ -116,15 +116,12 @@ export default function About() {
                   Read his story <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
-              <div className="flex items-center justify-center bg-brand-950 px-10 py-12">
-                <div className="text-center">
-                  <p className="font-display text-5xl font-semibold text-gold-300">
-                    MU
-                  </p>
-                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-brand-200">
-                    Prophet Michael Ugbede
-                  </p>
-                </div>
+              <div className="relative min-h-[240px] bg-brand-950 md:w-72">
+                <img
+                  src="/brand/prophet-michael-ugbede.jpg"
+                  alt="Prophet Michael Ugbede, Founding President"
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
               </div>
             </div>
           </Card>

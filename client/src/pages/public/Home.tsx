@@ -166,9 +166,11 @@ export default function Home() {
       {/* Founder */}
       <section className="mx-auto max-w-6xl px-6 pb-8">
         <Card className="flex flex-col items-start gap-4 p-8 sm:flex-row sm:items-center">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full grace-gradient">
-            <span className="font-display text-xl font-semibold text-gold-300">MU</span>
-          </div>
+          <img
+            src="/brand/prophet-michael-ugbede.jpg"
+            alt="Prophet Michael Ugbede"
+            className="h-16 w-16 shrink-0 rounded-full object-cover ring-2 ring-gold-200"
+          />
           <div className="flex-1">
             <p className="text-xs font-semibold uppercase tracking-widest text-gold-600">
               Founding President

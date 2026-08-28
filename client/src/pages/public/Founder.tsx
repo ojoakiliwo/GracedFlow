@@ -41,14 +41,11 @@ export default function Founder() {
     <div>
       <section className="grace-gradient px-6 py-20">
         <div className="mx-auto grid max-w-5xl items-center gap-10 lg:grid-cols-[auto_1fr]">
-          <div className="mx-auto flex h-40 w-40 items-center justify-center rounded-full bg-white/10 ring-2 ring-gold-300/60 sm:h-48 sm:w-48">
-            <div className="text-center">
-              <p className="font-display text-5xl font-semibold text-gold-300">MU</p>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-brand-100">
-                Founding President
-              </p>
-            </div>
-          </div>
+          <img
+            src="/brand/prophet-michael-ugbede.jpg"
+            alt="Prophet Michael Ugbede, Founding President of Infinitely Graced Church"
+            className="mx-auto h-44 w-44 rounded-full object-cover ring-4 ring-gold-300/80 sm:h-56 sm:w-56"
+          />
           <div className="text-center lg:text-left">
             <p className="text-sm font-medium uppercase tracking-[0.22em] text-gold-300">
               Infinitely Graced Church
