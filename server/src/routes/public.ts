@@ -40,11 +40,30 @@ publicRouter.get(
   "/events",
   asyncHandler(async (_req, res) => {
     res.json(
-      await db.prepare(
-          "SELECT id, title, description, type, starts_at, ends_at, location FROM events WHERE is_public = 1 ORDER BY starts_at ASC",
+      await db
+        .prepare(
+          `SELECT id, title, description, type, starts_at, ends_at, location, image_url
+           FROM events
+           WHERE is_public = 1
+           ORDER BY starts_at ASC`,
         )
         .all(),
     );
+  }),
+);
+
+publicRouter.get(
+  "/events/:id",
+  asyncHandler(async (req, res) => {
+    const row = await db
+      .prepare(
+        `SELECT id, title, description, type, starts_at, ends_at, location, image_url
+         FROM events
+         WHERE id = ? AND is_public = 1`,
+      )
+      .get(req.params.id);
+    if (!row) throw new HttpError(404, "Program not found");
+    res.json(row);
   }),
 );
 

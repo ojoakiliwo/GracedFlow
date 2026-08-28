@@ -306,6 +306,7 @@ export async function initSchema(): Promise<void> {
       location TEXT,
       is_public INTEGER NOT NULL DEFAULT 1,
       recurrence TEXT NOT NULL DEFAULT 'none',
+      image_url TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
@@ -344,6 +345,7 @@ export async function initSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_room_messages_dept ON room_messages(department_id);
 
     ALTER TABLE donations ADD COLUMN IF NOT EXISTS provider TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS image_url TEXT;
 
     CREATE TABLE IF NOT EXISTS meeting_reviews (
       id TEXT PRIMARY KEY,

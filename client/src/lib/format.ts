@@ -36,6 +36,38 @@ export function formatDateTime(value?: string | null): string {
   });
 }
 
+export function formatDateRange(start?: string | null, end?: string | null): string {
+  if (!start) return "—";
+  const from = new Date(start);
+  if (Number.isNaN(from.getTime())) return start;
+  const to = end ? new Date(end) : null;
+  const sameDay = to && !Number.isNaN(to.getTime()) && from.toDateString() === to.toDateString();
+  if (!to || Number.isNaN(to.getTime()) || sameDay) {
+    return from.toLocaleDateString("en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }
+  const sameMonth = from.getMonth() === to.getMonth() && from.getFullYear() === to.getFullYear();
+  if (sameMonth) {
+    return `${from.getDate()}–${to.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })}`;
+  }
+  return `${from.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+  })} – ${to.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })}`;
+}
+
 export const SPIRITUAL_CLASSES = [
   { value: "new_convert", label: "New Convert" },
   { value: "new_believer", label: "New Believer" },

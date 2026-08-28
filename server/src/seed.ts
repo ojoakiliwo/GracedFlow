@@ -267,11 +267,54 @@ export async function ensureDemoDataRemoved(): Promise<void> {
   }
 }
 
-/** Strip sample data, keep ministry rooms, and promote ADMIN_EMAIL to super_admin. */
+export const FREEDOM_REVIVAL_ID = "evt_igc_revival_oct2026";
+
+const FREEDOM_REVIVAL = {
+  id: FREEDOM_REVIVAL_ID,
+  title: "Freedom from Jesus",
+  description:
+    "A three-day revival hosted by Prophet Michael Ugbede. Come expecting encounter, healing and deliverance — mighty are the works of God. 3:00pm daily.",
+  type: "revival",
+  startsAt: "2026-10-01T15:00:00+01:00",
+  endsAt: "2026-10-03T18:00:00+01:00",
+  location: "IGC Agbeji, Anyigba, Kogi State",
+  imageUrl: "/programs/freedom-from-jesus-oct-2026.jpg",
+};
+
+/** Real church programs that should exist on the live site, not demo fixtures. */
+export async function ensureChurchPrograms(): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO events (id, title, description, type, starts_at, ends_at, location, is_public, recurrence, image_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'none', ?)
+       ON CONFLICT (id) DO UPDATE SET
+         title = EXCLUDED.title,
+         description = EXCLUDED.description,
+         type = EXCLUDED.type,
+         starts_at = EXCLUDED.starts_at,
+         ends_at = EXCLUDED.ends_at,
+         location = EXCLUDED.location,
+         is_public = 1,
+         image_url = EXCLUDED.image_url`,
+    )
+    .run(
+      FREEDOM_REVIVAL.id,
+      FREEDOM_REVIVAL.title,
+      FREEDOM_REVIVAL.description,
+      FREEDOM_REVIVAL.type,
+      FREEDOM_REVIVAL.startsAt,
+      FREEDOM_REVIVAL.endsAt,
+      FREEDOM_REVIVAL.location,
+      FREEDOM_REVIVAL.imageUrl,
+    );
+}
+
+/** Strip sample data, keep ministry rooms, seed church programs, and promote ADMIN_EMAIL. */
 export async function ensureProductionData(): Promise<void> {
   if (demoFixturesAllowed()) return;
   await ensureDemoDataRemoved();
   await ensureChurchStructure();
+  await ensureChurchPrograms();
   await ensureBootstrapAdmin();
 }
 
@@ -373,6 +416,7 @@ export async function ensureBootstrapAdmin(): Promise<void> {
 export async function prepareAppData(): Promise<void> {
   if (demoFixturesAllowed()) {
     await ensureSeed();
+    await ensureChurchPrograms();
     return;
   }
   await ensureProductionData();

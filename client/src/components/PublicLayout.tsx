@@ -11,6 +11,7 @@ const links = [
   { to: "/", label: "Home", end: true },
   { to: "/about", label: "About" },
   { to: "/founder", label: "Founder" },
+  { to: "/programs", label: "Programs" },
   { to: "/give", label: "Give" },
   { to: "/prayer", label: "Prayer" },
 ];
@@ -135,6 +136,11 @@ export default function PublicLayout() {
               <li>
                 <Link to="/founder" className="hover:text-white">
                   Founding President
+                </Link>
+              </li>
+              <li>
+                <Link to="/programs" className="hover:text-white">
+                  Programs
                 </Link>
               </li>
               <li>

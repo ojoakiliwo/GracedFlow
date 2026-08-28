@@ -37,7 +37,9 @@ describe("Production-ready data", () => {
     expect(projects).toHaveLength(0);
 
     const events = (await db.prepare("SELECT title FROM events").all()) as { title: string }[];
-    expect(events).toHaveLength(0);
+    expect(events.some((e) => e.title === "Sunday Celebration Service")).toBe(false);
+    expect(events.some((e) => e.title === "Wednesday Prayer Meeting")).toBe(false);
+    expect(events.some((e) => e.title === "Freedom from Jesus")).toBe(true);
 
     const meetings = (await db.prepare("SELECT title FROM meetings").all()) as { title: string }[];
     expect(meetings).toHaveLength(0);
@@ -86,7 +88,19 @@ describe("Production-ready data", () => {
     const app = createApp();
     const res = await request(app).get("/api/public/events");
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(0);
+    expect(res.body.some((e: { title: string }) => e.title === "Sunday Celebration Service")).toBe(
+      false,
+    );
+    const revival = res.body.find((e: { title: string }) => e.title === "Freedom from Jesus") as
+      | { id: string; title: string; image_url: string; location: string }
+      | undefined;
+    expect(revival).toBeTruthy();
+    expect(revival?.image_url).toBe("/programs/freedom-from-jesus-oct-2026.jpg");
+    expect(revival?.location).toMatch(/Anyigba/);
+
+    const detail = await request(app).get(`/api/public/events/${revival!.id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.title).toBe("Freedom from Jesus");
 
     const meetings = (await db.prepare("SELECT title FROM meetings").all()) as { title: string }[];
     expect(meetings).toHaveLength(0);

@@ -156,6 +156,29 @@ describe("Infinitely Graced Church API", () => {
     expect(res.status).toBe(201);
   });
 
+  it("posts a public program with a flyer and lists it on the website", async () => {
+    const created = await auth(request(app).post("/api/events")).send({
+      title: "Youth Night",
+      description: "A night of worship.",
+      type: "program",
+      startsAt: "2026-11-15T18:00:00+01:00",
+      endsAt: "2026-11-15T21:00:00+01:00",
+      location: "Main Auditorium",
+      imageUrl: "/programs/youth-night.jpg",
+      isPublic: true,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.image_url).toBe("/programs/youth-night.jpg");
+
+    const list = await request(app).get("/api/public/events");
+    expect(list.status).toBe(200);
+    expect(list.body.some((e: { title: string; image_url: string }) => e.title === "Youth Night" && e.image_url === "/programs/youth-night.jpg")).toBe(true);
+
+    const detail = await request(app).get(`/api/public/events/${created.body.id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.location).toBe("Main Auditorium");
+  });
+
   it("returns dashboard analytics", async () => {
     const res = await auth(request(app).get("/api/dashboard"));
     expect(res.status).toBe(200);

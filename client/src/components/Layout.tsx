@@ -55,7 +55,7 @@ const groups: NavGroup[] = [
       { to: "/app/projects", label: "Projects & Visions", icon: FolderKanban, min: "pastor" },
       { to: "/app/meetings", label: "Meetings", icon: CalendarDays },
       { to: "/app/tasks", label: "Tasks", icon: ListChecks },
-      { to: "/app/events", label: "Events", icon: CalendarRange, min: "pastor" },
+      { to: "/app/events", label: "Programs", icon: CalendarRange, min: "pastor" },
     ],
   },
   {

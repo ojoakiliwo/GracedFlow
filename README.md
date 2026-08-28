@@ -61,7 +61,7 @@ Built as an npm-workspaces monorepo:
 - Admin giving ledger with totals by type and one-click confirmation.
 
 ### Public website
-- Elegant landing page, About the church, **About the Founding President**, **Give**,
+- Elegant landing page, About the church, **About the Founding President**, **Programs**, **Give**,
   and **Prayer request** pages, live service times, public events and projects.
 
 ### Security & roles
@@ -92,7 +92,7 @@ Built as an npm-workspaces monorepo:
    ```
 
 4. Open **http://localhost:5173** in your browser.
-   - Public site: `/`, `/about`, `/founder`, `/give`, `/prayer`.
+   - Public site: `/`, `/about`, `/founder`, `/programs`, `/give`, `/prayer`.
    - Ministry portal: click **Member Login** (or go to `/login`).
 
 Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` before the first boot (or create the first
