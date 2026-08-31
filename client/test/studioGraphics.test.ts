@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { fetchVerseText, mergeBibleHits, parseBibleReferences } from "../src/lib/bibleRefs";
-import { drawProgrammeOverlay, fitWrappedText, suggestDesigns, wrapText } from "../src/lib/studioOverlays";
+import {
+  drawProgrammeOverlay,
+  fitWrappedText,
+  getOverlayPalette,
+  OVERLAY_PALETTES,
+  suggestDesigns,
+  wrapText,
+} from "../src/lib/studioOverlays";
 import { transcriptFromSpeechEvent } from "../src/lib/studioSpeech";
 import { searchQuotesLocal, searchQuotesRemote, scoreQuoteMatch } from "../src/lib/scriptureSearch";
 
@@ -99,18 +106,81 @@ describe("On-air design suggestions", () => {
     } as unknown as CanvasRenderingContext2D;
     drawProgrammeOverlay(ctx, 1280, 720, {
       design: "lower-third",
+      palette: "sanctuary",
       headline: "Welcome home",
       body: "Sunday service",
       visible: false,
     });
     expect(fillText).not.toHaveBeenCalled();
+    drawProgrammeOverlay(
+      ctx,
+      1280,
+      720,
+      {
+        design: "lower-third",
+        palette: "sanctuary",
+        headline: "Welcome home",
+        body: "Sunday service",
+        visible: false,
+      },
+      { stage: true },
+    );
+    expect(fillText).toHaveBeenCalled();
+    fillText.mockClear();
     drawProgrammeOverlay(ctx, 1280, 720, {
       design: "lower-third",
+      palette: "sanctuary",
       headline: "Welcome home",
       body: "Sunday service",
       visible: true,
     });
     expect(fillText).toHaveBeenCalled();
+  });
+
+  it("marks sanctuary, glory gold, and linen as the best-match palettes", () => {
+    const recommended = OVERLAY_PALETTES.filter((p) => p.recommended).map((p) => p.id);
+    expect(recommended).toEqual(["sanctuary", "glory", "linen"]);
+  });
+
+  it("paints overlay plates with the matching ink colour", () => {
+    const styles: string[] = [];
+    const ctx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      setTransform: vi.fn(),
+      fillRect: vi.fn(),
+      fill: vi.fn(),
+      stroke: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      arcTo: vi.fn(),
+      closePath: vi.fn(),
+      fillText: vi.fn(),
+      measureText: (t: string) => ({ width: t.length * 10 }),
+      set fillStyle(value: string) {
+        styles.push(String(value));
+      },
+      get fillStyle() {
+        return styles.at(-1) ?? "";
+      },
+      set strokeStyle(_value: string) {},
+      set lineWidth(_value: number) {},
+      set font(_value: string) {},
+      set filter(_value: string) {},
+      set textBaseline(_value: string) {},
+      set textAlign(_value: string) {},
+    } as unknown as CanvasRenderingContext2D;
+    const pal = getOverlayPalette("glory");
+    drawProgrammeOverlay(ctx, 1280, 720, {
+      design: "lower-third",
+      palette: "glory",
+      headline: "Welcome home",
+      body: "Sunday service",
+      visible: true,
+    });
+    expect(styles).toContain(pal.bg);
+    expect(styles).toContain(pal.text);
+    expect(styles).toContain(pal.accent);
   });
 });
 

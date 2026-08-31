@@ -113,11 +113,52 @@ function pickMime(): string {
   return pickRecordingMime(supported) || "video/webm";
 }
 
+function ensureStudioCanvas(canvas: HTMLCanvasElement) {
+  if (canvas.width < 960 || canvas.height < 540) {
+    canvas.width = 1280;
+    canvas.height = 720;
+  }
+}
+
+function paintStudioMonitor(
+  canvas: HTMLCanvasElement | null,
+  video: HTMLVideoElement | null,
+  overlay: ProgrammeOverlay,
+  lookNow: VideoLook,
+  auto: VideoAutoState,
+  stage: boolean,
+) {
+  if (!canvas) return;
+  ensureStudioCanvas(canvas);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const brightness = lookNow.brightness * auto.brightness;
+  const contrast = lookNow.contrast * auto.contrast;
+  const livePicture = Boolean(video && video.readyState >= 2);
+  if (livePicture && video) {
+    ctx.save();
+    if (lookNow.mirror) {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.filter = `brightness(${brightness}) contrast(${contrast}) saturate(${lookNow.saturation}) sepia(${Math.max(0, lookNow.warmth) * 0.28})`;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    ctx.filter = "none";
+  } else {
+    ctx.fillStyle = "#0b0b10";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  drawProgrammeOverlay(ctx, canvas.width, canvas.height, overlay, { stage });
+}
+
 export function useBroadcastStudio() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const programmeAudioRef = useRef<HTMLAudioElement | null>(null);
   const overlayRef = useRef<ProgrammeOverlay>({ ...EMPTY_OVERLAY });
+  const programOverlayRef = useRef<ProgrammeOverlay>({ ...EMPTY_OVERLAY });
   const audioState = useRef<AdaptiveAudioState>({ ...INITIAL_AUDIO_STATE });
   const videoAuto = useRef<VideoAutoState>({ ...INITIAL_VIDEO_AUTO });
   const lookRef = useRef<VideoLook>({ ...DEFAULT_LOOK });
@@ -177,6 +218,7 @@ export function useBroadcastStudio() {
   const [monitor, setMonitorState] = useState(false);
   const [busySource, setBusySource] = useState<"camera" | "mic" | null>(null);
   const [overlay, setOverlay] = useState<ProgrammeOverlay>({ ...EMPTY_OVERLAY });
+  const [programOverlay, setProgramOverlay] = useState<ProgrammeOverlay>({ ...EMPTY_OVERLAY });
   const [bibleHits, setBibleHits] = useState<BibleHit[]>([]);
   const [listening, setListening] = useState(false);
   const [postingVerse, setPostingVerse] = useState(false);
@@ -185,6 +227,7 @@ export function useBroadcastStudio() {
 
   lookRef.current = look;
   overlayRef.current = overlay;
+  programOverlayRef.current = programOverlay;
   statusRef.current = status;
   monitorRef.current = monitor;
 
@@ -347,33 +390,12 @@ export function useBroadcastStudio() {
   }, []);
 
   const paint = useCallback(() => {
-    const canvas = canvasRef.current;
     const video = videoRef.current;
     const n = nodes.current;
-    if (!canvas || !video || video.readyState < 2) {
-      n.raf = requestAnimationFrame(paint);
-      return;
-    }
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      n.raf = requestAnimationFrame(paint);
-      return;
-    }
     const lookNow = lookRef.current;
     const auto = lookNow.auto ? videoAuto.current : { brightness: 1, contrast: 1 };
-    const brightness = lookNow.brightness * auto.brightness;
-    const contrast = lookNow.contrast * auto.contrast;
-    const warmth = lookNow.warmth;
-    ctx.save();
-    if (lookNow.mirror) {
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-    }
-    ctx.filter = `brightness(${brightness}) contrast(${contrast}) saturate(${lookNow.saturation}) sepia(${Math.max(0, warmth) * 0.28})`;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    ctx.restore();
-    ctx.filter = "none";
-    drawProgrammeOverlay(ctx, canvas.width, canvas.height, overlayRef.current);
+    paintStudioMonitor(previewCanvasRef.current, video, overlayRef.current, lookNow, auto, true);
+    paintStudioMonitor(canvasRef.current, video, programOverlayRef.current, lookNow, auto, false);
     n.raf = requestAnimationFrame(paint);
   }, []);
 
@@ -520,10 +542,11 @@ export function useBroadcastStudio() {
         videoRef.current.srcObject = videoStream;
         await videoRef.current.play().catch(() => undefined);
       }
-      const canvas = canvasRef.current;
-      if (canvas) {
-        canvas.width = 1280;
-        canvas.height = 720;
+      for (const canvas of [canvasRef.current, previewCanvasRef.current]) {
+        if (canvas) {
+          canvas.width = 1280;
+          canvas.height = 720;
+        }
       }
       paint();
       meterTimer.current = window.setInterval(tickMeters, 50);
@@ -665,17 +688,10 @@ export function useBroadcastStudio() {
 
   const paintIdlePreview = useCallback(() => {
     if (statusRef.current === "live") return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    if (!canvas.width || canvas.width < 960 || canvas.height < 540) {
-      canvas.width = 1280;
-      canvas.height = 720;
-    }
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.fillStyle = "#0b0b10";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    drawProgrammeOverlay(ctx, canvas.width, canvas.height, overlayRef.current);
+    const lookNow = lookRef.current;
+    const auto = lookNow.auto ? videoAuto.current : { brightness: 1, contrast: 1 };
+    paintStudioMonitor(previewCanvasRef.current, videoRef.current, overlayRef.current, lookNow, auto, true);
+    paintStudioMonitor(canvasRef.current, videoRef.current, programOverlayRef.current, lookNow, auto, false);
   }, []);
 
   const updateOverlay = useCallback((patch: Partial<ProgrammeOverlay>) => {
@@ -688,13 +704,16 @@ export function useBroadcastStudio() {
     });
   }, [ingestOverlayText]);
 
-  const putOverlayOnAir = useCallback(() => {
-    setOverlay((prev) => ({ ...prev, visible: true }));
+  const takeToLive = useCallback(() => {
+    setProgramOverlay({ ...overlayRef.current, visible: true });
   }, []);
 
-  const clearOverlay = useCallback(() => {
-    setOverlay((prev) => ({ ...prev, visible: false }));
+  const clearLive = useCallback(() => {
+    setProgramOverlay((prev) => ({ ...prev, visible: false }));
   }, []);
+
+  const putOverlayOnAir = takeToLive;
+  const clearOverlay = clearLive;
 
   const postBibleVerses = useCallback(async () => {
     const selected = new Set(selectedVerseRefs);
@@ -707,12 +726,13 @@ export function useBroadcastStudio() {
         const payload = await fetchVerseText(hit);
         lines.push(payload.text ? `${hit.display} — ${payload.text}` : hit.snippet || hit.display);
       }
-      setOverlay({
+      setOverlay((prev) => ({
+        ...prev,
         visible: true,
         design: "verse",
         headline: pending.length === 1 ? pending[0]!.display : "Scripture",
         body: lines.join("\n\n"),
-      });
+      }));
     } finally {
       setPostingVerse(false);
     }
@@ -753,12 +773,14 @@ export function useBroadcastStudio() {
 
   useEffect(() => {
     overlayRef.current = overlay;
+    programOverlayRef.current = programOverlay;
     paintIdlePreview();
-  }, [overlay, status, paintIdlePreview]);
+  }, [overlay, programOverlay, status, paintIdlePreview]);
 
   return {
     videoRef,
     canvasRef,
+    previewCanvasRef,
     programmeAudioRef,
     status,
     error,
@@ -778,6 +800,7 @@ export function useBroadcastStudio() {
     setMonitor,
     busySource,
     overlay,
+    programOverlay,
     bibleHits,
     selectedVerseRefs,
     listening,
@@ -789,6 +812,8 @@ export function useBroadcastStudio() {
     startRecording,
     stopRecording,
     updateOverlay,
+    takeToLive,
+    clearLive,
     putOverlayOnAir,
     clearOverlay,
     postBibleVerses,

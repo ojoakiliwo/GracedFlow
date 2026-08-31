@@ -6,8 +6,92 @@ export type OverlayDesignId =
   | "prayer"
   | "title";
 
+export type OverlayPaletteId =
+  | "sanctuary"
+  | "glory"
+  | "linen"
+  | "midnight"
+  | "wine"
+  | "emerald";
+
+export type OverlayPalette = {
+  id: OverlayPaletteId;
+  label: string;
+  hint: string;
+  recommended?: boolean;
+  bg: string;
+  accent: string;
+  text: string;
+  muted: string;
+};
+
+export const OVERLAY_PALETTES: OverlayPalette[] = [
+  {
+    id: "sanctuary",
+    label: "Sanctuary",
+    hint: "Deep purple, gold edge, white type — our house look",
+    recommended: true,
+    bg: "rgba(20, 12, 40, 0.90)",
+    accent: "#c8912f",
+    text: "#ffffff",
+    muted: "#e0bd6f",
+  },
+  {
+    id: "glory",
+    label: "Glory gold",
+    hint: "Gold plate, royal ink — reads on bright cameras",
+    recommended: true,
+    bg: "rgba(200, 145, 47, 0.94)",
+    accent: "#2e1065",
+    text: "#1a1028",
+    muted: "#4c1d95",
+  },
+  {
+    id: "linen",
+    label: "Linen prayer",
+    hint: "Warm white, purple ink — choir and intercession",
+    recommended: true,
+    bg: "rgba(255, 250, 243, 0.94)",
+    accent: "#c8912f",
+    text: "#2e1065",
+    muted: "#6d28d9",
+  },
+  {
+    id: "midnight",
+    label: "Midnight",
+    hint: "Broadcast black, white type — news and titles",
+    bg: "rgba(8, 8, 12, 0.90)",
+    accent: "#e0bd6f",
+    text: "#ffffff",
+    muted: "#d9c7a0",
+  },
+  {
+    id: "wine",
+    label: "Altar wine",
+    hint: "Crimson, cream type — communion and passion week",
+    bg: "rgba(92, 18, 38, 0.92)",
+    accent: "#e0bd6f",
+    text: "#fff7ed",
+    muted: "#f3d5a8",
+  },
+  {
+    id: "emerald",
+    label: "Olive grove",
+    hint: "Deep green, cream type — thanksgiving and harvest",
+    bg: "rgba(14, 46, 34, 0.92)",
+    accent: "#e0bd6f",
+    text: "#f4fff8",
+    muted: "#c8e6c9",
+  },
+];
+
+export function getOverlayPalette(id?: OverlayPaletteId | null): OverlayPalette {
+  return OVERLAY_PALETTES.find((p) => p.id === id) ?? OVERLAY_PALETTES[0]!;
+}
+
 export type ProgrammeOverlay = {
   design: OverlayDesignId;
+  palette: OverlayPaletteId;
   headline: string;
   body: string;
   visible: boolean;
@@ -15,6 +99,7 @@ export type ProgrammeOverlay = {
 
 export const EMPTY_OVERLAY: ProgrammeOverlay = {
   design: "lower-third",
+  palette: "sanctuary",
   headline: "",
   body: "",
   visible: false,
@@ -103,11 +188,14 @@ export function drawProgrammeOverlay(
   width: number,
   height: number,
   overlay: ProgrammeOverlay | null,
+  opts?: { stage?: boolean },
 ) {
-  if (!overlay || !overlay.visible) return;
+  if (!overlay) return;
   const headline = overlay.headline.trim();
   const body = overlay.body.trim();
-  if (!headline && !body) return;
+  const show = opts?.stage ? Boolean(headline || body) : overlay.visible;
+  if (!show || (!headline && !body)) return;
+  const pal = getOverlayPalette(overlay.palette);
 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -119,15 +207,15 @@ export function drawProgrammeOverlay(
     const x = 48;
     const y = height - 168;
     roundRect(ctx, x, y, boxW, 112, 16);
-    ctx.fillStyle = "rgba(46, 16, 101, 0.92)";
+    ctx.fillStyle = pal.bg;
     ctx.fill();
-    ctx.fillStyle = "#c8912f";
+    ctx.fillStyle = pal.accent;
     ctx.fillRect(x, y, 8, 112);
     ctx.font = "600 32px Fraunces, Georgia, serif";
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = pal.text;
     ctx.fillText(headline.slice(0, 48), x + 28, y + 22);
     ctx.font = "400 20px Inter, system-ui, sans-serif";
-    ctx.fillStyle = "#e0bd6f";
+    ctx.fillStyle = pal.muted;
     const lines = wrapText(ctx, body || "Infinitely Graced Church", boxW - 48);
     ctx.fillText(lines[0] ?? "", x + 28, y + 66);
   } else if (overlay.design === "verse") {
@@ -140,43 +228,43 @@ export function drawProgrammeOverlay(
     const boxH = Math.min(height - 48, 80 + fitted.lines.length * fitted.lineHeight + 20);
     const y = Math.max(24, (height - boxH) / 2);
     roundRect(ctx, x, y, boxW, boxH, 20);
-    ctx.fillStyle = "rgba(20, 12, 40, 0.88)";
+    ctx.fillStyle = pal.bg;
     ctx.fill();
-    ctx.strokeStyle = "#c8912f";
+    ctx.strokeStyle = pal.accent;
     ctx.lineWidth = 3;
     ctx.stroke();
-    ctx.fillStyle = "#e0bd6f";
+    ctx.fillStyle = pal.muted;
     ctx.font = "600 20px Inter, system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(headline || "Holy Scripture", width / 2, y + 18);
-    ctx.fillStyle = "#f8f5ff";
+    ctx.fillStyle = pal.text;
     ctx.font = `400 ${fitted.fontSize}px ${family}`;
     fitted.lines.forEach((line, i) => {
       ctx.fillText(line, width / 2, y + 52 + i * fitted.lineHeight);
     });
     ctx.textAlign = "left";
   } else if (overlay.design === "banner") {
-    ctx.fillStyle = "rgba(46, 16, 101, 0.9)";
+    ctx.fillStyle = pal.bg;
     ctx.fillRect(0, height - 132, width, 132);
-    ctx.fillStyle = "#c8912f";
+    ctx.fillStyle = pal.accent;
     ctx.fillRect(0, height - 136, width, 6);
     ctx.font = "600 34px Fraunces, Georgia, serif";
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = pal.text;
     ctx.fillText(headline.slice(0, 60), 40, height - 108);
     ctx.font = "400 22px Inter, system-ui, sans-serif";
-    ctx.fillStyle = "#e8d9a8";
+    ctx.fillStyle = pal.muted;
     const lines = wrapText(ctx, body, width - 80);
     ctx.fillText(lines[0] ?? "", 40, height - 60);
   } else if (overlay.design === "news") {
-    ctx.fillStyle = "rgba(12, 8, 28, 0.86)";
+    ctx.fillStyle = pal.bg;
     ctx.fillRect(0, 0, width, 72);
-    ctx.fillStyle = "#c8912f";
+    ctx.fillStyle = pal.accent;
     ctx.fillRect(0, 72, width, 4);
     ctx.font = "700 18px Inter, system-ui, sans-serif";
-    ctx.fillStyle = "#c8912f";
+    ctx.fillStyle = pal.accent;
     ctx.fillText("NEWS", 28, 24);
     ctx.font = "500 26px Inter, system-ui, sans-serif";
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = pal.text;
     ctx.fillText([headline, body].filter(Boolean).join("  ·  ").slice(0, 90), 110, 22);
   } else if (overlay.design === "prayer") {
     const boxW = Math.min(820, width * 0.7);
@@ -186,13 +274,13 @@ export function drawProgrammeOverlay(
     const x = (width - boxW) / 2;
     const y = height - boxH - 48;
     roundRect(ctx, x, y, boxW, boxH, 18);
-    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.fillStyle = pal.bg;
     ctx.fill();
     ctx.textAlign = "center";
-    ctx.fillStyle = "#6d28d9";
+    ctx.fillStyle = pal.muted;
     ctx.font = "600 18px Inter, system-ui, sans-serif";
     ctx.fillText(headline || "Let us pray", width / 2, y + 20);
-    ctx.fillStyle = "#2e1065";
+    ctx.fillStyle = pal.text;
     ctx.font = "italic 26px Fraunces, Georgia, serif";
     lines.forEach((line, i) => ctx.fillText(line, width / 2, y + 52 + i * 36));
     ctx.textAlign = "left";
@@ -201,11 +289,11 @@ export function drawProgrammeOverlay(
     ctx.font = "700 56px Fraunces, Georgia, serif";
     ctx.fillStyle = "rgba(0,0,0,0.45)";
     ctx.fillText(headline.slice(0, 40), width / 2 + 3, height * 0.38 + 3);
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = pal.text;
     ctx.fillText(headline.slice(0, 40), width / 2, height * 0.38);
     if (body) {
       ctx.font = "400 26px Inter, system-ui, sans-serif";
-      ctx.fillStyle = "#e0bd6f";
+      ctx.fillStyle = pal.muted;
       ctx.fillText(body.slice(0, 80), width / 2, height * 0.38 + 72);
     }
     ctx.textAlign = "left";
