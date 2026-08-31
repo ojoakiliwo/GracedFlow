@@ -10,6 +10,16 @@ import {
   type AdaptiveAudioState,
   type VideoAutoState,
 } from "./studioEngine";
+import {
+  audioConstraintsFor,
+  decorateAudioLabel,
+  keepDeviceId,
+  pickRecordingMime,
+  sortAudioDevices,
+  videoConstraintsFor,
+  deviceIdFromStream,
+  type NamedDevice,
+} from "./studioDevices";
 
 export type StudioStatus = "idle" | "live" | "error";
 
@@ -64,12 +74,42 @@ function studioStartMessage(err: unknown): string {
   return (err as Error)?.message || "Could not start the studio.";
 }
 
+async function getAudioStream(deviceId: string): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: audioConstraintsFor(deviceId),
+      video: false,
+    });
+  } catch {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: deviceId ? { exact: deviceId } : undefined,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+      video: false,
+    });
+  }
+}
+
+function pickMime(): string {
+  const supported =
+    typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported
+      ? (type: string) => MediaRecorder.isTypeSupported(type)
+      : () => false;
+  return pickRecordingMime(supported) || "video/webm";
+}
+
 export function useBroadcastStudio() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const programmeAudioRef = useRef<HTMLAudioElement | null>(null);
   const audioState = useRef<AdaptiveAudioState>({ ...INITIAL_AUDIO_STATE });
   const videoAuto = useRef<VideoAutoState>({ ...INITIAL_VIDEO_AUTO });
   const lookRef = useRef<VideoLook>({ ...DEFAULT_LOOK });
+  const statusRef = useRef<StudioStatus>("idle");
+  const monitorRef = useRef(false);
   const nodes = useRef<{
     ctx?: AudioContext;
     source?: MediaStreamAudioSourceNode;
@@ -82,21 +122,23 @@ export function useBroadcastStudio() {
     analyserIn?: AnalyserNode;
     analyserOut?: AnalyserNode;
     dest?: MediaStreamAudioDestinationNode;
-    raw?: MediaStream;
-    processed?: MediaStream;
+    rawVideo?: MediaStream;
+    rawAudio?: MediaStream;
     recorder?: MediaRecorder;
     chunks?: Blob[];
     raf?: number;
+    mixed?: MediaStream;
   }>({});
   const meterTimer = useRef<number | null>(null);
   const lumaTimer = useRef<number | null>(null);
+  const metersLumaRef = useRef(120);
 
   const [status, setStatus] = useState<StudioStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [cameras, setCameras] = useState<DeviceOption[]>([]);
   const [mics, setMics] = useState<DeviceOption[]>([]);
-  const [cameraId, setCameraId] = useState("");
-  const [micId, setMicId] = useState("");
+  const [cameraId, setCameraIdState] = useState("");
+  const [micId, setMicIdState] = useState("");
   const [look, setLook] = useState<VideoLook>({ ...DEFAULT_LOOK });
   const [meters, setMeters] = useState<StudioMeters>({
     inputRms: 0,
@@ -111,9 +153,21 @@ export function useBroadcastStudio() {
   const [recording, setRecording] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
-  const metersLumaRef = useRef(120);
+  const [monitor, setMonitorState] = useState(false);
+  const [busySource, setBusySource] = useState<"camera" | "mic" | null>(null);
 
   lookRef.current = look;
+  statusRef.current = status;
+  monitorRef.current = monitor;
+
+  const attachProgrammeAudio = useCallback((stream: MediaStream | undefined) => {
+    const el = programmeAudioRef.current;
+    if (!el) return;
+    el.srcObject = stream ?? null;
+    el.muted = !monitorRef.current;
+    el.volume = 1;
+    if (stream) void el.play().catch(() => undefined);
+  }, []);
 
   const stopGraph = useCallback(() => {
     const n = nodes.current;
@@ -123,26 +177,36 @@ export function useBroadcastStudio() {
     meterTimer.current = null;
     lumaTimer.current = null;
     if (n.recorder?.state === "recording") n.recorder.stop();
-    n.raw?.getTracks().forEach((t) => t.stop());
-    n.processed?.getTracks().forEach((t) => t.stop());
+    n.rawVideo?.getTracks().forEach((t) => t.stop());
+    n.rawAudio?.getTracks().forEach((t) => t.stop());
+    n.mixed?.getTracks().forEach((t) => t.stop());
     void n.ctx?.close();
     nodes.current = {};
     audioState.current = { ...INITIAL_AUDIO_STATE };
     videoAuto.current = { ...INITIAL_VIDEO_AUTO };
-  }, []);
+    attachProgrammeAudio(undefined);
+  }, [attachProgrammeAudio]);
 
-  const listDevices = useCallback(async () => {
+  const listDevices = useCallback(async (prefer?: { camera?: string; mic?: string }) => {
     const all = await navigator.mediaDevices.enumerateDevices();
     const cam = all
       .filter((d) => d.kind === "videoinput")
-      .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Camera ${i + 1}` }));
-    const mic = all
-      .filter((d) => d.kind === "audioinput")
-      .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Microphone ${i + 1}` }));
+      .map((d, i) => ({
+        deviceId: d.deviceId,
+        label: d.label || `Camera ${i + 1}`,
+      }));
+    const mic = sortAudioDevices(
+      all
+        .filter((d) => d.kind === "audioinput")
+        .map((d, i) => ({
+          deviceId: d.deviceId,
+          label: decorateAudioLabel(d.label, i),
+        })),
+    );
     setCameras(cam);
     setMics(mic);
-    setCameraId((id) => id || cam[0]?.deviceId || "");
-    setMicId((id) => id || mic[0]?.deviceId || "");
+    setCameraIdState((id) => keepDeviceId(prefer?.camera || id, cam));
+    setMicIdState((id) => keepDeviceId(prefer?.mic || id, mic as NamedDevice[]));
   }, []);
 
   const paint = useCallback(() => {
@@ -225,6 +289,16 @@ export function useBroadcastStudio() {
     }
   }, []);
 
+  const connectAudioSource = useCallback((ctx: AudioContext, stream: MediaStream) => {
+    const n = nodes.current;
+    n.source?.disconnect();
+    const source = ctx.createMediaStreamSource(stream);
+    if (n.highpass) source.connect(n.highpass);
+    n.source = source;
+    n.rawAudio?.getTracks().forEach((t) => t.stop());
+    n.rawAudio = stream;
+  }, []);
+
   const start = useCallback(async () => {
     setError(null);
     stopGraph();
@@ -232,26 +306,21 @@ export function useBroadcastStudio() {
       URL.revokeObjectURL(recordingUrl);
       setRecordingUrl(null);
     }
-    let stream: MediaStream | undefined;
+    let videoStream: MediaStream | undefined;
+    let audioStream: MediaStream | undefined;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          deviceId: micId ? { exact: micId } : undefined,
-          echoCancellation: true,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-        video: {
-          deviceId: cameraId ? { exact: cameraId } : undefined,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 },
-        },
+      videoStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: videoConstraintsFor(cameraId),
       });
-      await listDevices();
-      const ctx = new AudioContext();
+      audioStream = await getAudioStream(micId);
+      const liveCam = deviceIdFromStream(videoStream, "video") || cameraId;
+      const liveMic = deviceIdFromStream(audioStream, "audio") || micId;
+      setCameraIdState(liveCam);
+      setMicIdState(liveMic);
+      await listDevices({ camera: liveCam, mic: liveMic });
+      const ctx = new AudioContext({ latencyHint: "interactive" });
       if (ctx.state === "suspended") await ctx.resume();
-      const source = ctx.createMediaStreamSource(stream);
       const highpass = ctx.createBiquadFilter();
       highpass.type = "highpass";
       highpass.frequency.value = 80;
@@ -283,7 +352,6 @@ export function useBroadcastStudio() {
       analyserOut.fftSize = 2048;
       const dest = ctx.createMediaStreamDestination();
 
-      source.connect(highpass);
       highpass.connect(hum);
       hum.connect(analyserIn);
       analyserIn.connect(gate);
@@ -295,7 +363,6 @@ export function useBroadcastStudio() {
 
       nodes.current = {
         ctx,
-        source,
         highpass,
         hum,
         gate,
@@ -305,12 +372,13 @@ export function useBroadcastStudio() {
         analyserIn,
         analyserOut,
         dest,
-        raw: stream,
-        processed: dest.stream,
+        rawVideo: videoStream,
       };
+      connectAudioSource(ctx, audioStream);
+      attachProgrammeAudio(dest.stream);
 
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+        videoRef.current.srcObject = videoStream;
         await videoRef.current.play().catch(() => undefined);
       }
       const canvas = canvasRef.current;
@@ -324,12 +392,24 @@ export function useBroadcastStudio() {
       setStatus("live");
       setElapsedSec(0);
     } catch (e) {
-      stream?.getTracks().forEach((t) => t.stop());
+      videoStream?.getTracks().forEach((t) => t.stop());
+      audioStream?.getTracks().forEach((t) => t.stop());
       stopGraph();
       setStatus("error");
       setError(studioStartMessage(e));
     }
-  }, [cameraId, listDevices, micId, paint, recordingUrl, sampleLuma, stopGraph, tickMeters]);
+  }, [
+    attachProgrammeAudio,
+    cameraId,
+    connectAudioSource,
+    listDevices,
+    micId,
+    paint,
+    recordingUrl,
+    sampleLuma,
+    stopGraph,
+    tickMeters,
+  ]);
 
   const stop = useCallback(() => {
     stopGraph();
@@ -339,34 +419,104 @@ export function useBroadcastStudio() {
     setElapsedSec(0);
   }, [stopGraph]);
 
+  const selectCamera = useCallback(
+    async (id: string) => {
+      setCameraIdState(id);
+      if (statusRef.current !== "live") return;
+      setBusySource("camera");
+      setError(null);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: videoConstraintsFor(id),
+        });
+        nodes.current.rawVideo?.getTracks().forEach((t) => t.stop());
+        nodes.current.rawVideo = stream;
+        setCameraIdState(deviceIdFromStream(stream, "video") || id);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => undefined);
+        }
+        await listDevices({ camera: deviceIdFromStream(stream, "video") || id });
+      } catch (e) {
+        setError(studioStartMessage(e));
+      } finally {
+        setBusySource(null);
+      }
+    },
+    [listDevices],
+  );
+
+  const selectMic = useCallback(
+    async (id: string) => {
+      setMicIdState(id);
+      if (statusRef.current !== "live" || !nodes.current.ctx) return;
+      setBusySource("mic");
+      setError(null);
+      try {
+        const stream = await getAudioStream(id);
+        connectAudioSource(nodes.current.ctx, stream);
+        setMicIdState(deviceIdFromStream(stream, "audio") || id);
+        if (nodes.current.dest) attachProgrammeAudio(nodes.current.dest.stream);
+        await listDevices({ mic: deviceIdFromStream(stream, "audio") || id });
+      } catch (e) {
+        setError(studioStartMessage(e));
+      } finally {
+        setBusySource(null);
+      }
+    },
+    [attachProgrammeAudio, connectAudioSource, listDevices],
+  );
+
+  const setMonitor = useCallback((on: boolean) => {
+    setMonitorState(on);
+    monitorRef.current = on;
+    const el = programmeAudioRef.current;
+    if (el) el.muted = !on;
+  }, []);
+
   const startRecording = useCallback(() => {
     const canvas = canvasRef.current;
-    const audio = nodes.current.dest?.stream;
-    if (!canvas || !audio || status !== "live") return;
-    const videoStream = canvas.captureStream(30);
-    const mixed = new MediaStream([
-      ...videoStream.getVideoTracks(),
-      ...audio.getAudioTracks(),
-    ]);
+    const dest = nodes.current.dest;
+    if (!canvas || !dest || statusRef.current !== "live") return;
+    if (nodes.current.ctx?.state === "suspended") {
+      void nodes.current.ctx.resume();
+    }
+    const mixed = canvas.captureStream(30);
+    const audioTracks = dest.stream.getAudioTracks().filter((t) => t.readyState === "live");
+    if (audioTracks.length === 0) {
+      setError("Recording did not get an audio track. Choose the Yamaha USB input, then record again.");
+      return;
+    }
+    for (const track of audioTracks) mixed.addTrack(track);
+    nodes.current.mixed = mixed;
+    attachProgrammeAudio(dest.stream);
+
     const chunks: Blob[] = [];
-    const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
-      ? "video/webm;codecs=vp9,opus"
-      : "video/webm";
-    const recorder = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 3_500_000 });
+    const mime = pickMime();
+    const recorder = new MediaRecorder(mixed, {
+      mimeType: mime || undefined,
+      audioBitsPerSecond: 192_000,
+      videoBitsPerSecond: 3_500_000,
+    });
     recorder.ondataavailable = (ev) => {
       if (ev.data.size) chunks.push(ev.data);
     };
+    recorder.onerror = () => {
+      setError("Recording failed. Try Chrome or Edge, and confirm the mixer is selected.");
+      setRecording(false);
+    };
     recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: mime });
+      const blob = new Blob(chunks, { type: mime || "video/webm" });
       if (recordingUrl) URL.revokeObjectURL(recordingUrl);
       setRecordingUrl(URL.createObjectURL(blob));
       setRecording(false);
     };
     nodes.current.recorder = recorder;
     nodes.current.chunks = chunks;
-    recorder.start(500);
+    recorder.start(250);
     setRecording(true);
-  }, [recordingUrl, status]);
+  }, [attachProgrammeAudio, recordingUrl]);
 
   const stopRecording = useCallback(() => {
     const rec = nodes.current.recorder;
@@ -375,7 +525,10 @@ export function useBroadcastStudio() {
 
   useEffect(() => {
     void listDevices().catch(() => undefined);
+    const onChange = () => void listDevices().catch(() => undefined);
+    navigator.mediaDevices?.addEventListener?.("devicechange", onChange);
     return () => {
+      navigator.mediaDevices?.removeEventListener?.("devicechange", onChange);
       stopGraph();
     };
   }, [listDevices, stopGraph]);
@@ -389,20 +542,25 @@ export function useBroadcastStudio() {
   return {
     videoRef,
     canvasRef,
+    programmeAudioRef,
     status,
     error,
     cameras,
     mics,
     cameraId,
     micId,
-    setCameraId,
-    setMicId,
+    selectCamera,
+    selectMic,
     look,
     setLook,
     meters,
     recording,
     recordingUrl,
     elapsedSec,
+    monitor,
+    setMonitor,
+    busySource,
+    refreshDevices: listDevices,
     start,
     stop,
     startRecording,

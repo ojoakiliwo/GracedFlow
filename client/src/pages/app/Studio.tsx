@@ -5,6 +5,7 @@ import {
   Mic,
   MonitorPlay,
   Radio,
+  RefreshCw,
   Square,
   Video,
 } from "lucide-react";
@@ -97,6 +98,7 @@ export default function Studio() {
           <Card className="overflow-hidden bg-ink-950 p-0">
             <div className="relative aspect-video bg-black">
               <video ref={studio.videoRef} className="hidden" muted playsInline />
+              <audio ref={studio.programmeAudioRef} className="hidden" playsInline />
               <canvas ref={studio.canvasRef} className="h-full w-full object-contain" />
               {!live && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-brand-100">
@@ -109,6 +111,16 @@ export default function Studio() {
                   <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
                   Recording
                 </span>
+              )}
+              {live && (
+                <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-black/70 px-2.5 py-1 text-[11px] text-white">
+                    {studio.cameras.find((d) => d.deviceId === studio.cameraId)?.label || "Camera"}
+                  </span>
+                  <span className="rounded-full bg-black/70 px-2.5 py-1 text-[11px] text-white">
+                    {studio.mics.find((d) => d.deviceId === studio.micId)?.label || "Audio"}
+                  </span>
+                </div>
               )}
             </div>
           </Card>
@@ -140,7 +152,11 @@ export default function Studio() {
           {studio.recordingUrl && (
             <Card className="p-4">
               <p className="mb-2 text-sm font-medium text-ink-800">Last recording</p>
-              <video src={studio.recordingUrl} controls className="w-full rounded-xl" />
+              <video src={studio.recordingUrl} controls playsInline className="w-full rounded-xl" />
+              <p className="mt-2 text-xs text-ink-500">
+                Turn the player volume up. If this is still silent, the recording was made on a
+                source with no programme — switch to the Yamaha USB input and record again.
+              </p>
               <a
                 href={studio.recordingUrl}
                 download="igc-broadcast.webm"
@@ -154,15 +170,29 @@ export default function Studio() {
 
         <div className="space-y-4 xl:col-span-2">
           <Card className="space-y-4 p-5">
-            <div className="flex items-center gap-2 text-ink-800">
-              <Video className="h-4 w-4 text-brand-600" />
-              <h2 className="text-sm font-semibold">Sources</h2>
+            <div className="flex items-center justify-between gap-2 text-ink-800">
+              <div className="flex items-center gap-2">
+                <Video className="h-4 w-4 text-brand-600" />
+                <h2 className="text-sm font-semibold">Sources</h2>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void studio.refreshDevices()}
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              </Button>
             </div>
-            <Field label="Camera">
+            <p className="text-xs text-ink-500">
+              Camera and audio are separate. Plug the Yamaha mixer in by USB, start the studio,
+              then pick that USB input here — you can switch while on air.
+            </p>
+            <Field label="Camera / video">
               <Select
                 value={studio.cameraId}
-                onChange={(e) => studio.setCameraId(e.target.value)}
-                disabled={live}
+                disabled={studio.busySource === "camera"}
+                onChange={(e) => void studio.selectCamera(e.target.value)}
               >
                 {studio.cameras.length === 0 && <option value="">Allow camera to list devices</option>}
                 {studio.cameras.map((d) => (
@@ -172,13 +202,18 @@ export default function Studio() {
                 ))}
               </Select>
             </Field>
-            <Field label="Microphone">
+            <Field
+              label="Audio / mixer"
+              hint="Choose the Yamaha (or USB Audio) line, not the laptop microphone."
+            >
               <Select
                 value={studio.micId}
-                onChange={(e) => studio.setMicId(e.target.value)}
-                disabled={live}
+                disabled={studio.busySource === "mic"}
+                onChange={(e) => void studio.selectMic(e.target.value)}
               >
-                {studio.mics.length === 0 && <option value="">Allow microphone to list devices</option>}
+                {studio.mics.length === 0 && (
+                  <option value="">Allow microphone to list mixers</option>
+                )}
                 {studio.mics.map((d) => (
                   <option key={d.deviceId} value={d.deviceId}>
                     {d.label}
@@ -186,6 +221,14 @@ export default function Studio() {
                 ))}
               </Select>
             </Field>
+            <label className="flex items-center gap-2 text-sm text-ink-700">
+              <input
+                type="checkbox"
+                checked={studio.monitor}
+                onChange={(e) => studio.setMonitor(e.target.checked)}
+              />
+              Hear programme in these speakers / headphones
+            </label>
           </Card>
 
           <Card className="space-y-3 p-5">
