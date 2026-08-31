@@ -21,6 +21,7 @@ import {
   type NamedDevice,
 } from "./studioDevices";
 import { fetchVerseText, mergeBibleHits, parseBibleReferences, type BibleHit } from "./bibleRefs";
+import { appendSpokenWindow, searchQuotesLocal, searchQuotesRemote } from "./scriptureSearch";
 import {
   EMPTY_OVERLAY,
   drawProgrammeOverlay,
@@ -28,7 +29,7 @@ import {
 } from "./studioOverlays";
 import {
   getSpeechRecognitionCtor,
-  transcriptFromSpeechEvent,
+  speechChunkFromEvent,
   type StudioSpeechRecognition,
 } from "./studioSpeech";
 
@@ -125,6 +126,9 @@ export function useBroadcastStudio() {
   const bibleHitsRef = useRef<BibleHit[]>([]);
   const speechHitsRef = useRef<BibleHit[]>([]);
   const overlayHitsRef = useRef<BibleHit[]>([]);
+  const spokenBufferRef = useRef("");
+  const quoteTimerRef = useRef<number | null>(null);
+  const quoteSearchGen = useRef(0);
   const listenRef = useRef(false);
   const recognitionRef = useRef<StudioSpeechRecognition | null>(null);
   const nodes = useRef<{
@@ -176,6 +180,8 @@ export function useBroadcastStudio() {
   const [bibleHits, setBibleHits] = useState<BibleHit[]>([]);
   const [listening, setListening] = useState(false);
   const [postingVerse, setPostingVerse] = useState(false);
+  const [searchingQuotes, setSearchingQuotes] = useState(false);
+  const [selectedVerseRefs, setSelectedVerseRefs] = useState<string[]>([]);
 
   lookRef.current = look;
   overlayRef.current = overlay;
@@ -194,19 +200,63 @@ export function useBroadcastStudio() {
   const publishBibleHits = useCallback(() => {
     bibleHitsRef.current = mergeBibleHits(speechHitsRef.current, overlayHitsRef.current);
     setBibleHits([...bibleHitsRef.current]);
+    setSelectedVerseRefs((prev) => prev.filter((id) => bibleHitsRef.current.some((h) => h.display === id)));
   }, []);
 
+  const searchSpokenQuotes = useCallback(
+    async (spoken: string) => {
+      const local = searchQuotesLocal(spoken);
+      if (local.length) {
+        speechHitsRef.current = mergeBibleHits(speechHitsRef.current, local);
+        publishBibleHits();
+      }
+      const gen = ++quoteSearchGen.current;
+      setSearchingQuotes(true);
+      try {
+        const remote = await searchQuotesRemote(spoken);
+        if (gen !== quoteSearchGen.current) return;
+        if (remote.length) {
+          speechHitsRef.current = mergeBibleHits(speechHitsRef.current, remote);
+          publishBibleHits();
+        }
+      } finally {
+        if (gen === quoteSearchGen.current) setSearchingQuotes(false);
+      }
+    },
+    [publishBibleHits],
+  );
+
+  const scheduleQuoteSearch = useCallback(
+    (spoken: string) => {
+      if (quoteTimerRef.current != null) window.clearTimeout(quoteTimerRef.current);
+      quoteTimerRef.current = window.setTimeout(() => {
+        void searchSpokenQuotes(spoken);
+      }, 500);
+    },
+    [searchSpokenQuotes],
+  );
+
   const ingestTranscript = useCallback((text: string) => {
-    const found = parseBibleReferences(text);
-    if (!found.length) return;
-    speechHitsRef.current = mergeBibleHits(speechHitsRef.current, found);
-    publishBibleHits();
-  }, [publishBibleHits]);
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const found = parseBibleReferences(trimmed);
+    if (found.length) {
+      speechHitsRef.current = mergeBibleHits(speechHitsRef.current, found);
+      publishBibleHits();
+    }
+    spokenBufferRef.current = appendSpokenWindow(spokenBufferRef.current, trimmed);
+    scheduleQuoteSearch(spokenBufferRef.current);
+  }, [publishBibleHits, scheduleQuoteSearch]);
 
   const ingestOverlayText = useCallback((headline: string, body: string) => {
-    overlayHitsRef.current = parseBibleReferences(`${headline} ${body}`);
+    const combined = `${headline} ${body}`.trim();
+    overlayHitsRef.current = mergeBibleHits(
+      parseBibleReferences(combined),
+      searchQuotesLocal(combined),
+    );
     publishBibleHits();
-  }, [publishBibleHits]);
+    if (combined.split(/\s+/).length >= 6) scheduleQuoteSearch(combined);
+  }, [publishBibleHits, scheduleQuoteSearch]);
 
   const stopListening = useCallback(() => {
     listenRef.current = false;
@@ -230,7 +280,7 @@ export function useBroadcastStudio() {
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = "en-US";
-    rec.onresult = (ev) => ingestTranscript(transcriptFromSpeechEvent(ev));
+    rec.onresult = (ev) => ingestTranscript(speechChunkFromEvent(ev).text);
     rec.onerror = () => {
       /* keep the toggle available; the operator can stop listening */
     };
@@ -647,14 +697,15 @@ export function useBroadcastStudio() {
   }, []);
 
   const postBibleVerses = useCallback(async () => {
-    const pending = bibleHitsRef.current;
+    const selected = new Set(selectedVerseRefs);
+    const pending = bibleHitsRef.current.filter((h) => selected.has(h.display));
     if (!pending.length) return;
     setPostingVerse(true);
     try {
       const lines: string[] = [];
       for (const hit of pending) {
         const payload = await fetchVerseText(hit);
-        lines.push(payload.text ? `${hit.display} — ${payload.text}` : hit.display);
+        lines.push(payload.text ? `${hit.display} — ${payload.text}` : hit.snippet || hit.display);
       }
       setOverlay({
         visible: true,
@@ -665,13 +716,21 @@ export function useBroadcastStudio() {
     } finally {
       setPostingVerse(false);
     }
+  }, [selectedVerseRefs]);
+
+  const toggleVerseHit = useCallback((display: string) => {
+    setSelectedVerseRefs((prev) =>
+      prev.includes(display) ? prev.filter((id) => id !== display) : [...prev, display],
+    );
   }, []);
 
   const dismissBibleHits = useCallback(() => {
     speechHitsRef.current = [];
     overlayHitsRef.current = [];
     bibleHitsRef.current = [];
+    spokenBufferRef.current = "";
     setBibleHits([]);
+    setSelectedVerseRefs([]);
   }, []);
 
   useEffect(() => {
@@ -682,6 +741,7 @@ export function useBroadcastStudio() {
       navigator.mediaDevices?.removeEventListener?.("devicechange", onChange);
       stopListening();
       stopGraph();
+      if (quoteTimerRef.current != null) window.clearTimeout(quoteTimerRef.current);
     };
   }, [listDevices, stopGraph, stopListening]);
 
@@ -719,8 +779,10 @@ export function useBroadcastStudio() {
     busySource,
     overlay,
     bibleHits,
+    selectedVerseRefs,
     listening,
     postingVerse,
+    searchingQuotes,
     refreshDevices: listDevices,
     start,
     stop,
@@ -730,6 +792,7 @@ export function useBroadcastStudio() {
     putOverlayOnAir,
     clearOverlay,
     postBibleVerses,
+    toggleVerseHit,
     startListening,
     stopListening,
     dismissBibleHits,

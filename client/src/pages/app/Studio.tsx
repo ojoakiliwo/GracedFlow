@@ -82,7 +82,9 @@ export default function Studio() {
   const studio = useBroadcastStudio();
   const live = studio.status === "live";
   const suggested = suggestDesigns(studio.overlay.headline, studio.overlay.body);
-  const verseLabel = studio.bibleHits.length === 1 ? "Post bible verse" : "Post bible verses";
+  const selectedCount = studio.selectedVerseRefs.length;
+  const verseLabel =
+    selectedCount === 1 ? "Post selected verse" : selectedCount > 1 ? "Post selected verses" : "Post selected verse";
 
   function patchLook(partial: Partial<VideoLook>) {
     studio.setLook((look) => ({ ...look, ...partial }));
@@ -276,27 +278,55 @@ export default function Studio() {
               )}
             </div>
             <p className="text-xs text-ink-500">
-              When the speaker names a passage, it is collected here. Nothing is shown on the
-              picture until you click {verseLabel.toLowerCase()}. Listening uses the browser
-              microphone in Chrome or Edge — typed references in the text box are also found.
+              Listening watches for a named reference and for the words of a verse. If several
+              passages could match, pick the one that fits, then post. Nothing is shown on the
+              picture until you click {verseLabel.toLowerCase()}. Chrome or Edge can listen;
+              typed words in the boxes above are also searched.
             </p>
             {studio.listening && (
-              <p className="text-xs font-medium text-brand-700">Listening for bible references…</p>
+              <p className="text-xs font-medium text-brand-700">Listening for scripture…</p>
+            )}
+            {studio.searchingQuotes && (
+              <p className="text-xs font-medium text-brand-700">Searching the scriptures…</p>
             )}
             {studio.bibleHits.length === 0 ? (
               <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm text-ink-500">
-                No passages yet. Speak or type one, for example John 3:16.
+                No passages yet. Speak or type the words, for example “ask, and it shall be given
+                you”, or a reference such as John 3:16.
               </p>
             ) : (
-              <ul className="flex flex-wrap gap-2">
-                {studio.bibleHits.map((hit) => (
-                  <li
-                    key={hit.display}
-                    className="rounded-full bg-gold-100 px-3 py-1 text-sm font-medium text-gold-900"
-                  >
-                    {hit.display}
-                  </li>
-                ))}
+              <ul className="space-y-2">
+                {studio.bibleHits.map((hit) => {
+                  const on = studio.selectedVerseRefs.includes(hit.display);
+                  return (
+                    <li key={hit.display}>
+                      <button
+                        type="button"
+                        onClick={() => studio.toggleVerseHit(hit.display)}
+                        className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
+                          on
+                            ? "border-gold-500 bg-gold-50 ring-2 ring-gold-200"
+                            : "border-ink-200 bg-white hover:border-gold-300"
+                        }`}
+                      >
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-semibold text-ink-900">{hit.display}</span>
+                          <span className="text-[11px] font-medium text-gold-800">
+                            {on ? "Selected" : "Tap to select"}
+                          </span>
+                        </span>
+                        {hit.snippet && (
+                          <span className="mt-1 block text-xs leading-relaxed text-ink-600">
+                            {hit.snippet}
+                          </span>
+                        )}
+                        <span className="mt-1 block text-[11px] text-ink-400">
+                          {hit.source === "quote" ? "From the words spoken" : "Named by reference"}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
             <div className="flex flex-wrap gap-2">
@@ -304,7 +334,7 @@ export default function Studio() {
                 type="button"
                 variant="gold"
                 onClick={() => void studio.postBibleVerses()}
-                disabled={!studio.bibleHits.length}
+                disabled={!selectedCount}
                 loading={studio.postingVerse}
               >
                 {verseLabel}

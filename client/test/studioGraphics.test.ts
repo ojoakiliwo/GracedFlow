@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fetchVerseText, mergeBibleHits, parseBibleReferences } from "../src/lib/bibleRefs";
 import { drawProgrammeOverlay, fitWrappedText, suggestDesigns, wrapText } from "../src/lib/studioOverlays";
 import { transcriptFromSpeechEvent } from "../src/lib/studioSpeech";
+import { searchQuotesLocal, searchQuotesRemote, scoreQuoteMatch } from "../src/lib/scriptureSearch";
 
 describe("Bible reference parsing", () => {
   it("finds ordinary spoken and written references", () => {
@@ -120,5 +121,43 @@ describe("Spoken verse capture", () => {
       results: [{ 0: { transcript: "open John 3:16" } }],
     });
     expect(text).toBe("open John 3:16");
+  });
+});
+
+describe("Scripture quoted by words", () => {
+  const spoken =
+    "the bible says Ask, it shall be given unto you, seek, you will find, knock and the door";
+
+  it("finds Matthew 7:7 and Luke 11:9 from the spoken words without a reference", () => {
+    const hits = searchQuotesLocal(spoken);
+    expect(hits.map((h) => h.display)).toContain("Matthew 7:7");
+    expect(hits.map((h) => h.display)).toContain("Luke 11:9");
+  });
+
+  it("does not treat ordinary church talk as a verse", () => {
+    expect(searchQuotesLocal("We thank God for john in the choir this morning")).toEqual([]);
+  });
+
+  it("ranks the knock-and-ask saying above a weak overlap", () => {
+    const ask = scoreQuoteMatch(spoken, "Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you:");
+    const weak = scoreQuoteMatch(spoken, "The Lord is my shepherd; I shall not want.");
+    expect(ask).toBeGreaterThan(weak);
+    expect(weak).toBe(0);
+  });
+
+  it("keeps remote search results that match the spoken words", async () => {
+    const fetcher = async () =>
+      ({
+        ok: true,
+        json: async () => ({
+          results: [
+            { book: 40, chapter: 7, verse: 7, text: "Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you:" },
+            { book: 42, chapter: 11, verse: 9, text: "Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you." },
+            { book: 19, chapter: 2, verse: 8, text: "Ask of me, and I shall give thee the heathen for thine inheritance." },
+          ],
+        }),
+      }) as Response;
+    const hits = await searchQuotesRemote(spoken, fetcher);
+    expect(hits.map((h) => h.display)).toEqual(["Matthew 7:7", "Luke 11:9"]);
   });
 });

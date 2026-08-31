@@ -32,10 +32,19 @@ export function transcriptFromSpeechEvent(ev: {
   resultIndex: number;
   results: SpeechResultList;
 }): string {
+  return speechChunkFromEvent(ev).text;
+}
+
+export function speechChunkFromEvent(ev: {
+  resultIndex: number;
+  results: SpeechResultList;
+}): { text: string; isFinal: boolean } {
   let chunk = "";
+  let isFinal = false;
   for (let i = ev.resultIndex; i < ev.results.length; i++) {
     const row = ev.results[i] ?? ev.results.item?.(i);
     chunk += row?.[0]?.transcript ?? "";
+    if (row?.isFinal) isFinal = true;
   }
-  return chunk;
+  return { text: chunk, isFinal };
 }

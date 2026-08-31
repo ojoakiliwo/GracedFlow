@@ -4,6 +4,8 @@ export type BibleHit = {
   verse?: number;
   verseEnd?: number;
   display: string;
+  snippet?: string;
+  source?: "reference" | "quote";
 };
 
 type BookEntry = { name: string; aliases: string[] };
@@ -77,6 +79,8 @@ const BOOKS: BookEntry[] = [
   { name: "Revelation", aliases: ["revelation", "rev", "revelations"] },
 ];
 
+export const CANON_BOOKS = BOOKS.map((b) => b.name);
+
 const ALIAS_TO_BOOK = (() => {
   const map = new Map<string, string>();
   for (const book of BOOKS) {
@@ -122,6 +126,7 @@ export function parseBibleReferences(text: string): BibleHit[] {
       verse,
       verseEnd: verseEnd && verse && verseEnd > verse ? verseEnd : undefined,
       display: "",
+      source: "reference",
     };
     hit.display = formatBibleHit(hit);
     if (seen.has(hit.display)) continue;
@@ -182,7 +187,12 @@ export function mergeBibleHits(existing: BibleHit[], incoming: BibleHit[]): Bibl
   let next = [...existing];
   for (const hit of incoming) {
     next = next.filter((old) => !isTypingPrefix(old, hit));
-    if (next.some((h) => h.display === hit.display)) continue;
+    if (next.some((h) => h.display === hit.display)) {
+      next = next.map((old) =>
+        old.display === hit.display && !old.snippet && hit.snippet ? { ...old, ...hit } : old,
+      );
+      continue;
+    }
     if (next.some((h) => isTypingPrefix(hit, h))) continue;
     next.push(hit);
   }
