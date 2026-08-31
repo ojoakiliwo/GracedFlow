@@ -1,12 +1,19 @@
 import { useBroadcastStudio, type VideoLook } from "../../lib/useBroadcastStudio";
-import { Badge, Button, Card, Field, PageHeader, Select } from "../../components/ui";
+import { Badge, Button, Card, Field, Input, PageHeader, Select, Textarea } from "../../components/ui";
 import {
+  OVERLAY_DESIGNS,
+  suggestDesigns,
+  type OverlayDesignId,
+} from "../../lib/studioOverlays";
+import {
+  BookOpen,
   Clapperboard,
   Mic,
   MonitorPlay,
   Radio,
   RefreshCw,
   Square,
+  Type,
   Video,
 } from "lucide-react";
 
@@ -74,9 +81,15 @@ function SliderRow({
 export default function Studio() {
   const studio = useBroadcastStudio();
   const live = studio.status === "live";
+  const suggested = suggestDesigns(studio.overlay.headline, studio.overlay.body);
+  const verseLabel = studio.bibleHits.length === 1 ? "Post bible verse" : "Post bible verses";
 
   function patchLook(partial: Partial<VideoLook>) {
     studio.setLook((look) => ({ ...look, ...partial }));
+  }
+
+  function chooseDesign(id: OverlayDesignId) {
+    studio.updateOverlay({ design: id });
   }
 
   return (
@@ -110,6 +123,11 @@ export default function Studio() {
                 <span className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
                   Recording
+                </span>
+              )}
+              {live && studio.overlay.visible && (
+                <span className="absolute right-4 top-4 rounded-full bg-gold-500 px-3 py-1 text-[11px] font-semibold text-white">
+                  Text on air
                 </span>
               )}
               {live && (
@@ -149,6 +167,159 @@ export default function Studio() {
           {studio.error && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{studio.error}</p>
           )}
+
+          <Card className="space-y-4 p-5">
+            <div className="flex items-center gap-2 text-ink-800">
+              <Type className="h-4 w-4 text-brand-600" />
+              <h2 className="text-sm font-semibold">On-air text</h2>
+            </div>
+            <p className="text-xs text-ink-500">
+              Type a welcome, news line, or announcement. Suggested designs appear from the
+              words — pick the one that fits, then put it on the picture.
+            </p>
+            <Field label="Headline">
+              <Input
+                value={studio.overlay.headline}
+                onChange={(e) => studio.updateOverlay({ headline: e.target.value })}
+                placeholder="Welcome · Midweek service · John 3:16"
+              />
+            </Field>
+            <Field label="Message">
+              <Textarea
+                value={studio.overlay.body}
+                onChange={(e) => studio.updateOverlay({ body: e.target.value })}
+                placeholder="The words you want on screen"
+              />
+            </Field>
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-400">
+                Suggested for this message
+              </p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {suggested.map((id) => {
+                  const design = OVERLAY_DESIGNS.find((d) => d.id === id);
+                  if (!design) return null;
+                  const active = studio.overlay.design === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => chooseDesign(id)}
+                      className={`rounded-xl border px-3 py-2 text-left transition ${
+                        active
+                          ? "border-brand-500 bg-brand-50 ring-2 ring-brand-200"
+                          : "border-ink-200 bg-white hover:border-brand-300"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 text-sm font-medium text-ink-800">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ background: design.swatch }}
+                        />
+                        {design.label}
+                      </span>
+                      <span className="mt-1 block text-[11px] text-ink-500">{design.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-400">
+                All designs
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {OVERLAY_DESIGNS.map((design) => (
+                  <button
+                    key={design.id}
+                    type="button"
+                    onClick={() => chooseDesign(design.id)}
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                      studio.overlay.design === design.id
+                        ? "bg-brand-700 text-white"
+                        : "bg-ink-100 text-ink-700 hover:bg-ink-200"
+                    }`}
+                  >
+                    {design.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                onClick={studio.putOverlayOnAir}
+                disabled={!studio.overlay.headline.trim() && !studio.overlay.body.trim()}
+              >
+                Put on air
+              </Button>
+              <Button type="button" variant="outline" onClick={studio.clearOverlay}>
+                Clear from picture
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="space-y-4 p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-ink-800">
+                <BookOpen className="h-4 w-4 text-brand-600" />
+                <h2 className="text-sm font-semibold">Scripture heard</h2>
+              </div>
+              {studio.listening ? (
+                <Button type="button" variant="danger" size="sm" onClick={studio.stopListening}>
+                  Stop listening
+                </Button>
+              ) : (
+                <Button type="button" variant="secondary" size="sm" onClick={studio.startListening}>
+                  Listen for verses
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-ink-500">
+              When the speaker names a passage, it is collected here. Nothing is shown on the
+              picture until you click {verseLabel.toLowerCase()}. Listening uses the browser
+              microphone in Chrome or Edge — typed references in the text box are also found.
+            </p>
+            {studio.listening && (
+              <p className="text-xs font-medium text-brand-700">Listening for bible references…</p>
+            )}
+            {studio.bibleHits.length === 0 ? (
+              <p className="rounded-lg bg-ink-50 px-3 py-2 text-sm text-ink-500">
+                No passages yet. Speak or type one, for example John 3:16.
+              </p>
+            ) : (
+              <ul className="flex flex-wrap gap-2">
+                {studio.bibleHits.map((hit) => (
+                  <li
+                    key={hit.display}
+                    className="rounded-full bg-gold-100 px-3 py-1 text-sm font-medium text-gold-900"
+                  >
+                    {hit.display}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="gold"
+                onClick={() => void studio.postBibleVerses()}
+                disabled={!studio.bibleHits.length}
+                loading={studio.postingVerse}
+              >
+                {verseLabel}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={studio.dismissBibleHits}
+                disabled={!studio.bibleHits.length}
+              >
+                Dismiss
+              </Button>
+            </div>
+          </Card>
+
           {studio.recordingUrl && (
             <Card className="p-4">
               <p className="mb-2 text-sm font-medium text-ink-800">Last recording</p>
@@ -237,12 +408,12 @@ export default function Studio() {
               <h2 className="text-sm font-semibold">Living sound</h2>
             </div>
             <p className="text-xs text-ink-500">
-              Noise gate, loudness and compression move with the room — a quiet prayer and a loud
-              chorus are not treated the same.
+              Quiet prayer and choir stay in the mix — we do not mute low words. Gain only eases
+              shouting so car stereos, headsets, phones and computers hear a calm programme.
             </p>
             <Meter label="Mic in" value={studio.meters.inputRms * 3.2} color="bg-ink-400" />
             <Meter label="Programme out" value={studio.meters.outputRms * 3.2} color="bg-brand-600" />
-            <Meter label="Gate (open)" value={studio.meters.gate} color="bg-emerald-500" />
+            <Meter label="Voice kept (open)" value={studio.meters.gate} color="bg-emerald-500" />
             <dl className="grid grid-cols-2 gap-2 pt-1 text-xs text-ink-600">
               <div className="rounded-lg bg-ink-50 px-2 py-1.5">
                 Auto gain {studio.meters.agcDb.toFixed(1)} dB
@@ -313,9 +484,10 @@ export default function Studio() {
           </Card>
 
           <p className="text-xs leading-relaxed text-ink-400">
-            This is the in-browser desk: capture, living audio, picture grade, and a local recording.
-            Sending that programme to YouTube or Facebook Live the way OBS does still needs a stream
-            ingest (RTMP/WHIP) in a later step — a Vercel site cannot open an RTMP socket itself.
+            This is the in-browser desk: capture, living audio, picture grade, on-air text, and a
+            local recording. Sending that programme to YouTube or Facebook Live the way OBS does
+            still needs a stream ingest (RTMP/WHIP) in a later step — a Vercel site cannot open an
+            RTMP socket itself.
           </p>
         </div>
       </div>

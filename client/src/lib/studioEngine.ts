@@ -1,8 +1,9 @@
-/** Adaptive broadcast DSP — settings follow the live signal, they are not a one-time preset. */
+/** Adaptive broadcast DSP — follow the room, but never mute a quiet voice or choir. */
 
-export const AUDIO_TARGET_RMS = 0.12;
-export const AGC_MIN = 0.4;
-export const AGC_MAX = 7.5;
+export const AGC_MIN = 0.55;
+export const AGC_MAX = 1.45;
+export const COMFORT_RMS_HIGH = 0.2;
+export const SAFETY_PEAK = 0.58;
 
 export type AdaptiveAudioState = {
   noiseFloor: number;
@@ -15,9 +16,9 @@ export type AdaptiveAudioState = {
 export const INITIAL_AUDIO_STATE: AdaptiveAudioState = {
   noiseFloor: 0.008,
   gate: 1,
-  agcGain: 1.4,
-  compressorThresholdDb: -14,
-  compressorRatio: 3,
+  agcGain: 1,
+  compressorThresholdDb: -8,
+  compressorRatio: 1.8,
 };
 
 export function rmsFromSamples(samples: ArrayLike<number>): number {
@@ -36,7 +37,6 @@ export function peakFromSamples(samples: ArrayLike<number>): number {
   return peak;
 }
 
-/** Tracks the quiet-floor so the gate can rise/fall as the room changes. */
 export function updateNoiseFloor(prev: number, rms: number): number {
   if (rms < prev * 1.9 || rms < 0.018) {
     return prev * 0.9 + rms * 0.1;
@@ -44,19 +44,30 @@ export function updateNoiseFloor(prev: number, rms: number): number {
   return prev * 0.997 + Math.min(rms, prev) * 0.003;
 }
 
+/**
+ * Transparency, not a mute. Quiet prayer and choir stay in the mix.
+ * Only a little hiss is eased — never pulled to silence.
+ */
 export function nextGate(rms: number, noiseFloor: number, prev: number): number {
-  const threshold = Math.max(0.0035, noiseFloor * 3.4);
-  let target = 0.015;
-  if (rms > threshold) target = 1;
-  else if (rms > threshold * 0.55) target = 0.4;
-  return prev * 0.7 + target * 0.3;
+  const hiss = Math.max(0.0022, noiseFloor * 1.2);
+  const target = rms < hiss ? 0.82 : 1;
+  const mix = target > prev ? 0.22 : 0.08;
+  return prev * (1 - mix) + target * mix;
 }
 
-export function nextAgcGain(rms: number, gate: number, prevGain: number): number {
-  const effective = Math.max(0.0009, rms * Math.max(gate, 0.08));
-  const desired = AUDIO_TARGET_RMS / effective;
+/**
+ * Do not chase one loudness. Leave quiet passages quiet; ease only the extremes
+ * so car stereos, phones and headsets are not blasted.
+ */
+export function nextAgcGain(rms: number, peak: number, prevGain: number): number {
+  let desired = prevGain;
+  if (peak > SAFETY_PEAK) {
+    desired = prevGain * (SAFETY_PEAK / peak);
+  } else if (rms > COMFORT_RMS_HIGH) {
+    desired = prevGain * 0.97;
+  }
   const clamped = Math.min(AGC_MAX, Math.max(AGC_MIN, desired));
-  return prevGain + (clamped - prevGain) * 0.09;
+  return prevGain + (clamped - prevGain) * 0.05;
 }
 
 export function nextCompressor(peak: number, rms: number): {
@@ -64,9 +75,9 @@ export function nextCompressor(peak: number, rms: number): {
   ratio: number;
 } {
   const crest = peak / Math.max(0.001, rms);
-  const thresholdDb = peak >= 0.62 ? -20 : peak >= 0.35 ? -15 : -11;
-  const ratio = crest >= 9 ? 7 : crest >= 4.5 ? 4.2 : 2.6;
-  return { thresholdDb, ratio };
+  if (peak >= 0.7 || (rms >= 0.22 && crest >= 6)) return { thresholdDb: -14, ratio: 3.2 };
+  if (peak >= 0.48) return { thresholdDb: -11, ratio: 2.4 };
+  return { thresholdDb: -6, ratio: 1.6 };
 }
 
 export function tickAudio(
@@ -76,14 +87,14 @@ export function tickAudio(
 ): AdaptiveAudioState {
   const noiseFloor = updateNoiseFloor(state.noiseFloor, rms);
   const gate = nextGate(rms, noiseFloor, state.gate);
-  const agcGain = nextAgcGain(rms, gate, state.agcGain);
+  const agcGain = nextAgcGain(rms, peak, state.agcGain);
   const comp = nextCompressor(peak, rms);
   return {
     noiseFloor,
     gate,
     agcGain,
-    compressorThresholdDb: state.compressorThresholdDb * 0.85 + comp.thresholdDb * 0.15,
-    compressorRatio: state.compressorRatio * 0.85 + comp.ratio * 0.15,
+    compressorThresholdDb: state.compressorThresholdDb * 0.9 + comp.thresholdDb * 0.1,
+    compressorRatio: state.compressorRatio * 0.9 + comp.ratio * 0.1,
   };
 }
 
@@ -98,7 +109,6 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
-/** Average luma 0–255. Dark rooms lift brightness; harsh light eases it back. */
 export function nextVideoAuto(luma: number, prev: VideoAutoState): VideoAutoState {
   const target = 120;
   const delta = (target - luma) / 255;

@@ -20,6 +20,17 @@ import {
   deviceIdFromStream,
   type NamedDevice,
 } from "./studioDevices";
+import { fetchVerseText, mergeBibleHits, parseBibleReferences, type BibleHit } from "./bibleRefs";
+import {
+  EMPTY_OVERLAY,
+  drawProgrammeOverlay,
+  type ProgrammeOverlay,
+} from "./studioOverlays";
+import {
+  getSpeechRecognitionCtor,
+  transcriptFromSpeechEvent,
+  type StudioSpeechRecognition,
+} from "./studioSpeech";
 
 export type StudioStatus = "idle" | "live" | "error";
 
@@ -105,11 +116,15 @@ export function useBroadcastStudio() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const programmeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const overlayRef = useRef<ProgrammeOverlay>({ ...EMPTY_OVERLAY });
   const audioState = useRef<AdaptiveAudioState>({ ...INITIAL_AUDIO_STATE });
   const videoAuto = useRef<VideoAutoState>({ ...INITIAL_VIDEO_AUTO });
   const lookRef = useRef<VideoLook>({ ...DEFAULT_LOOK });
   const statusRef = useRef<StudioStatus>("idle");
   const monitorRef = useRef(false);
+  const bibleHitsRef = useRef<BibleHit[]>([]);
+  const listenRef = useRef(false);
+  const recognitionRef = useRef<StudioSpeechRecognition | null>(null);
   const nodes = useRef<{
     ctx?: AudioContext;
     source?: MediaStreamAudioSourceNode;
@@ -147,7 +162,7 @@ export function useBroadcastStudio() {
     noiseFloor: 0,
     gate: 1,
     agcDb: 0,
-    compressorDb: -14,
+    compressorDb: -8,
     luma: 120,
   });
   const [recording, setRecording] = useState(false);
@@ -155,8 +170,13 @@ export function useBroadcastStudio() {
   const [elapsedSec, setElapsedSec] = useState(0);
   const [monitor, setMonitorState] = useState(false);
   const [busySource, setBusySource] = useState<"camera" | "mic" | null>(null);
+  const [overlay, setOverlay] = useState<ProgrammeOverlay>({ ...EMPTY_OVERLAY });
+  const [bibleHits, setBibleHits] = useState<BibleHit[]>([]);
+  const [listening, setListening] = useState(false);
+  const [postingVerse, setPostingVerse] = useState(false);
 
   lookRef.current = look;
+  overlayRef.current = overlay;
   statusRef.current = status;
   monitorRef.current = monitor;
 
@@ -168,6 +188,61 @@ export function useBroadcastStudio() {
     el.volume = 1;
     if (stream) void el.play().catch(() => undefined);
   }, []);
+
+  const ingestTranscript = useCallback((text: string) => {
+    const found = parseBibleReferences(text);
+    if (!found.length) return;
+    bibleHitsRef.current = mergeBibleHits(bibleHitsRef.current, found);
+    setBibleHits([...bibleHitsRef.current]);
+  }, []);
+
+  const stopListening = useCallback(() => {
+    listenRef.current = false;
+    setListening(false);
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      /* already stopped */
+    }
+    recognitionRef.current = null;
+  }, []);
+
+  const startListening = useCallback(() => {
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) {
+      setError("This browser cannot listen for spoken verses. Type a reference, or use Chrome / Edge.");
+      return;
+    }
+    stopListening();
+    const rec = new Ctor();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    rec.onresult = (ev) => ingestTranscript(transcriptFromSpeechEvent(ev));
+    rec.onerror = () => {
+      /* keep the toggle available; the operator can stop listening */
+    };
+    rec.onend = () => {
+      if (listenRef.current) {
+        try {
+          rec.start();
+        } catch {
+          listenRef.current = false;
+          setListening(false);
+        }
+      }
+    };
+    recognitionRef.current = rec;
+    listenRef.current = true;
+    setListening(true);
+    try {
+      rec.start();
+    } catch (e) {
+      listenRef.current = false;
+      setListening(false);
+      setError(e instanceof Error ? e.message : "Could not start speech recognition.");
+    }
+  }, [ingestTranscript, stopListening]);
 
   const stopGraph = useCallback(() => {
     const n = nodes.current;
@@ -235,6 +310,8 @@ export function useBroadcastStudio() {
     ctx.filter = `brightness(${brightness}) contrast(${contrast}) saturate(${lookNow.saturation}) sepia(${Math.max(0, warmth) * 0.28})`;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     ctx.restore();
+    ctx.filter = "none";
+    drawProgrammeOverlay(ctx, canvas.width, canvas.height, overlayRef.current);
     n.raf = requestAnimationFrame(paint);
   }, []);
 
@@ -251,11 +328,11 @@ export function useBroadcastStudio() {
     const peak = peakFromSamples(bufIn);
     audioState.current = tickAudio(audioState.current, rms, peak);
     const s = audioState.current;
-    if (n.gate) n.gate.gain.setTargetAtTime(Math.max(0.02, s.gate), n.ctx!.currentTime, 0.04);
-    if (n.agc) n.agc.gain.setTargetAtTime(s.agcGain, n.ctx!.currentTime, 0.05);
+    if (n.gate) n.gate.gain.setTargetAtTime(s.gate, n.ctx!.currentTime, 0.08);
+    if (n.agc) n.agc.gain.setTargetAtTime(s.agcGain, n.ctx!.currentTime, 0.18);
     if (n.compressor) {
-      n.compressor.threshold.setTargetAtTime(s.compressorThresholdDb, n.ctx!.currentTime, 0.08);
-      n.compressor.ratio.setTargetAtTime(s.compressorRatio, n.ctx!.currentTime, 0.08);
+      n.compressor.threshold.setTargetAtTime(s.compressorThresholdDb, n.ctx!.currentTime, 0.12);
+      n.compressor.ratio.setTargetAtTime(s.compressorRatio, n.ctx!.currentTime, 0.12);
     }
     setMeters({
       inputRms: rms,
@@ -323,7 +400,7 @@ export function useBroadcastStudio() {
       if (ctx.state === "suspended") await ctx.resume();
       const highpass = ctx.createBiquadFilter();
       highpass.type = "highpass";
-      highpass.frequency.value = 80;
+      highpass.frequency.value = 55;
       highpass.Q.value = 0.7;
       const hum = ctx.createBiquadFilter();
       hum.type = "notch";
@@ -335,19 +412,19 @@ export function useBroadcastStudio() {
       const gate = ctx.createGain();
       gate.gain.value = 1;
       const agc = ctx.createGain();
-      agc.gain.value = 1.4;
+      agc.gain.value = 1;
       const compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.value = -14;
-      compressor.knee.value = 8;
-      compressor.ratio.value = 3;
-      compressor.attack.value = 0.008;
-      compressor.release.value = 0.18;
+      compressor.threshold.value = -8;
+      compressor.knee.value = 12;
+      compressor.ratio.value = 1.8;
+      compressor.attack.value = 0.012;
+      compressor.release.value = 0.28;
       const limiter = ctx.createDynamicsCompressor();
-      limiter.threshold.value = -1.5;
-      limiter.knee.value = 0;
-      limiter.ratio.value = 20;
-      limiter.attack.value = 0.002;
-      limiter.release.value = 0.05;
+      limiter.threshold.value = -3;
+      limiter.knee.value = 4;
+      limiter.ratio.value = 12;
+      limiter.attack.value = 0.003;
+      limiter.release.value = 0.12;
       const analyserOut = ctx.createAnalyser();
       analyserOut.fftSize = 2048;
       const dest = ctx.createMediaStreamDestination();
@@ -412,12 +489,13 @@ export function useBroadcastStudio() {
   ]);
 
   const stop = useCallback(() => {
+    stopListening();
     stopGraph();
     if (videoRef.current) videoRef.current.srcObject = null;
     setStatus("idle");
     setRecording(false);
     setElapsedSec(0);
-  }, [stopGraph]);
+  }, [stopGraph, stopListening]);
 
   const selectCamera = useCallback(
     async (id: string) => {
@@ -523,15 +601,60 @@ export function useBroadcastStudio() {
     if (rec && rec.state === "recording") rec.stop();
   }, []);
 
+  const updateOverlay = useCallback((patch: Partial<ProgrammeOverlay>) => {
+    setOverlay((prev) => {
+      const next = { ...prev, ...patch };
+      if (patch.headline != null || patch.body != null) {
+        ingestTranscript(`${next.headline} ${next.body}`);
+      }
+      return next;
+    });
+  }, [ingestTranscript]);
+
+  const putOverlayOnAir = useCallback(() => {
+    setOverlay((prev) => ({ ...prev, visible: true }));
+  }, []);
+
+  const clearOverlay = useCallback(() => {
+    setOverlay((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  const postBibleVerses = useCallback(async () => {
+    const pending = bibleHitsRef.current;
+    if (!pending.length) return;
+    setPostingVerse(true);
+    try {
+      const lines: string[] = [];
+      for (const hit of pending) {
+        const payload = await fetchVerseText(hit);
+        lines.push(payload.text ? `${hit.display} — ${payload.text}` : hit.display);
+      }
+      setOverlay({
+        visible: true,
+        design: "verse",
+        headline: pending.length === 1 ? pending[0]!.display : "Scripture",
+        body: lines.join("   ·   "),
+      });
+    } finally {
+      setPostingVerse(false);
+    }
+  }, []);
+
+  const dismissBibleHits = useCallback(() => {
+    bibleHitsRef.current = [];
+    setBibleHits([]);
+  }, []);
+
   useEffect(() => {
     void listDevices().catch(() => undefined);
     const onChange = () => void listDevices().catch(() => undefined);
     navigator.mediaDevices?.addEventListener?.("devicechange", onChange);
     return () => {
       navigator.mediaDevices?.removeEventListener?.("devicechange", onChange);
+      stopListening();
       stopGraph();
     };
-  }, [listDevices, stopGraph]);
+  }, [listDevices, stopGraph, stopListening]);
 
   useEffect(() => {
     if (status !== "live") return;
@@ -560,10 +683,21 @@ export function useBroadcastStudio() {
     monitor,
     setMonitor,
     busySource,
+    overlay,
+    bibleHits,
+    listening,
+    postingVerse,
     refreshDevices: listDevices,
     start,
     stop,
     startRecording,
     stopRecording,
+    updateOverlay,
+    putOverlayOnAir,
+    clearOverlay,
+    postBibleVerses,
+    startListening,
+    stopListening,
+    dismissBibleHits,
   };
 }

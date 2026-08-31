@@ -26,29 +26,31 @@ describe("Broadcast studio adaptive engine", () => {
     expect(duringSpeech).toBeLessThan(0.03);
   });
 
-  it("opens the gate for speech and closes it for noise-floor hiss", () => {
+  it("keeps quiet speech and choir open instead of muting them", () => {
     const floor = 0.006;
+    expect(nextGate(0.02, floor, 1)).toBeGreaterThan(0.95);
     let open = 0.2;
-    for (let i = 0; i < 10; i++) open = nextGate(0.12, floor, open);
-    expect(open).toBeGreaterThan(0.85);
-    let closed = 0.8;
-    for (let i = 0; i < 10; i++) closed = nextGate(0.004, floor, closed);
-    expect(closed).toBeLessThan(0.25);
+    for (let i = 0; i < 16; i++) open = nextGate(0.03, floor, open);
+    expect(open).toBeGreaterThan(0.9);
+    let hiss = 1;
+    for (let i = 0; i < 30; i++) hiss = nextGate(0.0012, floor, hiss);
+    expect(hiss).toBeGreaterThan(0.7);
+    expect(hiss).toBeLessThan(1);
   });
 
-  it("raises gain on a quiet talker and eases it on a loud one", () => {
-    const quiet = nextAgcGain(0.03, 1, 1.2);
-    const loud = nextAgcGain(0.4, 1, 1.2);
-    expect(quiet).toBeGreaterThan(loud);
-    expect(quiet).toBeGreaterThan(1.2);
-    expect(loud).toBeLessThan(1.2);
+  it("does not boost a quiet passage; it eases only a loud peak", () => {
+    const quiet = nextAgcGain(0.03, 0.05, 1);
+    const loud = nextAgcGain(0.28, 0.72, 1);
+    expect(quiet).toBeCloseTo(1, 2);
+    expect(loud).toBeLessThan(1);
   });
 
-  it("moves compressor settings when the crest factor changes", () => {
-    const quiet = tickAudio(INITIAL_AUDIO_STATE, 0.05, 0.08);
-    const shout = tickAudio(INITIAL_AUDIO_STATE, 0.2, 0.95);
-    expect(shout.compressorThresholdDb).toBeLessThan(quiet.compressorThresholdDb);
-    expect(shout.compressorRatio).toBeGreaterThan(quiet.compressorRatio);
+  it("tightens the ceiling only when peaks get extreme", () => {
+    const calm = tickAudio(INITIAL_AUDIO_STATE, 0.08, 0.12);
+    const shout = tickAudio(INITIAL_AUDIO_STATE, 0.22, 0.9);
+    expect(shout.compressorThresholdDb).toBeLessThan(calm.compressorThresholdDb);
+    expect(shout.compressorRatio).toBeGreaterThan(calm.compressorRatio);
+    expect(shout.compressorRatio).toBeLessThan(4);
   });
 
   it("lifts video brightness in a dark frame", () => {
@@ -59,10 +61,10 @@ describe("Broadcast studio adaptive engine", () => {
 
   it("keeps adapting across ticks instead of locking a preset", () => {
     let state = { ...INITIAL_AUDIO_STATE };
-    for (let i = 0; i < 24; i++) state = tickAudio(state, 0.02, 0.03);
-    const quietGain = state.agcGain;
-    for (let i = 0; i < 24; i++) state = tickAudio(state, 0.3, 0.55);
-    expect(state.agcGain).toBeLessThan(quietGain);
-    expect(state.gate).toBeGreaterThan(0.8);
+    for (let i = 0; i < 24; i++) state = tickAudio(state, 0.05, 0.08);
+    const calmGain = state.agcGain;
+    for (let i = 0; i < 24; i++) state = tickAudio(state, 0.3, 0.7);
+    expect(state.agcGain).toBeLessThan(calmGain);
+    expect(state.gate).toBeGreaterThan(0.9);
   });
 });
