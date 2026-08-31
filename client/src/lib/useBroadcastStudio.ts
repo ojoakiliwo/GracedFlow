@@ -2,12 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   INITIAL_AUDIO_STATE,
   INITIAL_VIDEO_AUTO,
+  SPEECH_PROFILE,
   dbFromLinear,
   peakFromSamples,
   rmsFromSamples,
+  soundProfile,
   tickAudio,
   nextVideoAuto,
   type AdaptiveAudioState,
+  type SoundProfile,
   type VideoAutoState,
 } from "./studioEngine";
 import {
@@ -20,7 +23,14 @@ import {
   deviceIdFromStream,
   type NamedDevice,
 } from "./studioDevices";
-import { fetchVerseText, mergeBibleHits, parseBibleReferences, type BibleHit } from "./bibleRefs";
+import {
+  fetchAdjacentVerse,
+  fetchVerseText,
+  liveVerseFromOverlay,
+  mergeBibleHits,
+  parseBibleReferences,
+  type BibleHit,
+} from "./bibleRefs";
 import { appendSpokenWindow, searchQuotesLocal, searchQuotesRemote } from "./scriptureSearch";
 import {
   EMPTY_OVERLAY,
@@ -171,16 +181,21 @@ export function useBroadcastStudio() {
   const quoteTimerRef = useRef<number | null>(null);
   const quoteSearchGen = useRef(0);
   const listenRef = useRef(false);
+  const musicFilterRef = useRef(false);
+  const liveVerseRef = useRef<BibleHit | null>(null);
   const recognitionRef = useRef<StudioSpeechRecognition | null>(null);
   const nodes = useRef<{
     ctx?: AudioContext;
     source?: MediaStreamAudioSourceNode;
     highpass?: BiquadFilterNode;
+    lowShelf?: BiquadFilterNode;
+    highShelf?: BiquadFilterNode;
     hum?: BiquadFilterNode;
     gate?: GainNode;
     agc?: GainNode;
     compressor?: DynamicsCompressorNode;
     limiter?: DynamicsCompressorNode;
+    programmeGain?: GainNode;
     analyserIn?: AnalyserNode;
     analyserOut?: AnalyserNode;
     dest?: MediaStreamAudioDestinationNode;
@@ -224,12 +239,16 @@ export function useBroadcastStudio() {
   const [postingVerse, setPostingVerse] = useState(false);
   const [searchingQuotes, setSearchingQuotes] = useState(false);
   const [selectedVerseRefs, setSelectedVerseRefs] = useState<string[]>([]);
+  const [musicFilter, setMusicFilterState] = useState(false);
+  const [liveVerse, setLiveVerse] = useState<BibleHit | null>(null);
+  const [steppingVerse, setSteppingVerse] = useState(false);
 
   lookRef.current = look;
   overlayRef.current = overlay;
   programOverlayRef.current = programOverlay;
   statusRef.current = status;
   monitorRef.current = monitor;
+  musicFilterRef.current = musicFilter;
 
   const attachProgrammeAudio = useCallback((stream: MediaStream | undefined) => {
     const el = programmeAudioRef.current;
@@ -410,7 +429,12 @@ export function useBroadcastStudio() {
     analyserOut.getFloatTimeDomainData(bufOut);
     const rms = rmsFromSamples(bufIn);
     const peak = peakFromSamples(bufIn);
-    audioState.current = tickAudio(audioState.current, rms, peak);
+    audioState.current = tickAudio(
+      audioState.current,
+      rms,
+      peak,
+      soundProfile(musicFilterRef.current ? "music" : "speech"),
+    );
     const s = audioState.current;
     if (n.gate) n.gate.gain.setTargetAtTime(s.gate, n.ctx!.currentTime, 0.08);
     if (n.agc) n.agc.gain.setTargetAtTime(s.agcGain, n.ctx!.currentTime, 0.18);
@@ -450,6 +474,39 @@ export function useBroadcastStudio() {
     }
   }, []);
 
+  const applySoundProfile = useCallback((profile: SoundProfile) => {
+    const n = nodes.current;
+    const ctx = n.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    n.highpass?.frequency.setTargetAtTime(profile.highpassHz, t, 0.08);
+    if (n.lowShelf) {
+      n.lowShelf.frequency.setTargetAtTime(profile.lowShelfHz, t, 0.08);
+      n.lowShelf.gain.setTargetAtTime(profile.lowShelfDb, t, 0.08);
+    }
+    if (n.highShelf) {
+      n.highShelf.frequency.setTargetAtTime(profile.highShelfHz, t, 0.08);
+      n.highShelf.gain.setTargetAtTime(profile.highShelfDb, t, 0.08);
+    }
+    n.programmeGain?.gain.setTargetAtTime(profile.programmeGain, t, 0.08);
+    if (n.limiter) n.limiter.threshold.setTargetAtTime(profile.limiterThresholdDb, t, 0.08);
+    if (n.compressor) {
+      n.compressor.threshold.setTargetAtTime(profile.compressorThresholdDb, t, 0.08);
+      n.compressor.ratio.setTargetAtTime(profile.compressorRatio, t, 0.08);
+      n.compressor.attack.setTargetAtTime(profile.compressorAttack, t, 0.08);
+      n.compressor.release.setTargetAtTime(profile.compressorRelease, t, 0.08);
+    }
+  }, []);
+
+  const setMusicFilter = useCallback(
+    (on: boolean) => {
+      musicFilterRef.current = on;
+      setMusicFilterState(on);
+      applySoundProfile(soundProfile(on ? "music" : "speech"));
+    },
+    [applySoundProfile],
+  );
+
   const connectAudioSource = useCallback((ctx: AudioContext, stream: MediaStream) => {
     const n = nodes.current;
     n.source?.disconnect();
@@ -484,8 +541,16 @@ export function useBroadcastStudio() {
       if (ctx.state === "suspended") await ctx.resume();
       const highpass = ctx.createBiquadFilter();
       highpass.type = "highpass";
-      highpass.frequency.value = 55;
+      highpass.frequency.value = SPEECH_PROFILE.highpassHz;
       highpass.Q.value = 0.7;
+      const lowShelf = ctx.createBiquadFilter();
+      lowShelf.type = "lowshelf";
+      lowShelf.frequency.value = SPEECH_PROFILE.lowShelfHz;
+      lowShelf.gain.value = SPEECH_PROFILE.lowShelfDb;
+      const highShelf = ctx.createBiquadFilter();
+      highShelf.type = "highshelf";
+      highShelf.frequency.value = SPEECH_PROFILE.highShelfHz;
+      highShelf.gain.value = SPEECH_PROFILE.highShelfDb;
       const hum = ctx.createBiquadFilter();
       hum.type = "notch";
       hum.frequency.value = 50;
@@ -498,44 +563,53 @@ export function useBroadcastStudio() {
       const agc = ctx.createGain();
       agc.gain.value = 1;
       const compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.value = -8;
+      compressor.threshold.value = SPEECH_PROFILE.compressorThresholdDb;
       compressor.knee.value = 12;
-      compressor.ratio.value = 1.8;
-      compressor.attack.value = 0.012;
-      compressor.release.value = 0.28;
+      compressor.ratio.value = SPEECH_PROFILE.compressorRatio;
+      compressor.attack.value = SPEECH_PROFILE.compressorAttack;
+      compressor.release.value = SPEECH_PROFILE.compressorRelease;
       const limiter = ctx.createDynamicsCompressor();
-      limiter.threshold.value = -3;
+      limiter.threshold.value = SPEECH_PROFILE.limiterThresholdDb;
       limiter.knee.value = 4;
       limiter.ratio.value = 12;
       limiter.attack.value = 0.003;
       limiter.release.value = 0.12;
+      const programmeGain = ctx.createGain();
+      programmeGain.gain.value = SPEECH_PROFILE.programmeGain;
       const analyserOut = ctx.createAnalyser();
       analyserOut.fftSize = 2048;
       const dest = ctx.createMediaStreamDestination();
 
-      highpass.connect(hum);
+      highpass.connect(lowShelf);
+      lowShelf.connect(highShelf);
+      highShelf.connect(hum);
       hum.connect(analyserIn);
       analyserIn.connect(gate);
       gate.connect(agc);
       agc.connect(compressor);
       compressor.connect(limiter);
-      limiter.connect(analyserOut);
+      limiter.connect(programmeGain);
+      programmeGain.connect(analyserOut);
       analyserOut.connect(dest);
 
       nodes.current = {
         ctx,
         highpass,
+        lowShelf,
+        highShelf,
         hum,
         gate,
         agc,
         compressor,
         limiter,
+        programmeGain,
         analyserIn,
         analyserOut,
         dest,
         rawVideo: videoStream,
       };
       connectAudioSource(ctx, audioStream);
+      applySoundProfile(soundProfile(musicFilterRef.current ? "music" : "speech"));
       attachProgrammeAudio(dest.stream);
 
       if (videoRef.current) {
@@ -561,6 +635,7 @@ export function useBroadcastStudio() {
       setError(studioStartMessage(e));
     }
   }, [
+    applySoundProfile,
     attachProgrammeAudio,
     cameraId,
     connectAudioSource,
@@ -705,15 +780,50 @@ export function useBroadcastStudio() {
   }, [ingestOverlayText]);
 
   const takeToLive = useCallback(() => {
-    setProgramOverlay({ ...overlayRef.current, visible: true });
+    const draft = overlayRef.current;
+    if (!draft.headline.trim() && !draft.body.trim()) return;
+    const verse = liveVerseFromOverlay(draft.headline, draft.body);
+    liveVerseRef.current = verse;
+    setLiveVerse(verse);
+    setProgramOverlay({ ...draft, visible: true });
+    setOverlay((prev) => ({ ...EMPTY_OVERLAY, palette: prev.palette }));
+    overlayHitsRef.current = [];
+    bibleHitsRef.current = mergeBibleHits(speechHitsRef.current, []);
+    setBibleHits([...bibleHitsRef.current]);
+    setSelectedVerseRefs([]);
   }, []);
 
   const clearLive = useCallback(() => {
+    liveVerseRef.current = null;
+    setLiveVerse(null);
     setProgramOverlay((prev) => ({ ...prev, visible: false }));
   }, []);
 
   const putOverlayOnAir = takeToLive;
   const clearOverlay = clearLive;
+
+  const stepLiveVerse = useCallback(async (direction: 1 | -1) => {
+    const current =
+      liveVerseRef.current ||
+      liveVerseFromOverlay(programOverlayRef.current.headline, programOverlayRef.current.body);
+    if (!current) return;
+    setSteppingVerse(true);
+    try {
+      const next = await fetchAdjacentVerse(current, direction);
+      if (!next) return;
+      liveVerseRef.current = next.hit;
+      setLiveVerse(next.hit);
+      setProgramOverlay((prev) => ({
+        ...prev,
+        visible: true,
+        design: "verse",
+        headline: next.hit.display,
+        body: next.text ? `${next.hit.display} — ${next.text}` : next.hit.display,
+      }));
+    } finally {
+      setSteppingVerse(false);
+    }
+  }, []);
 
   const postBibleVerses = useCallback(async () => {
     const selected = new Set(selectedVerseRefs);
@@ -803,6 +913,10 @@ export function useBroadcastStudio() {
     programOverlay,
     bibleHits,
     selectedVerseRefs,
+    liveVerse,
+    steppingVerse,
+    musicFilter,
+    setMusicFilter,
     listening,
     postingVerse,
     searchingQuotes,
@@ -814,6 +928,7 @@ export function useBroadcastStudio() {
     updateOverlay,
     takeToLive,
     clearLive,
+    stepLiveVerse,
     putOverlayOnAir,
     clearOverlay,
     postBibleVerses,

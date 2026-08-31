@@ -1,9 +1,71 @@
 /** Adaptive broadcast DSP — follow the room, but never mute a quiet voice or choir. */
 
-export const AGC_MIN = 0.55;
-export const AGC_MAX = 1.45;
-export const COMFORT_RMS_HIGH = 0.2;
-export const SAFETY_PEAK = 0.58;
+export const AGC_MIN = 0.7;
+export const AGC_MAX = 1.85;
+export const COMFORT_RMS_HIGH = 0.28;
+export const SAFETY_PEAK = 0.72;
+
+export type StudioSoundMode = "speech" | "music";
+
+export type SoundProfile = {
+  highpassHz: number;
+  lowShelfHz: number;
+  lowShelfDb: number;
+  highShelfHz: number;
+  highShelfDb: number;
+  programmeGain: number;
+  limiterThresholdDb: number;
+  compressorThresholdDb: number;
+  compressorRatio: number;
+  compressorAttack: number;
+  compressorRelease: number;
+  safetyPeak: number;
+  comfortRms: number;
+  agcMax: number;
+};
+
+/** Preaching and speaking: fuller, louder, words sit forward. */
+export const SPEECH_PROFILE: SoundProfile = {
+  highpassHz: 55,
+  lowShelfHz: 160,
+  lowShelfDb: 1.8,
+  highShelfHz: 3200,
+  highShelfDb: 2.8,
+  programmeGain: 2.05,
+  limiterThresholdDb: -1.2,
+  compressorThresholdDb: -8,
+  compressorRatio: 1.8,
+  compressorAttack: 0.012,
+  compressorRelease: 0.28,
+  safetyPeak: SAFETY_PEAK,
+  comfortRms: COMFORT_RMS_HIGH,
+  agcMax: AGC_MAX,
+};
+
+/**
+ * Worship / musical: lighter than speech so the band is not as heavy.
+ * Switch this off when the music stops so every instrument comes through.
+ */
+export const MUSIC_PROFILE: SoundProfile = {
+  highpassHz: 95,
+  lowShelfHz: 220,
+  lowShelfDb: -5.5,
+  highShelfHz: 9000,
+  highShelfDb: 1.2,
+  programmeGain: 1.12,
+  limiterThresholdDb: -5,
+  compressorThresholdDb: -14,
+  compressorRatio: 2.8,
+  compressorAttack: 0.02,
+  compressorRelease: 0.42,
+  safetyPeak: 0.5,
+  comfortRms: 0.16,
+  agcMax: 1.12,
+};
+
+export function soundProfile(mode: StudioSoundMode): SoundProfile {
+  return mode === "music" ? MUSIC_PROFILE : SPEECH_PROFILE;
+}
 
 export type AdaptiveAudioState = {
   noiseFloor: number;
@@ -59,36 +121,56 @@ export function nextGate(rms: number, noiseFloor: number, prev: number): number 
  * Do not chase one loudness. Leave quiet passages quiet; ease only the extremes
  * so car stereos, phones and headsets are not blasted.
  */
-export function nextAgcGain(rms: number, peak: number, prevGain: number): number {
+export function nextAgcGain(
+  rms: number,
+  peak: number,
+  prevGain: number,
+  profile: SoundProfile = SPEECH_PROFILE,
+): number {
   let desired = prevGain;
-  if (peak > SAFETY_PEAK) {
-    desired = prevGain * (SAFETY_PEAK / peak);
-  } else if (rms > COMFORT_RMS_HIGH) {
+  if (peak > profile.safetyPeak) {
+    desired = prevGain * (profile.safetyPeak / peak);
+  } else if (rms > profile.comfortRms) {
     desired = prevGain * 0.97;
   }
-  const clamped = Math.min(AGC_MAX, Math.max(AGC_MIN, desired));
+  const clamped = Math.min(profile.agcMax, Math.max(AGC_MIN, desired));
   return prevGain + (clamped - prevGain) * 0.05;
 }
 
-export function nextCompressor(peak: number, rms: number): {
+export function nextCompressor(
+  peak: number,
+  rms: number,
+  profile: SoundProfile = SPEECH_PROFILE,
+): {
   thresholdDb: number;
   ratio: number;
 } {
   const crest = peak / Math.max(0.001, rms);
-  if (peak >= 0.7 || (rms >= 0.22 && crest >= 6)) return { thresholdDb: -14, ratio: 3.2 };
-  if (peak >= 0.48) return { thresholdDb: -11, ratio: 2.4 };
-  return { thresholdDb: -6, ratio: 1.6 };
+  if (peak >= 0.7 || (rms >= 0.22 && crest >= 6)) {
+    return {
+      thresholdDb: profile.compressorThresholdDb - 6,
+      ratio: Math.min(6, profile.compressorRatio + 1.4),
+    };
+  }
+  if (peak >= 0.48) {
+    return {
+      thresholdDb: profile.compressorThresholdDb - 3,
+      ratio: profile.compressorRatio + 0.6,
+    };
+  }
+  return { thresholdDb: profile.compressorThresholdDb, ratio: profile.compressorRatio };
 }
 
 export function tickAudio(
   state: AdaptiveAudioState,
   rms: number,
   peak: number,
+  profile: SoundProfile = SPEECH_PROFILE,
 ): AdaptiveAudioState {
   const noiseFloor = updateNoiseFloor(state.noiseFloor, rms);
   const gate = nextGate(rms, noiseFloor, state.gate);
-  const agcGain = nextAgcGain(rms, peak, state.agcGain);
-  const comp = nextCompressor(peak, rms);
+  const agcGain = nextAgcGain(rms, peak, state.agcGain, profile);
+  const comp = nextCompressor(peak, rms, profile);
   return {
     noiseFloor,
     gate,

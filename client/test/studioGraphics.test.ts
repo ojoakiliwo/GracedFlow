@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchVerseText, mergeBibleHits, parseBibleReferences } from "../src/lib/bibleRefs";
+import {
+  fetchAdjacentVerse,
+  fetchVerseText,
+  liveVerseFromOverlay,
+  mergeBibleHits,
+  nextBookChapter,
+  parseBibleReferences,
+  prevBookChapter,
+} from "../src/lib/bibleRefs";
 import {
   drawProgrammeOverlay,
   fitWrappedText,
@@ -57,6 +65,47 @@ describe("Bible reference parsing", () => {
       fetcher,
     );
     expect(payload.text).toContain("God so loved");
+  });
+
+  it("steps across chapter and book boundaries", () => {
+    expect(nextBookChapter("John", 3)).toEqual({ book: "John", chapter: 4 });
+    expect(nextBookChapter("John", 21)).toEqual({ book: "Acts", chapter: 1 });
+    expect(nextBookChapter("Revelation", 22)).toBeNull();
+    expect(prevBookChapter("John", 3)).toEqual({ book: "John", chapter: 2 });
+    expect(prevBookChapter("Matthew", 1)).toEqual({ book: "Malachi", chapter: 4 });
+    expect(prevBookChapter("Genesis", 1)).toBeNull();
+    expect(liveVerseFromOverlay("John 3:16", "For God so loved the world")?.display).toBe("John 3:16");
+  });
+
+  it("loads the next and previous verse of a posted scripture", async () => {
+    const john3 = [
+      { verse: 15, text: "That whosoever believeth in him should not perish." },
+      { verse: 16, text: "For God so loved the world." },
+      { verse: 17, text: "For God sent not his Son into the world to condemn the world." },
+    ];
+    const john4 = [{ verse: 1, text: "When therefore the Lord knew how the Pharisees had heard." }];
+    const fetcher = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("John%203") || url.includes("John 3")) {
+        return { ok: true, json: async () => ({ verses: john3 }) } as Response;
+      }
+      if (url.includes("John%204") || url.includes("John 4")) {
+        return { ok: true, json: async () => ({ verses: john4 }) } as Response;
+      }
+      return { ok: false, json: async () => ({}) } as Response;
+    };
+    const hit = { book: "John", chapter: 3, verse: 16, display: "John 3:16" };
+    const next = await fetchAdjacentVerse(hit, 1, fetcher);
+    expect(next?.hit.display).toBe("John 3:17");
+    expect(next?.text).toContain("condemn");
+    const prev = await fetchAdjacentVerse(hit, -1, fetcher);
+    expect(prev?.hit.display).toBe("John 3:15");
+    const over = await fetchAdjacentVerse(
+      { book: "John", chapter: 3, verse: 17, display: "John 3:17" },
+      1,
+      fetcher,
+    );
+    expect(over?.hit.display).toBe("John 4:1");
   });
 });
 

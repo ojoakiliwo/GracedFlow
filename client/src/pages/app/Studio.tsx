@@ -10,9 +10,12 @@ import {
 } from "../../lib/studioOverlays";
 import {
   BookOpen,
+  ChevronLeft,
+  ChevronRight,
   Clapperboard,
   Mic,
   MonitorPlay,
+  Music,
   Radio,
   RefreshCw,
   Square,
@@ -145,6 +148,8 @@ export default function Studio() {
   const selectedHits = s.bibleHits.filter((h) => s.selectedVerseRefs.includes(h.display));
   const selectedPalette = OVERLAY_PALETTES.find((p) => p.id === s.overlay.palette) ?? OVERLAY_PALETTES[0]!;
   const canTake = Boolean(s.overlay.headline.trim() || s.overlay.body.trim());
+  const canStepVerse =
+    s.programOverlay.visible && (Boolean(s.liveVerse) || s.programOverlay.design === "verse");
 
   return (
     <div className="-mx-4 -my-6 min-h-[calc(100vh-4rem)] bg-[#0b0c10] px-3 py-4 text-ink-100 sm:-mx-6 lg:-mx-8">
@@ -159,6 +164,7 @@ export default function Studio() {
           <Badge color={live ? "red" : "gray"}>{live ? "On air" : "Standby"}</Badge>
           {s.recording ? <Badge color="red">Recording</Badge> : null}
           {s.listening ? <Badge color="green">Listening</Badge> : null}
+          {s.musicFilter ? <Badge color="gold">Music filter</Badge> : null}
           {s.searchingQuotes ? <Badge color="gold">Searching quotes</Badge> : null}
           <span className="font-mono text-lg tabular-nums text-gold-300">{formatClock(s.elapsedSec)}</span>
         </div>
@@ -195,8 +201,28 @@ export default function Studio() {
         <Button variant="danger" onClick={s.clearLive}>
           Clear live
         </Button>
-        <span className="hidden text-[11px] text-ink-400 lg:inline">
-          Preview is the draft. Program is what the congregation sees.
+        <Button
+          variant="secondary"
+          disabled={!canStepVerse || s.steppingVerse}
+          onClick={() => void s.stepLiveVerse(-1)}
+        >
+          <ChevronLeft className="h-4 w-4" /> Previous verse
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={!canStepVerse || s.steppingVerse}
+          onClick={() => void s.stepLiveVerse(1)}
+        >
+          Next verse <ChevronRight className="h-4 w-4" />
+        </Button>
+        <Button
+          variant={s.musicFilter ? "gold" : "secondary"}
+          onClick={() => s.setMusicFilter(!s.musicFilter)}
+        >
+          <Music className="h-4 w-4" /> {s.musicFilter ? "Music filter on" : "Music filter"}
+        </Button>
+        <span className="hidden text-[11px] text-ink-400 xl:inline">
+          Take to live clears Preview. Music filter lightens worship; switch it off for preaching.
         </span>
       </div>
 
@@ -212,8 +238,8 @@ export default function Studio() {
             </MonitorWell>
           </div>
           <p className="text-[11px] text-ink-500">
-            Type or post a verse onto Preview first. Confirm the look, then press Take to live. Clear live stays on the
-            transport bar so you never have to scroll to find it.
+            Type or post a verse onto Preview, then Take to live. Preview clears automatically. Use Previous / Next verse
+            on Program, and Music filter while worship is playing.
           </p>
         </div>
 
@@ -430,6 +456,11 @@ export default function Studio() {
           <div className="mt-2">
             <Meter label="On air" value={s.meters.outputRms} color="bg-emerald-400" />
           </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-ink-400">
+            {s.musicFilter
+              ? "Music filter is on: lighter mix so worship is not as heavy as preaching. Switch it off when the music stops so every instrument and voice comes through clearly."
+              : "Speech mix is louder and fuller for preaching. Turn on Music filter when worship starts."}
+          </p>
           <label className="mt-3 flex items-center gap-2 text-sm text-ink-200">
             <input
               type="checkbox"

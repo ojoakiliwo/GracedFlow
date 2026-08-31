@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  MUSIC_PROFILE,
+  SPEECH_PROFILE,
   nextAgcGain,
   nextGate,
   nextVideoAuto,
   peakFromSamples,
   rmsFromSamples,
+  soundProfile,
   tickAudio,
   updateNoiseFloor,
   INITIAL_AUDIO_STATE,
@@ -40,7 +43,7 @@ describe("Broadcast studio adaptive engine", () => {
 
   it("does not boost a quiet passage; it eases only a loud peak", () => {
     const quiet = nextAgcGain(0.03, 0.05, 1);
-    const loud = nextAgcGain(0.28, 0.72, 1);
+    const loud = nextAgcGain(0.28, 0.9, 1);
     expect(quiet).toBeCloseTo(1, 2);
     expect(loud).toBeLessThan(1);
   });
@@ -66,5 +69,17 @@ describe("Broadcast studio adaptive engine", () => {
     for (let i = 0; i < 24; i++) state = tickAudio(state, 0.3, 0.7);
     expect(state.agcGain).toBeLessThan(calmGain);
     expect(state.gate).toBeGreaterThan(0.9);
+  });
+
+  it("makes the speech mix louder than the music filter", () => {
+    expect(SPEECH_PROFILE.programmeGain).toBeGreaterThan(MUSIC_PROFILE.programmeGain);
+    expect(SPEECH_PROFILE.highpassHz).toBeLessThan(MUSIC_PROFILE.highpassHz);
+    expect(MUSIC_PROFILE.lowShelfDb).toBeLessThan(0);
+    expect(SPEECH_PROFILE.lowShelfDb).toBeGreaterThan(0);
+    expect(soundProfile("music")).toBe(MUSIC_PROFILE);
+    expect(soundProfile("speech")).toBe(SPEECH_PROFILE);
+    const speechAgc = nextAgcGain(0.4, 0.9, 1.8, SPEECH_PROFILE);
+    const musicAgc = nextAgcGain(0.4, 0.9, 1.8, MUSIC_PROFILE);
+    expect(musicAgc).toBeLessThan(speechAgc);
   });
 });

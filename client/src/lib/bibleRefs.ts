@@ -198,3 +198,166 @@ export function mergeBibleHits(existing: BibleHit[], incoming: BibleHit[]): Bibl
   }
   return next.slice(-12);
 }
+
+/** Protestant canon chapter counts, aligned with CANON_BOOKS. */
+export const BOOK_CHAPTERS: Record<string, number> = {
+  Genesis: 50,
+  Exodus: 40,
+  Leviticus: 27,
+  Numbers: 36,
+  Deuteronomy: 34,
+  Joshua: 24,
+  Judges: 21,
+  Ruth: 4,
+  "1 Samuel": 31,
+  "2 Samuel": 24,
+  "1 Kings": 22,
+  "2 Kings": 25,
+  "1 Chronicles": 29,
+  "2 Chronicles": 36,
+  Ezra: 10,
+  Nehemiah: 13,
+  Esther: 10,
+  Job: 42,
+  Psalm: 150,
+  Proverbs: 31,
+  Ecclesiastes: 12,
+  "Song of Solomon": 8,
+  Isaiah: 66,
+  Jeremiah: 52,
+  Lamentations: 5,
+  Ezekiel: 48,
+  Daniel: 12,
+  Hosea: 14,
+  Joel: 3,
+  Amos: 9,
+  Obadiah: 1,
+  Jonah: 4,
+  Micah: 7,
+  Nahum: 3,
+  Habakkuk: 3,
+  Zephaniah: 3,
+  Haggai: 2,
+  Zechariah: 14,
+  Malachi: 4,
+  Matthew: 28,
+  Mark: 16,
+  Luke: 24,
+  John: 21,
+  Acts: 28,
+  Romans: 16,
+  "1 Corinthians": 16,
+  "2 Corinthians": 13,
+  Galatians: 6,
+  Ephesians: 6,
+  Philippians: 4,
+  Colossians: 4,
+  "1 Thessalonians": 5,
+  "2 Thessalonians": 3,
+  "1 Timothy": 6,
+  "2 Timothy": 4,
+  Titus: 3,
+  Philemon: 1,
+  Hebrews: 13,
+  James: 5,
+  "1 Peter": 5,
+  "2 Peter": 3,
+  "1 John": 5,
+  "2 John": 1,
+  "3 John": 1,
+  Jude: 1,
+  Revelation: 22,
+};
+
+export function liveVerseFromOverlay(headline: string, body: string): BibleHit | null {
+  const hits = parseBibleReferences(`${headline} ${body}`);
+  return hits[0] ?? null;
+}
+
+export function nextBookChapter(book: string, chapter: number): { book: string; chapter: number } | null {
+  const total = BOOK_CHAPTERS[book];
+  if (!total) return null;
+  if (chapter < total) return { book, chapter: chapter + 1 };
+  const idx = CANON_BOOKS.indexOf(book);
+  if (idx < 0 || idx >= CANON_BOOKS.length - 1) return null;
+  return { book: CANON_BOOKS[idx + 1]!, chapter: 1 };
+}
+
+export function prevBookChapter(book: string, chapter: number): { book: string; chapter: number } | null {
+  if (chapter > 1) return { book, chapter: chapter - 1 };
+  const idx = CANON_BOOKS.indexOf(book);
+  if (idx <= 0) return null;
+  const prevBook = CANON_BOOKS[idx - 1]!;
+  return { book: prevBook, chapter: BOOK_CHAPTERS[prevBook] ?? 1 };
+}
+
+type ChapterVerse = { verse: number; text: string };
+
+const chapterCache = new Map<string, ChapterVerse[]>();
+
+export async function fetchChapterVerses(
+  book: string,
+  chapter: number,
+  fetcher: typeof fetch = fetch,
+): Promise<ChapterVerse[]> {
+  const key = `${book}|${chapter}`;
+  const cached = chapterCache.get(key);
+  if (cached) return cached;
+  const url = `https://bible-api.com/${encodeURIComponent(`${book} ${chapter}`)}?translation=kjv`;
+  const res = await fetcher(url);
+  if (!res.ok) return [];
+  const data = (await res.json()) as { verses?: { verse?: number; text?: string }[]; text?: string };
+  const verses = (data.verses ?? [])
+    .map((v) => ({
+      verse: Number(v.verse) || 0,
+      text: (v.text || "").replace(/\s+/g, " ").trim(),
+    }))
+    .filter((v) => v.verse > 0);
+  if (verses.length) chapterCache.set(key, verses);
+  return verses;
+}
+
+export async function fetchAdjacentVerse(
+  hit: BibleHit,
+  direction: 1 | -1,
+  fetcher: typeof fetch = fetch,
+): Promise<{ hit: BibleHit; text: string } | null> {
+  const currentVerse = direction > 0 ? hit.verseEnd || hit.verse || 1 : hit.verse || 1;
+  let book = hit.book;
+  let chapter = hit.chapter;
+  let verses = await fetchChapterVerses(book, chapter, fetcher);
+  if (!verses.length) return null;
+
+  const idx = verses.findIndex((v) => v.verse === currentVerse);
+  const at = idx >= 0 ? idx : 0;
+  const nextIdx = at + direction;
+  if (nextIdx >= 0 && nextIdx < verses.length) {
+    const row = verses[nextIdx]!;
+    const nextHit: BibleHit = {
+      book,
+      chapter,
+      verse: row.verse,
+      display: formatBibleHit({ book, chapter, verse: row.verse }),
+      snippet: row.text,
+      source: "reference",
+    };
+    verseCache.set(nextHit.display, { reference: nextHit.display, text: row.text });
+    return { hit: nextHit, text: row.text };
+  }
+
+  const neighbour = direction > 0 ? nextBookChapter(book, chapter) : prevBookChapter(book, chapter);
+  if (!neighbour) return null;
+  verses = await fetchChapterVerses(neighbour.book, neighbour.chapter, fetcher);
+  if (!verses.length) return null;
+  const row = direction > 0 ? verses[0]! : verses[verses.length - 1]!;
+  const nextHit: BibleHit = {
+    book: neighbour.book,
+    chapter: neighbour.chapter,
+    verse: row.verse,
+    display: formatBibleHit({ book: neighbour.book, chapter: neighbour.chapter, verse: row.verse }),
+    snippet: row.text,
+    source: "reference",
+  };
+  verseCache.set(nextHit.display, { reference: nextHit.display, text: row.text });
+  return { hit: nextHit, text: row.text };
+}
