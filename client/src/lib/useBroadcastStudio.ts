@@ -617,7 +617,7 @@ export function useBroadcastStudio() {
     if (statusRef.current === "live") return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    if (!canvas.width || !canvas.height) {
+    if (!canvas.width || canvas.width < 960 || canvas.height < 540) {
       canvas.width = 1280;
       canvas.height = 720;
     }
