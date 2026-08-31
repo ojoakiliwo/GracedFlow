@@ -11,6 +11,7 @@ import {
   Send,
   CalendarClock,
   Share2,
+  Clapperboard,
   HandCoins,
   HeartHandshake,
   CalendarRange,
@@ -63,6 +64,7 @@ const groups: NavGroup[] = [
       { to: "/app/messages", label: "Messages (SMS/Email)", icon: Send },
       { to: "/app/automations", label: "Automations", icon: CalendarClock },
       { to: "/app/social", label: "Social Broadcast", icon: Share2 },
+      { to: "/app/studio", label: "Broadcast studio", icon: Clapperboard },
     ],
   },
   {

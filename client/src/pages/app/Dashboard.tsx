@@ -7,6 +7,7 @@ import {
   Cake,
   CalendarDays,
   Send,
+  Clapperboard,
 } from "lucide-react";
 import {
   Bar,
@@ -102,7 +103,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="p-5">
           <p className="text-sm text-ink-500">Confirmed Giving</p>
           <p className="mt-1 font-display text-2xl font-semibold text-ink-900">
@@ -137,6 +138,16 @@ export default function Dashboard() {
           </p>
           <Link to="/app/prayer" className="mt-1 text-xs text-brand-600 hover:underline">
             Attend to requests →
+          </Link>
+        </Card>
+        <Card className="p-5">
+          <div className="flex items-center gap-2 text-ink-500">
+            <Clapperboard className="h-4 w-4" />
+            <p className="text-sm">Broadcast studio</p>
+          </div>
+          <p className="mt-1 font-display text-2xl font-semibold text-ink-900">Live</p>
+          <Link to="/app/studio" className="mt-1 text-xs text-brand-600 hover:underline">
+            Camera, living sound, record →
           </Link>
         </Card>
       </div>

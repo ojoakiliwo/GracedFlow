@@ -25,6 +25,7 @@ import Events from "./pages/app/Events";
 import Messages from "./pages/app/Messages";
 import Automations from "./pages/app/Automations";
 import Social from "./pages/app/Social";
+import Studio from "./pages/app/Studio";
 import Giving from "./pages/app/Giving";
 import PrayerRequests from "./pages/app/PrayerRequests";
 import Settings from "./pages/app/Settings";
@@ -75,6 +76,7 @@ export default function App() {
         <Route path="messages" element={<Messages />} />
         <Route path="automations" element={<Automations />} />
         <Route path="social" element={<Social />} />
+        <Route path="studio" element={<Studio />} />
         <Route path="giving" element={<Giving />} />
         <Route path="prayer" element={<PrayerRequests />} />
         <Route path="settings" element={<Settings />} />
