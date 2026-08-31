@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fetchVerseText, mergeBibleHits, parseBibleReferences } from "../src/lib/bibleRefs";
-import { drawProgrammeOverlay, suggestDesigns, wrapText } from "../src/lib/studioOverlays";
+import { drawProgrammeOverlay, fitWrappedText, suggestDesigns, wrapText } from "../src/lib/studioOverlays";
 import { transcriptFromSpeechEvent } from "../src/lib/studioSpeech";
 
 describe("Bible reference parsing", () => {
@@ -69,6 +69,15 @@ describe("On-air design suggestions", () => {
     expect(lines.length).toBeGreaterThan(1);
     const paras = wrapText(ctx, "John 3:16 — For God so loved\n\nRomans 8:28 — And we know", 80);
     expect(paras.length).toBeGreaterThan(lines.length);
+    const fitted = fitWrappedText(
+      ctx,
+      "John 3:16 — For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.\n\nRomans 8:28 — And we know that all things work together for good to them that love God.",
+      400,
+      280,
+      "serif",
+    );
+    expect(fitted.lines.join(" ")).toContain("Romans 8:28");
+    expect(fitted.lines.join(" ")).toContain("all things work together");
   });
 
   it("does not draw typed text until it is put on air", () => {

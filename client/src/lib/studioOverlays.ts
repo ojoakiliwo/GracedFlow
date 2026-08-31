@@ -59,6 +59,27 @@ export function wrapText(
   return lines;
 }
 
+/** Shrink the font until every line of copy fits in the box. */
+export function fitWrappedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxHeight: number,
+  fontFamily: string,
+): { lines: string[]; fontSize: number; lineHeight: number } {
+  const sizes = [28, 24, 20, 18, 16, 14];
+  let chosen = { lines: [] as string[], fontSize: 14, lineHeight: 20 };
+  for (const fontSize of sizes) {
+    const lineHeight = Math.round(fontSize * 1.3);
+    ctx.font = `400 ${fontSize}px ${fontFamily}`;
+    const lines = wrapText(ctx, text, maxWidth);
+    chosen = { lines, fontSize, lineHeight };
+    if (lines.length * lineHeight <= maxHeight) return chosen;
+  }
+  const maxLines = Math.max(1, Math.floor(maxHeight / chosen.lineHeight));
+  return { ...chosen, lines: chosen.lines.slice(0, maxLines) };
+}
+
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -110,15 +131,13 @@ export function drawProgrammeOverlay(
     const lines = wrapText(ctx, body || "Infinitely Graced Church", boxW - 48);
     ctx.fillText(lines[0] ?? "", x + 28, y + 66);
   } else if (overlay.design === "verse") {
-    const boxW = Math.min(980, width * 0.86);
+    const boxW = Math.min(1040, width * 0.88);
     const x = (width - boxW) / 2;
     const copy = body || headline;
-    const long = copy.length > 140;
-    const fontSize = long ? 20 : 28;
-    const lineH = long ? 26 : 36;
-    ctx.font = `400 ${fontSize}px Fraunces, Georgia, serif`;
-    const bodyLines = wrapText(ctx, copy, boxW - 72).slice(0, long ? 12 : 6);
-    const boxH = 88 + bodyLines.length * lineH + (headline ? 28 : 0);
+    const family = "Fraunces, Georgia, serif";
+    const maxTextH = height * 0.62;
+    const fitted = fitWrappedText(ctx, copy, boxW - 72, maxTextH, family);
+    const boxH = Math.min(height - 48, 80 + fitted.lines.length * fitted.lineHeight + 20);
     const y = Math.max(24, (height - boxH) / 2);
     roundRect(ctx, x, y, boxW, boxH, 20);
     ctx.fillStyle = "rgba(20, 12, 40, 0.88)";
@@ -129,11 +148,11 @@ export function drawProgrammeOverlay(
     ctx.fillStyle = "#e0bd6f";
     ctx.font = "600 20px Inter, system-ui, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(headline || "Holy Scripture", width / 2, y + 22);
+    ctx.fillText(headline || "Holy Scripture", width / 2, y + 18);
     ctx.fillStyle = "#f8f5ff";
-    ctx.font = `400 ${fontSize}px Fraunces, Georgia, serif`;
-    bodyLines.forEach((line, i) => {
-      ctx.fillText(line, width / 2, y + 58 + i * lineH);
+    ctx.font = `400 ${fitted.fontSize}px ${family}`;
+    fitted.lines.forEach((line, i) => {
+      ctx.fillText(line, width / 2, y + 52 + i * fitted.lineHeight);
     });
     ctx.textAlign = "left";
   } else if (overlay.design === "banner") {
