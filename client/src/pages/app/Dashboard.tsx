@@ -22,7 +22,8 @@ import {
 import { Link } from "react-router-dom";
 import { useApi } from "../../lib/useApi";
 import { Card, PageHeader, Spinner, Badge } from "../../components/ui";
-import { classLabel, formatDateTime, naira } from "../../lib/format";
+import { classLabel, formatDateTime } from "../../lib/format";
+import { money } from "../../lib/currencies";
 import { useAuth } from "../../lib/auth";
 
 interface DashboardData {
@@ -34,7 +35,11 @@ interface DashboardData {
     openTasks: number;
     newPrayers: number;
     givingPending: number;
-    givingConfirmed: { total: number; count: number };
+    givingConfirmed: {
+      count: number;
+      byCurrency?: { currency: string; total: number; count: number }[];
+      total?: number;
+    };
   };
   projectsByStatus: { status: string; count: number }[];
   membersByClass: { spiritual_class: string; count: number }[];
@@ -107,7 +112,13 @@ export default function Dashboard() {
         <Card className="p-5">
           <p className="text-sm text-ink-500">Confirmed Giving</p>
           <p className="mt-1 font-display text-2xl font-semibold text-ink-900">
-            {naira(stats.givingConfirmed.total)}
+            {(stats.givingConfirmed.byCurrency ?? []).length === 0
+              ? money(0)
+              : (stats.givingConfirmed.byCurrency ?? []).map((row) => (
+                  <span key={row.currency} className="mr-3 last:mr-0">
+                    {money(Number(row.total), row.currency)}
+                  </span>
+                ))}
           </p>
           <p className="mt-1 text-xs text-ink-400">
             {stats.givingConfirmed.count} recorded ·{" "}

@@ -22,19 +22,20 @@ const eventSchema = z.object({
   startsAt: z.string().min(1),
   endsAt: z.string().optional().nullable(),
   location: z.string().optional().nullable(),
+  imageUrl: z.string().optional().nullable(),
   isPublic: z.boolean().default(true),
   recurrence: z.string().default("none"),
 });
 
 eventsRouter.post(
   "/",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
     const input = parseBody(eventSchema, req.body);
     const id = newId("evt");
     await db.prepare(
-      `INSERT INTO events (id, title, description, type, starts_at, ends_at, location, is_public, recurrence)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO events (id, title, description, type, starts_at, ends_at, location, is_public, recurrence, image_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       input.title,
@@ -45,6 +46,7 @@ eventsRouter.post(
       input.location ?? null,
       input.isPublic ? 1 : 0,
       input.recurrence,
+      input.imageUrl?.trim() || null,
     );
     audit("create", "event", id, req.user);
     res.status(201).json(await db.prepare("SELECT * FROM events WHERE id = ?").get(id));
@@ -53,7 +55,7 @@ eventsRouter.post(
 
 eventsRouter.delete(
   "/:id",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
     await db.prepare("DELETE FROM events WHERE id = ?").run(req.params.id);
     res.status(204).end();

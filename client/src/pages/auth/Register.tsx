@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { Button, Field, Input } from "../../components/ui";
+import { PreviewLockNotice } from "../../components/PreviewLockNotice";
+import { BrandLogo } from "../../components/BrandLogo";
 
 export default function Register() {
-  const { register } = useAuth();
+  const { register, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({
     firstName: "",
@@ -33,19 +35,24 @@ export default function Register() {
     }
   }
 
+  if (authLoading) return null;
+  if (user) return <Navigate to="/app" replace />;
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-ink-50 p-6">
       <div className="w-full max-w-md rounded-2xl border border-ink-100 bg-white p-8 card-shadow">
-        <Link to="/" className="mb-6 flex items-center gap-3">
-          <img src="/brand/igc-logo.png" alt="IGC" className="h-12 w-12 object-contain" />
+        <BrandLogo size="md" className="mb-6">
           <span className="font-display text-lg font-semibold text-brand-900">
             Infinitely Graced Church
           </span>
-        </Link>
-        <h2 className="text-2xl text-ink-900">Create your worker account</h2>
+        </BrandLogo>
+        <h2 className="text-2xl text-ink-900">Create your account</h2>
         <p className="mt-1 text-sm text-ink-500">
-          Join the ministry portal to receive messages, join rooms and take on tasks.
+          If your pastor already added you, use that same email or phone. This opens
+          your existing record and does not create a second membership. New signups
+          without a church record join as workers.
         </p>
+        <PreviewLockNotice />
 
         <form onSubmit={submit} className="mt-6 space-y-4">
           <div className="grid grid-cols-2 gap-3">

@@ -10,7 +10,7 @@ prayerRouter.use(authenticate);
 
 prayerRouter.get(
   "/",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (_req, res) => {
     res.json(
       await db.prepare("SELECT * FROM prayer_requests ORDER BY created_at DESC LIMIT 200").all(),
@@ -21,7 +21,7 @@ prayerRouter.get(
 const statusSchema = z.object({ status: z.enum(["new", "praying", "answered"]) });
 prayerRouter.put(
   "/:id",
-  requireRole("worker"),
+  requireRole("pastor"),
   asyncHandler(async (req, res) => {
     const input = parseBody(statusSchema, req.body);
     const existing = await db

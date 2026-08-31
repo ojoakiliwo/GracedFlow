@@ -3,12 +3,18 @@ import { HandCoins, CheckCircle2, Landmark, CreditCard } from "lucide-react";
 import { apiPost } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import { Button, Card, Field, Input, Select, Spinner } from "../../components/ui";
-import { naira } from "../../lib/format";
+import { GIVING_CURRENCIES, money } from "../../lib/currencies";
+
+type CheckoutProvider = "paystack" | "flutterwave" | "dryrun";
 
 interface GivingOptions {
   currency: string;
+  currencies?: { code: string; name: string; symbol: string }[];
   online: boolean;
   onlineLive: boolean;
+  provider?: CheckoutProvider;
+  providers?: { flutterwave: boolean; paystack: boolean };
+  paystackCurrencies?: string[];
   bank: {
     bankName: string;
     accountName: string;
@@ -34,12 +40,14 @@ const TYPES = [
 export default function Give() {
   const { data: options, loading } = useApi<GivingOptions>("/public/giving-options");
   const [method, setMethod] = useState<"online" | "transfer">("online");
+  const [checkout, setCheckout] = useState<CheckoutProvider | "">("");
   const [form, setForm] = useState({
     donorName: "",
     donorEmail: "",
     donorPhone: "",
     type: "tithe",
     amount: "",
+    currency: "NGN",
   });
   const [result, setResult] = useState<GiveResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -53,10 +61,17 @@ export default function Give() {
       const res = await apiPost<GiveResult>("/public/give", {
         ...form,
         amount: Number(form.amount),
+        currency: form.currency,
         method,
+        provider:
+          method === "online"
+            ? paystackCanTake(options, form.currency)
+              ? checkout || undefined
+              : "flutterwave"
+            : undefined,
       });
       if (res.method === "online" && res.authorizationUrl) {
-        // Hand off to the Paystack hosted checkout (or simulated callback).
+        // Hand off to Flutterwave / Paystack hosted checkout (or simulated callback).
         window.location.href = res.authorizationUrl;
         return;
       }
@@ -90,7 +105,10 @@ export default function Give() {
             <p className="mt-2 text-ink-500">
               Please complete your{" "}
               <span className="font-semibold capitalize">{form.type}</span> of{" "}
-              <span className="font-semibold">{naira(Number(form.amount))}</span> using the
+              <span className="font-semibold">
+                {money(Number(form.amount), form.currency)}
+              </span>{" "}
+              using the
               details below.
             </p>
             <div className="mx-auto mt-6 max-w-sm rounded-2xl bg-brand-50 p-6 text-left">
@@ -120,21 +138,48 @@ export default function Give() {
         ) : (
           <Card className="p-8">
             {options?.online && (
-              <div className="mb-6 grid grid-cols-2 gap-3">
-                <MethodTile
-                  active={method === "online"}
-                  onClick={() => setMethod("online")}
-                  icon={<CreditCard className="h-5 w-5" />}
-                  title="Card / Online"
-                  subtitle={options.onlineLive ? "Secured by Paystack" : "Instant & secure"}
-                />
-                <MethodTile
-                  active={method === "transfer"}
-                  onClick={() => setMethod("transfer")}
-                  icon={<Landmark className="h-5 w-5" />}
-                  title="Bank transfer"
-                  subtitle="Get account details"
-                />
+              <div className="mb-6 space-y-3">
+                <div className={`grid gap-3 ${hasBankDetails(options) ? "grid-cols-2" : "grid-cols-1"}`}>
+                  <MethodTile
+                    active={method === "online"}
+                    onClick={() => setMethod("online")}
+                    icon={<CreditCard className="h-5 w-5" />}
+                    title="Card / Online"
+                    subtitle={onlineSubtitle(options)}
+                  />
+                  {hasBankDetails(options) && (
+                  <MethodTile
+                    active={method === "transfer"}
+                    onClick={() => {
+                      setMethod("transfer");
+                      setForm((f) => ({ ...f, currency: "NGN" }));
+                    }}
+                      icon={<Landmark className="h-5 w-5" />}
+                      title="Bank transfer"
+                      subtitle="Get account details"
+                    />
+                  )}
+                </div>
+                {method === "online" &&
+                  bothLive(options) &&
+                  paystackCanTake(options, form.currency) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <MethodTile
+                      active={checkout === "flutterwave" || (!checkout && options.provider !== "paystack")}
+                      onClick={() => setCheckout("flutterwave")}
+                      icon={<CreditCard className="h-5 w-5" />}
+                      title="Flutterwave"
+                      subtitle="Cards, transfer, USSD"
+                    />
+                    <MethodTile
+                      active={checkout === "paystack" || (!checkout && options.provider === "paystack")}
+                      onClick={() => setCheckout("paystack")}
+                      icon={<CreditCard className="h-5 w-5" />}
+                      title="Paystack"
+                      subtitle="Nigerian cards & bank"
+                    />
+                  </div>
+                )}
               </div>
             )}
 
@@ -152,17 +197,40 @@ export default function Give() {
                     ))}
                   </Select>
                 </Field>
-                <Field label="Amount (₦)">
+                <Field label="Amount">
                   <Input
                     type="number"
                     min="1"
+                    step={form.currency === "NGN" ? "1" : "0.01"}
                     value={form.amount}
                     onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                    placeholder="5000"
+                    placeholder={form.currency === "NGN" ? "5000" : "25"}
                     required
                   />
                 </Field>
               </div>
+              <Field
+                label="Currency"
+                hint={currencyHint(method, form.currency)}
+              >
+                <Select
+                  value={form.currency}
+                  onChange={(e) => {
+                    const currency = e.target.value;
+                    setForm({ ...form, currency });
+                    if (currency !== "NGN" && method === "transfer") setMethod("online");
+                    if (!paystackCanTake(options, currency)) setCheckout("flutterwave");
+                  }}
+                >
+                  {(options?.currencies?.length ? options.currencies : [...GIVING_CURRENCIES]).map(
+                    (c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} — {c.name}
+                      </option>
+                    ),
+                  )}
+                </Select>
+              </Field>
               <Field label="Full name">
                 <Input
                   value={form.donorName}
@@ -200,7 +268,7 @@ export default function Give() {
                 className="w-full"
               >
                 {method === "online" ? "Give securely" : "Continue"}{" "}
-                {form.amount && naira(Number(form.amount))}
+                {form.amount && money(Number(form.amount), form.currency)}
               </Button>
               {method === "online" && !options?.onlineLive && (
                 <p className="text-center text-xs text-ink-400">
@@ -213,6 +281,37 @@ export default function Give() {
       </section>
     </div>
   );
+}
+
+function hasBankDetails(options: GivingOptions): boolean {
+  const number = options.bank?.accountNumber?.trim() ?? "";
+  return number.length > 0 && number !== "0000000000";
+}
+
+function bothLive(options: GivingOptions): boolean {
+  return !!options.providers?.flutterwave && !!options.providers?.paystack;
+}
+
+function paystackCanTake(options: GivingOptions | null | undefined, currency: string): boolean {
+  const allowed = options?.paystackCurrencies;
+  if (allowed && allowed.length > 0) return allowed.includes(currency);
+  return currency === "NGN";
+}
+
+function currencyHint(method: "online" | "transfer", currency: string): string {
+  if (method === "transfer") return "Bank transfer is received in Nigerian Naira.";
+  if (currency === "NGN") {
+    return "Naira checkout is for Nigerian cards. Paying from a dollar account? Switch to USD.";
+  }
+  return "Dollar gifts go through Flutterwave (Apple Pay on iPhone or Mac). Paystack on this church account cannot take foreign cards.";
+}
+
+function onlineSubtitle(options: GivingOptions): string {
+  if (!options.onlineLive) return "Instant & secure";
+  if (bothLive(options)) return "Naira: Paystack. Dollars: Flutterwave Apple Pay.";
+  if (options.providers?.flutterwave) return "Secured by Flutterwave";
+  if (options.providers?.paystack) return "Secured by Paystack";
+  return "Instant & secure";
 }
 
 function MethodTile({

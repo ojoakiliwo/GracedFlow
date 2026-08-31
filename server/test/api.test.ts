@@ -7,6 +7,7 @@ process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ??
   "postgres://igc:igc@127.0.0.1:5432/gracedflow_test";
 process.env.SCHEDULER_ENABLED = "false";
+process.env.SEED_DEMO = "true";
 
 let app: Express;
 let token: string;
@@ -35,6 +36,15 @@ describe("Infinitely Graced Church API", () => {
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
     expect(res.body.church).toContain("Infinitely Graced");
+  });
+
+  it("publishes Sunday 8:00 AM and Wednesday 4:00 PM service times", async () => {
+    const res = await request(app).get("/api/public/info");
+    expect(res.status).toBe(200);
+    expect(res.body.services).toEqual([
+      { name: "Sunday Service", time: "Sundays, 8:00 AM" },
+      { name: "Wednesday Prayer Meeting", time: "Wednesdays, 4:00 PM" },
+    ]);
   });
 
   it("logs in the seeded admin and rejects bad passwords", async () => {
@@ -144,6 +154,29 @@ describe("Infinitely Graced Church API", () => {
       request: "Please pray for my family.",
     });
     expect(res.status).toBe(201);
+  });
+
+  it("posts a public program with a flyer and lists it on the website", async () => {
+    const created = await auth(request(app).post("/api/events")).send({
+      title: "Youth Night",
+      description: "A night of worship.",
+      type: "program",
+      startsAt: "2026-11-15T18:00:00+01:00",
+      endsAt: "2026-11-15T21:00:00+01:00",
+      location: "Main Auditorium",
+      imageUrl: "/programs/youth-night.jpg",
+      isPublic: true,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.image_url).toBe("/programs/youth-night.jpg");
+
+    const list = await request(app).get("/api/public/events");
+    expect(list.status).toBe(200);
+    expect(list.body.some((e: { title: string; image_url: string }) => e.title === "Youth Night" && e.image_url === "/programs/youth-night.jpg")).toBe(true);
+
+    const detail = await request(app).get(`/api/public/events/${created.body.id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.location).toBe("Main Auditorium");
   });
 
   it("returns dashboard analytics", async () => {

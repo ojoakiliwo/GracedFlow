@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api, apiPost, getToken, setToken } from "./api";
+import { api, apiPost, getToken, setToken, ApiError } from "./api";
 
 export interface User {
   id: string;
@@ -15,6 +15,7 @@ export interface User {
   role: string;
   first_name: string;
   last_name: string;
+  ledDepartments?: { id: string; name: string; slug: string; position: string }[];
 }
 
 interface AuthState {
@@ -24,6 +25,9 @@ interface AuthState {
   register: (input: RegisterInput) => Promise<void>;
   logout: () => void;
   hasRole: (min: Role) => boolean;
+  isSuperAdmin: boolean;
+  canManageChurch: boolean;
+  leadsDepartment: (departmentId?: string | null) => boolean;
 }
 
 export interface RegisterInput {
@@ -56,7 +60,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     api<User>("/auth/me")
       .then((u) => setUser(u))
-      .catch(() => setToken(null))
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 401) {
+          setToken(null);
+          setUser(null);
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -67,12 +76,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     setToken(res.token);
     setUser(res.user);
+    try {
+      setUser(await api<User>("/auth/me"));
+    } catch {
+      // Session is already established from /auth/login.
+    }
   }, []);
 
   const register = useCallback(async (input: RegisterInput) => {
     const res = await apiPost<{ token: string; user: User }>("/auth/register", input);
     setToken(res.token);
     setUser(res.user);
+    try {
+      setUser(await api<User>("/auth/me"));
+    } catch {
+      // Session is already established from /auth/register.
+    }
   }, []);
 
   const logout = useCallback(() => {
@@ -85,9 +104,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const isSuperAdmin = user?.role === "super_admin";
+  const canManageChurch = hasRole("admin");
+
+  const leadsDepartment = useCallback(
+    (departmentId?: string | null) => {
+      if (!user) return false;
+      if (RANK[user.role as Role] >= RANK.admin) return true;
+      const led = user.ledDepartments ?? [];
+      if (!departmentId) return led.some((d) => d.slug === "all-workers");
+      return led.some((d) => d.id === departmentId);
+    },
+    [user],
+  );
+
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, hasRole }),
-    [user, loading, login, register, logout, hasRole],
+    () => ({
+      user,
+      loading,
+      login,
+      register,
+      logout,
+      hasRole,
+      isSuperAdmin,
+      canManageChurch,
+      leadsDepartment,
+    }),
+    [user, loading, login, register, logout, hasRole, isSuperAdmin, canManageChurch, leadsDepartment],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

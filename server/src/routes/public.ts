@@ -5,7 +5,14 @@ import { config } from "../config.js";
 import { HttpError, newId, nowIso } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 import { createPrayerRequest } from "./prayer.js";
-import { initializeTransaction, isPaystackLive, verifyTransaction } from "../payments.js";
+import {
+  initializeTransaction,
+  isOnlineLive,
+  livePaymentProviders,
+  resolveCheckoutProvider,
+  verifyTransaction,
+} from "../payments.js";
+import { GIVING_CURRENCIES, normalizeGivingCurrency, paystackCollectableCurrencies } from "../currencies.js";
 
 export const publicRouter = Router();
 
@@ -22,8 +29,8 @@ publicRouter.get(
         onlineUrl: config.giving.onlineUrl,
       },
       services: [
-        { name: "Sunday Service", time: "Sundays, 9:00 AM" },
-        { name: "Wednesday Prayer Meeting", time: "Wednesdays, 5:30 PM" },
+        { name: "Sunday Service", time: "Sundays, 8:00 AM" },
+        { name: "Wednesday Prayer Meeting", time: "Wednesdays, 4:00 PM" },
       ],
     });
   }),
@@ -33,11 +40,30 @@ publicRouter.get(
   "/events",
   asyncHandler(async (_req, res) => {
     res.json(
-      await db.prepare(
-          "SELECT id, title, description, type, starts_at, ends_at, location FROM events WHERE is_public = 1 ORDER BY starts_at ASC",
+      await db
+        .prepare(
+          `SELECT id, title, description, type, starts_at, ends_at, location, image_url
+           FROM events
+           WHERE is_public = 1
+           ORDER BY starts_at ASC`,
         )
         .all(),
     );
+  }),
+);
+
+publicRouter.get(
+  "/events/:id",
+  asyncHandler(async (req, res) => {
+    const row = await db
+      .prepare(
+        `SELECT id, title, description, type, starts_at, ends_at, location, image_url
+         FROM events
+         WHERE id = ? AND is_public = 1`,
+      )
+      .get(req.params.id);
+    if (!row) throw new HttpError(404, "Program not found");
+    res.json(row);
   }),
 );
 
@@ -80,10 +106,18 @@ publicRouter.post(
 publicRouter.get(
   "/giving-options",
   asyncHandler(async (_req, res) => {
+    const providers = livePaymentProviders();
     res.json({
-      currency: config.payments.currency,
-      online: config.payments.provider === "paystack" || config.payments.provider === "dryrun",
-      onlineLive: isPaystackLive(),
+      currency: config.payments.currency || "NGN",
+      currencies: GIVING_CURRENCIES,
+      online: true,
+      onlineLive: isOnlineLive(),
+      provider: resolveCheckoutProvider(),
+      providers: {
+        flutterwave: providers.includes("flutterwave"),
+        paystack: providers.includes("paystack"),
+      },
+      paystackCurrencies: paystackCollectableCurrencies(),
       paystackPublicKey: config.payments.paystackPublicKey || null,
       bank: config.giving,
     });
@@ -98,7 +132,9 @@ const giveSchema = z.object({
   donorPhone: z.string().optional(),
   type: z.string().default("offering"),
   amount: z.number().positive(),
+  currency: z.string().optional(),
   method: z.enum(["online", "transfer"]).default("online"),
+  provider: z.enum(["flutterwave", "paystack", "dryrun"]).optional(),
   note: z.string().optional(),
 });
 
@@ -106,13 +142,57 @@ publicRouter.post(
   "/give",
   asyncHandler(async (req, res) => {
     const input = parseBody(giveSchema, req.body);
+    const currency = normalizeGivingCurrency(input.currency);
+    if (input.method === "transfer" && currency !== "NGN") {
+      throw new HttpError(
+        400,
+        "Bank transfer is in Nigerian Naira. Use Card / Online to give in another currency.",
+      );
+    }
     const id = newId("don");
     const reference = `IGC-${Date.now().toString(36).toUpperCase()}-${Math.floor(
       Math.random() * 1000,
     )}`;
+    if (input.method === "online") {
+      const init = await initializeTransaction({
+        email: input.donorEmail || "giving@infinitelygracedchurch.com",
+        amountMajor: input.amount,
+        reference,
+        customerName: input.donorName,
+        provider: input.provider,
+        currency,
+        metadata: { donationId: id, type: input.type, donorName: input.donorName, currency },
+      });
+      await db.prepare(
+        `INSERT INTO donations (id, donor_name, donor_email, donor_phone, type, amount, currency, method, reference, status, note, provider, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+      ).run(
+        id,
+        input.donorName ?? null,
+        input.donorEmail || null,
+        input.donorPhone ?? null,
+        input.type,
+        input.amount,
+        currency,
+        input.method,
+        reference,
+        input.note ?? null,
+        init.provider,
+        nowIso(),
+      );
+      return void res.status(201).json({
+        id,
+        reference,
+        method: "online",
+        currency,
+        provider: init.provider,
+        authorizationUrl: init.authorizationUrl,
+      });
+    }
+
     await db.prepare(
-      `INSERT INTO donations (id, donor_name, donor_email, donor_phone, type, amount, currency, method, reference, status, note, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+      `INSERT INTO donations (id, donor_name, donor_email, donor_phone, type, amount, currency, method, reference, status, note, provider, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
     ).run(
       id,
       input.donorName ?? null,
@@ -120,33 +200,19 @@ publicRouter.post(
       input.donorPhone ?? null,
       input.type,
       input.amount,
-      config.payments.currency,
+      currency,
       input.method,
       reference,
       input.note ?? null,
+      null,
       nowIso(),
     );
-
-    if (input.method === "online") {
-      const init = await initializeTransaction({
-        email: input.donorEmail || "giving@infinitelygraced.church",
-        amountMajor: input.amount,
-        reference,
-        metadata: { donationId: id, type: input.type, donorName: input.donorName },
-      });
-      return void res.status(201).json({
-        id,
-        reference,
-        method: "online",
-        provider: init.provider,
-        authorizationUrl: init.authorizationUrl,
-      });
-    }
 
     res.status(201).json({
       id,
       reference,
       method: "transfer",
+      currency,
       giving: config.giving,
       message:
         "Thank you for your generosity! Use the reference and account details to complete your gift.",
@@ -154,26 +220,51 @@ publicRouter.post(
   }),
 );
 
-// Called after returning from the Paystack checkout to confirm payment.
+// Called after returning from hosted checkout. Confirms the gift by querying
+// Flutterwave/Paystack directly — webhooks are optional.
 publicRouter.get(
   "/give/verify",
   asyncHandler(async (req, res) => {
-    const reference = String(req.query.reference ?? "");
+    const reference = String(req.query.reference ?? req.query.tx_ref ?? req.query.trxref ?? "");
     if (!reference) throw new HttpError(400, "Missing reference");
     const donation = await db.prepare("SELECT * FROM donations WHERE reference = ?")
-      .get(reference) as { id: string; amount: number; type: string; status: string } | undefined;
+      .get(reference) as {
+        id: string;
+        amount: number;
+        type: string;
+        status: string;
+        currency?: string | null;
+        provider?: string | null;
+      } | undefined;
     if (!donation) throw new HttpError(404, "Donation not found");
 
     if (donation.status === "confirmed") {
-      return void res.json({ status: "success", amount: donation.amount, type: donation.type });
+      return void res.json({
+        status: "success",
+        amount: donation.amount,
+        type: donation.type,
+        currency: donation.currency ?? "NGN",
+      });
     }
 
-    const result = await verifyTransaction(reference);
+    const chargeId = String(
+      req.query.chargeId ?? req.query.id ?? req.query.transaction_id ?? req.query.charge_id ?? "",
+    );
+    const provider = String(req.query.provider ?? donation.provider ?? "");
+    const result = await verifyTransaction(reference, {
+      chargeId: chargeId || undefined,
+      provider: provider || undefined,
+    });
     if (result.status === "success") {
       await db.prepare(
         "UPDATE donations SET status = 'confirmed', method = 'card', confirmed_at = ? WHERE id = ?",
       ).run(nowIso(), donation.id);
     }
-    res.json({ status: result.status, amount: donation.amount, type: donation.type });
+    res.json({
+      status: result.status,
+      amount: donation.amount,
+      type: donation.type,
+      currency: donation.currency ?? "NGN",
+    });
   }),
 );
