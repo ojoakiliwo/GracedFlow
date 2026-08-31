@@ -123,6 +123,8 @@ export function useBroadcastStudio() {
   const statusRef = useRef<StudioStatus>("idle");
   const monitorRef = useRef(false);
   const bibleHitsRef = useRef<BibleHit[]>([]);
+  const speechHitsRef = useRef<BibleHit[]>([]);
+  const overlayHitsRef = useRef<BibleHit[]>([]);
   const listenRef = useRef(false);
   const recognitionRef = useRef<StudioSpeechRecognition | null>(null);
   const nodes = useRef<{
@@ -189,12 +191,22 @@ export function useBroadcastStudio() {
     if (stream) void el.play().catch(() => undefined);
   }, []);
 
+  const publishBibleHits = useCallback(() => {
+    bibleHitsRef.current = mergeBibleHits(speechHitsRef.current, overlayHitsRef.current);
+    setBibleHits([...bibleHitsRef.current]);
+  }, []);
+
   const ingestTranscript = useCallback((text: string) => {
     const found = parseBibleReferences(text);
     if (!found.length) return;
-    bibleHitsRef.current = mergeBibleHits(bibleHitsRef.current, found);
-    setBibleHits([...bibleHitsRef.current]);
-  }, []);
+    speechHitsRef.current = mergeBibleHits(speechHitsRef.current, found);
+    publishBibleHits();
+  }, [publishBibleHits]);
+
+  const ingestOverlayText = useCallback((headline: string, body: string) => {
+    overlayHitsRef.current = parseBibleReferences(`${headline} ${body}`);
+    publishBibleHits();
+  }, [publishBibleHits]);
 
   const stopListening = useCallback(() => {
     listenRef.current = false;
@@ -601,15 +613,30 @@ export function useBroadcastStudio() {
     if (rec && rec.state === "recording") rec.stop();
   }, []);
 
+  const paintIdlePreview = useCallback(() => {
+    if (statusRef.current === "live") return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (!canvas.width || !canvas.height) {
+      canvas.width = 1280;
+      canvas.height = 720;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#0b0b10";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    drawProgrammeOverlay(ctx, canvas.width, canvas.height, overlayRef.current);
+  }, []);
+
   const updateOverlay = useCallback((patch: Partial<ProgrammeOverlay>) => {
     setOverlay((prev) => {
       const next = { ...prev, ...patch };
       if (patch.headline != null || patch.body != null) {
-        ingestTranscript(`${next.headline} ${next.body}`);
+        ingestOverlayText(next.headline, next.body);
       }
       return next;
     });
-  }, [ingestTranscript]);
+  }, [ingestOverlayText]);
 
   const putOverlayOnAir = useCallback(() => {
     setOverlay((prev) => ({ ...prev, visible: true }));
@@ -641,6 +668,8 @@ export function useBroadcastStudio() {
   }, []);
 
   const dismissBibleHits = useCallback(() => {
+    speechHitsRef.current = [];
+    overlayHitsRef.current = [];
     bibleHitsRef.current = [];
     setBibleHits([]);
   }, []);
@@ -661,6 +690,11 @@ export function useBroadcastStudio() {
     const t = window.setInterval(() => setElapsedSec((s) => s + 1), 1000);
     return () => window.clearInterval(t);
   }, [status]);
+
+  useEffect(() => {
+    overlayRef.current = overlay;
+    paintIdlePreview();
+  }, [overlay, status, paintIdlePreview]);
 
   return {
     videoRef,

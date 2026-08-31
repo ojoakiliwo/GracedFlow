@@ -31,6 +31,13 @@ describe("Bible reference parsing", () => {
     expect(merged.map((h) => h.display)).toEqual(["John 3:16", "Luke 4:18"]);
   });
 
+  it("replaces a half-typed reference instead of keeping every keystroke", () => {
+    const chapter = parseBibleReferences("John 3");
+    const mid = mergeBibleHits(chapter, parseBibleReferences("John 3:1"));
+    const done = mergeBibleHits(mid, parseBibleReferences("John 3:16"));
+    expect(done.map((h) => h.display)).toEqual(["John 3:16"]);
+  });
+
   it("loads verse text through the lookup helper", async () => {
     const fetcher = async () =>
       ({

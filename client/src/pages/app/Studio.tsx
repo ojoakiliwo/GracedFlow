@@ -113,7 +113,7 @@ export default function Studio() {
               <video ref={studio.videoRef} className="hidden" muted playsInline />
               <audio ref={studio.programmeAudioRef} className="hidden" playsInline />
               <canvas ref={studio.canvasRef} className="h-full w-full object-contain" />
-              {!live && (
+              {!live && !studio.overlay.visible && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-brand-100">
                   <MonitorPlay className="h-10 w-10 text-brand-300" />
                   <p className="text-sm">Start the studio to open camera and microphone.</p>
@@ -125,9 +125,9 @@ export default function Studio() {
                   Recording
                 </span>
               )}
-              {live && studio.overlay.visible && (
+              {studio.overlay.visible && (
                 <span className="absolute right-4 top-4 rounded-full bg-gold-500 px-3 py-1 text-[11px] font-semibold text-white">
-                  Text on air
+                  {live ? "Text on air" : "Text preview"}
                 </span>
               )}
               {live && (

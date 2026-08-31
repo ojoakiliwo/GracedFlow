@@ -158,12 +158,32 @@ export async function fetchVerseText(
   return payload;
 }
 
+/** True when `short` looks like a half-typed version of `long` (John 3 → John 3:16). */
+export function isTypingPrefix(short: BibleHit, long: BibleHit): boolean {
+  if (short.book !== long.book || short.chapter !== long.chapter) return false;
+  if (short.display === long.display) return false;
+  if (!short.verse && long.verse) return true;
+  if (
+    short.verse &&
+    long.verse &&
+    !short.verseEnd &&
+    String(long.verse).startsWith(String(short.verse)) &&
+    String(long.verse).length > String(short.verse).length
+  ) {
+    return true;
+  }
+  if (short.verse && long.verse && short.verse === long.verse && !short.verseEnd && long.verseEnd) {
+    return true;
+  }
+  return false;
+}
+
 export function mergeBibleHits(existing: BibleHit[], incoming: BibleHit[]): BibleHit[] {
-  const seen = new Set(existing.map((h) => h.display));
-  const next = [...existing];
+  let next = [...existing];
   for (const hit of incoming) {
-    if (seen.has(hit.display)) continue;
-    seen.add(hit.display);
+    next = next.filter((old) => !isTypingPrefix(old, hit));
+    if (next.some((h) => h.display === hit.display)) continue;
+    if (next.some((h) => isTypingPrefix(hit, h))) continue;
     next.push(hit);
   }
   return next.slice(-12);
