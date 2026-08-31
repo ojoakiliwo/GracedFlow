@@ -660,7 +660,7 @@ export function useBroadcastStudio() {
         visible: true,
         design: "verse",
         headline: pending.length === 1 ? pending[0]!.display : "Scripture",
-        body: lines.join("   ·   "),
+        body: lines.join("\n\n"),
       });
     } finally {
       setPostingVerse(false);

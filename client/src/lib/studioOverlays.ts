@@ -39,19 +39,23 @@ export function wrapText(
   text: string,
   maxWidth: number,
 ): string[] {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return [];
+  const paragraphs = text.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+  if (paragraphs.length === 0) return [];
   const lines: string[] = [];
-  let line = words[0]!;
-  for (let i = 1; i < words.length; i++) {
-    const next = `${line} ${words[i]}`;
-    if (ctx.measureText(next).width <= maxWidth) line = next;
-    else {
-      lines.push(line);
-      line = words[i]!;
+  for (const paragraph of paragraphs) {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    if (words.length === 0) continue;
+    let line = words[0]!;
+    for (let i = 1; i < words.length; i++) {
+      const next = `${line} ${words[i]}`;
+      if (ctx.measureText(next).width <= maxWidth) line = next;
+      else {
+        lines.push(line);
+        line = words[i]!;
+      }
     }
+    lines.push(line);
   }
-  lines.push(line);
   return lines;
 }
 
@@ -106,12 +110,16 @@ export function drawProgrammeOverlay(
     const lines = wrapText(ctx, body || "Infinitely Graced Church", boxW - 48);
     ctx.fillText(lines[0] ?? "", x + 28, y + 66);
   } else if (overlay.design === "verse") {
-    const boxW = Math.min(900, width * 0.78);
+    const boxW = Math.min(980, width * 0.86);
     const x = (width - boxW) / 2;
-    ctx.font = "400 28px Fraunces, Georgia, serif";
-    const bodyLines = wrapText(ctx, body || headline, boxW - 80).slice(0, 6);
-    const boxH = 92 + bodyLines.length * 36 + (headline ? 36 : 0);
-    const y = (height - boxH) / 2;
+    const copy = body || headline;
+    const long = copy.length > 140;
+    const fontSize = long ? 20 : 28;
+    const lineH = long ? 26 : 36;
+    ctx.font = `400 ${fontSize}px Fraunces, Georgia, serif`;
+    const bodyLines = wrapText(ctx, copy, boxW - 72).slice(0, long ? 12 : 6);
+    const boxH = 88 + bodyLines.length * lineH + (headline ? 28 : 0);
+    const y = Math.max(24, (height - boxH) / 2);
     roundRect(ctx, x, y, boxW, boxH, 20);
     ctx.fillStyle = "rgba(20, 12, 40, 0.88)";
     ctx.fill();
@@ -119,13 +127,13 @@ export function drawProgrammeOverlay(
     ctx.lineWidth = 3;
     ctx.stroke();
     ctx.fillStyle = "#e0bd6f";
-    ctx.font = "600 22px Inter, system-ui, sans-serif";
+    ctx.font = "600 20px Inter, system-ui, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(headline || "Holy Scripture", width / 2, y + 28);
+    ctx.fillText(headline || "Holy Scripture", width / 2, y + 22);
     ctx.fillStyle = "#f8f5ff";
-    ctx.font = "400 28px Fraunces, Georgia, serif";
+    ctx.font = `400 ${fontSize}px Fraunces, Georgia, serif`;
     bodyLines.forEach((line, i) => {
-      ctx.fillText(line, width / 2, y + 70 + i * 36);
+      ctx.fillText(line, width / 2, y + 58 + i * lineH);
     });
     ctx.textAlign = "left";
   } else if (overlay.design === "banner") {

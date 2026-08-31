@@ -67,6 +67,8 @@ describe("On-air design suggestions", () => {
     } as unknown as CanvasRenderingContext2D;
     const lines = wrapText(ctx, "God is good all the time", 80);
     expect(lines.length).toBeGreaterThan(1);
+    const paras = wrapText(ctx, "John 3:16 — For God so loved\n\nRomans 8:28 — And we know", 80);
+    expect(paras.length).toBeGreaterThan(lines.length);
   });
 
   it("does not draw typed text until it is put on air", () => {
