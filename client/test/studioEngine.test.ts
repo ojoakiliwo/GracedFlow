@@ -82,4 +82,11 @@ describe("Broadcast studio adaptive engine", () => {
     const musicAgc = nextAgcGain(0.4, 0.9, 1.8, MUSIC_PROFILE);
     expect(musicAgc).toBeLessThan(speechAgc);
   });
+
+  it("stops chasing gain when automatic living sound is off", () => {
+    const locked = tickAudio({ ...INITIAL_AUDIO_STATE, agcGain: 1.4, gate: 0.8 }, 0.4, 0.9, SPEECH_PROFILE, false);
+    expect(locked.agcGain).toBe(1);
+    expect(locked.gate).toBe(1);
+    expect(locked.compressorThresholdDb).toBe(SPEECH_PROFILE.compressorThresholdDb);
+  });
 });

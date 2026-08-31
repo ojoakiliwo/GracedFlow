@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, createContext, type ReactNode } from "react";
 import {
   INITIAL_AUDIO_STATE,
   INITIAL_VIDEO_AUTO,
@@ -37,6 +37,19 @@ import {
   drawProgrammeOverlay,
   type ProgrammeOverlay,
 } from "./studioOverlays";
+import {
+  activeSoundProfile,
+  getAudioPreset,
+  loadSoundSettings,
+  makeReverbImpulse,
+  reverbDecayPower,
+  reverbDurationSec,
+  reverbWetDry,
+  saveSoundSettings,
+  type AudioPresetId,
+  type ReverbSettings,
+  type StudioSoundSettings,
+} from "./studioSound";
 import {
   getSpeechRecognitionCtor,
   speechChunkFromEvent,
@@ -162,7 +175,7 @@ function paintStudioMonitor(
   drawProgrammeOverlay(ctx, canvas.width, canvas.height, overlay, { stage });
 }
 
-export function useBroadcastStudio() {
+export function useBroadcastStudioEngine() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -182,6 +195,7 @@ export function useBroadcastStudio() {
   const quoteSearchGen = useRef(0);
   const listenRef = useRef(false);
   const musicFilterRef = useRef(false);
+  const soundSettingsRef = useRef<StudioSoundSettings>(loadSoundSettings());
   const liveVerseRef = useRef<BibleHit | null>(null);
   const recognitionRef = useRef<StudioSpeechRecognition | null>(null);
   const nodes = useRef<{
@@ -196,6 +210,11 @@ export function useBroadcastStudio() {
     compressor?: DynamicsCompressorNode;
     limiter?: DynamicsCompressorNode;
     programmeGain?: GainNode;
+    dryGain?: GainNode;
+    wetGain?: GainNode;
+    preDelay?: DelayNode;
+    convolver?: ConvolverNode;
+    reverbSum?: GainNode;
     analyserIn?: AnalyserNode;
     analyserOut?: AnalyserNode;
     dest?: MediaStreamAudioDestinationNode;
@@ -240,6 +259,7 @@ export function useBroadcastStudio() {
   const [searchingQuotes, setSearchingQuotes] = useState(false);
   const [selectedVerseRefs, setSelectedVerseRefs] = useState<string[]>([]);
   const [musicFilter, setMusicFilterState] = useState(false);
+  const [soundSettings, setSoundSettingsState] = useState<StudioSoundSettings>(() => loadSoundSettings());
   const [liveVerse, setLiveVerse] = useState<BibleHit | null>(null);
   const [steppingVerse, setSteppingVerse] = useState(false);
 
@@ -249,6 +269,7 @@ export function useBroadcastStudio() {
   statusRef.current = status;
   monitorRef.current = monitor;
   musicFilterRef.current = musicFilter;
+  soundSettingsRef.current = soundSettings;
 
   const attachProgrammeAudio = useCallback((stream: MediaStream | undefined) => {
     const el = programmeAudioRef.current;
@@ -429,11 +450,14 @@ export function useBroadcastStudio() {
     analyserOut.getFloatTimeDomainData(bufOut);
     const rms = rmsFromSamples(bufIn);
     const peak = peakFromSamples(bufIn);
+    const settings = soundSettingsRef.current;
+    const profile = activeSoundProfile(settings, musicFilterRef.current);
     audioState.current = tickAudio(
       audioState.current,
       rms,
       peak,
-      soundProfile(musicFilterRef.current ? "music" : "speech"),
+      profile,
+      settings.auto,
     );
     const s = audioState.current;
     if (n.gate) n.gate.gain.setTargetAtTime(s.gate, n.ctx!.currentTime, 0.08);
@@ -498,11 +522,82 @@ export function useBroadcastStudio() {
     }
   }, []);
 
+  const applyReverbSettings = useCallback((reverb: ReverbSettings, rebuildImpulse = true) => {
+    const n = nodes.current;
+    const ctx = n.ctx;
+    if (!ctx || !n.dryGain || !n.wetGain || !n.preDelay) return;
+    const t = ctx.currentTime;
+    const mix = reverbWetDry(reverb.mix, reverb.enabled);
+    n.dryGain.gain.setTargetAtTime(mix.dry, t, 0.06);
+    n.wetGain.gain.setTargetAtTime(mix.wet, t, 0.06);
+    n.preDelay.delayTime.setTargetAtTime(reverb.preDelayMs / 1000, t, 0.06);
+    if (rebuildImpulse && n.convolver) {
+      n.convolver.buffer = makeReverbImpulse(
+        ctx,
+        reverbDurationSec(reverb.roomSize),
+        reverbDecayPower(reverb.decay),
+      );
+    }
+  }, []);
+
+  const applyActiveSound = useCallback(() => {
+    const settings = soundSettingsRef.current;
+    applySoundProfile(activeSoundProfile(settings, musicFilterRef.current));
+    applyReverbSettings(settings.reverb);
+  }, [applyReverbSettings, applySoundProfile]);
+
+  const persistSoundSettings = useCallback(
+    (next: StudioSoundSettings, rebuildImpulse = true) => {
+      soundSettingsRef.current = next;
+      setSoundSettingsState(next);
+      saveSoundSettings(next);
+      applySoundProfile(activeSoundProfile(next, musicFilterRef.current));
+      applyReverbSettings(next.reverb, rebuildImpulse);
+    },
+    [applyReverbSettings, applySoundProfile],
+  );
+
+  const setSoundAuto = useCallback(
+    (auto: boolean) => {
+      persistSoundSettings({ ...soundSettingsRef.current, auto });
+    },
+    [persistSoundSettings],
+  );
+
+  const setAudioPreset = useCallback(
+    (preset: AudioPresetId) => {
+      const pack = getAudioPreset(preset);
+      persistSoundSettings({
+        auto: false,
+        preset,
+        reverb: { ...pack.reverb },
+      });
+    },
+    [persistSoundSettings],
+  );
+
+  const setReverb = useCallback(
+    (patch: Partial<ReverbSettings>) => {
+      const current = soundSettingsRef.current;
+      const rebuildImpulse = patch.roomSize != null || patch.decay != null || patch.enabled === true;
+      persistSoundSettings(
+        {
+          ...current,
+          reverb: { ...current.reverb, ...patch },
+        },
+        rebuildImpulse,
+      );
+    },
+    [persistSoundSettings],
+  );
+
   const setMusicFilter = useCallback(
     (on: boolean) => {
       musicFilterRef.current = on;
       setMusicFilterState(on);
-      applySoundProfile(soundProfile(on ? "music" : "speech"));
+      if (soundSettingsRef.current.auto) {
+        applySoundProfile(soundProfile(on ? "music" : "speech"));
+      }
     },
     [applySoundProfile],
   );
@@ -576,6 +671,16 @@ export function useBroadcastStudio() {
       limiter.release.value = 0.12;
       const programmeGain = ctx.createGain();
       programmeGain.gain.value = SPEECH_PROFILE.programmeGain;
+      const dryGain = ctx.createGain();
+      dryGain.gain.value = 1;
+      const wetGain = ctx.createGain();
+      wetGain.gain.value = 0;
+      const preDelay = ctx.createDelay(1);
+      preDelay.delayTime.value = 0.018;
+      const convolver = ctx.createConvolver();
+      convolver.normalize = true;
+      const reverbSum = ctx.createGain();
+      reverbSum.gain.value = 1;
       const analyserOut = ctx.createAnalyser();
       analyserOut.fftSize = 2048;
       const dest = ctx.createMediaStreamDestination();
@@ -589,7 +694,13 @@ export function useBroadcastStudio() {
       agc.connect(compressor);
       compressor.connect(limiter);
       limiter.connect(programmeGain);
-      programmeGain.connect(analyserOut);
+      programmeGain.connect(dryGain);
+      programmeGain.connect(preDelay);
+      preDelay.connect(convolver);
+      convolver.connect(wetGain);
+      dryGain.connect(reverbSum);
+      wetGain.connect(reverbSum);
+      reverbSum.connect(analyserOut);
       analyserOut.connect(dest);
 
       nodes.current = {
@@ -603,13 +714,18 @@ export function useBroadcastStudio() {
         compressor,
         limiter,
         programmeGain,
+        dryGain,
+        wetGain,
+        preDelay,
+        convolver,
+        reverbSum,
         analyserIn,
         analyserOut,
         dest,
         rawVideo: videoStream,
       };
       connectAudioSource(ctx, audioStream);
-      applySoundProfile(soundProfile(musicFilterRef.current ? "music" : "speech"));
+      applyActiveSound();
       attachProgrammeAudio(dest.stream);
 
       if (videoRef.current) {
@@ -635,7 +751,7 @@ export function useBroadcastStudio() {
       setError(studioStartMessage(e));
     }
   }, [
-    applySoundProfile,
+    applyActiveSound,
     attachProgrammeAudio,
     cameraId,
     connectAudioSource,
@@ -917,6 +1033,10 @@ export function useBroadcastStudio() {
     steppingVerse,
     musicFilter,
     setMusicFilter,
+    soundSettings,
+    setSoundAuto,
+    setAudioPreset,
+    setReverb,
     listening,
     postingVerse,
     searchingQuotes,
@@ -937,4 +1057,25 @@ export function useBroadcastStudio() {
     stopListening,
     dismissBibleHits,
   };
+}
+
+const BroadcastStudioContext = createContext<ReturnType<typeof useBroadcastStudioEngine> | null>(null);
+
+export function BroadcastStudioProvider({ children }: { children: ReactNode }) {
+  const studio = useBroadcastStudioEngine();
+  return (
+    <BroadcastStudioContext.Provider value={studio}>
+      <audio ref={studio.programmeAudioRef} className="hidden" />
+      <video ref={studio.videoRef} className="hidden" playsInline muted />
+      {children}
+    </BroadcastStudioContext.Provider>
+  );
+}
+
+export function useBroadcastStudio() {
+  const ctx = useContext(BroadcastStudioContext);
+  if (!ctx) {
+    throw new Error("useBroadcastStudio must be used inside BroadcastStudioProvider");
+  }
+  return ctx;
 }

@@ -28,7 +28,9 @@ import Events from "./pages/app/Events";
 import Messages from "./pages/app/Messages";
 import Automations from "./pages/app/Automations";
 import Social from "./pages/app/Social";
+import StudioLayout from "./pages/app/StudioLayout";
 import Studio from "./pages/app/Studio";
+import StudioAudio from "./pages/app/StudioAudio";
 import Giving from "./pages/app/Giving";
 import PrayerRequests from "./pages/app/PrayerRequests";
 import Settings from "./pages/app/Settings";
@@ -89,7 +91,10 @@ export default function App() {
         <Route path="messages" element={<RoleGate min="pastor"><Messages /></RoleGate>} />
         <Route path="automations" element={<RoleGate min="admin"><Automations /></RoleGate>} />
         <Route path="social" element={<RoleGate min="admin"><Social /></RoleGate>} />
-        <Route path="studio" element={<RoleGate min="worker"><Studio /></RoleGate>} />
+        <Route path="studio" element={<RoleGate min="worker"><StudioLayout /></RoleGate>}>
+          <Route index element={<Studio />} />
+          <Route path="audio" element={<StudioAudio />} />
+        </Route>
         <Route path="giving" element={<RoleGate min="admin"><Giving /></RoleGate>} />
         <Route path="prayer" element={<RoleGate min="pastor"><PrayerRequests /></RoleGate>} />
         <Route path="settings" element={<RoleGate min="admin"><Settings /></RoleGate>} />

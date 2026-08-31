@@ -166,8 +166,18 @@ export function tickAudio(
   rms: number,
   peak: number,
   profile: SoundProfile = SPEECH_PROFILE,
+  auto = true,
 ): AdaptiveAudioState {
   const noiseFloor = updateNoiseFloor(state.noiseFloor, rms);
+  if (!auto) {
+    return {
+      noiseFloor,
+      gate: 1,
+      agcGain: 1,
+      compressorThresholdDb: profile.compressorThresholdDb,
+      compressorRatio: profile.compressorRatio,
+    };
+  }
   const gate = nextGate(rms, noiseFloor, state.gate);
   const agcGain = nextAgcGain(rms, peak, state.agcGain, profile);
   const comp = nextCompressor(peak, rms, profile);

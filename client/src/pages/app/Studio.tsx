@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { useBroadcastStudio, type VideoLook } from "../../lib/useBroadcastStudio";
 import { Badge, Button, Input, Select, Textarea } from "../../components/ui";
 import {
@@ -8,6 +9,7 @@ import {
   type OverlayDesignId,
   type OverlayPaletteId,
 } from "../../lib/studioOverlays";
+import { getAudioPreset } from "../../lib/studioSound";
 import {
   BookOpen,
   ChevronLeft,
@@ -18,6 +20,7 @@ import {
   Music,
   Radio,
   RefreshCw,
+  SlidersHorizontal,
   Square,
   Type,
   Video,
@@ -165,6 +168,9 @@ export default function Studio() {
           {s.recording ? <Badge color="red">Recording</Badge> : null}
           {s.listening ? <Badge color="green">Listening</Badge> : null}
           {s.musicFilter ? <Badge color="gold">Music filter</Badge> : null}
+          {!s.soundSettings.auto ? (
+            <Badge color="gold">Manual · {getAudioPreset(s.soundSettings.preset).label}</Badge>
+          ) : null}
           {s.searchingQuotes ? <Badge color="gold">Searching quotes</Badge> : null}
           <span className="font-mono text-lg tabular-nums text-gold-300">{formatClock(s.elapsedSec)}</span>
         </div>
@@ -217,6 +223,7 @@ export default function Studio() {
         </Button>
         <Button
           variant={s.musicFilter ? "gold" : "secondary"}
+          disabled={!s.soundSettings.auto}
           onClick={() => s.setMusicFilter(!s.musicFilter)}
         >
           <Music className="h-4 w-4" /> {s.musicFilter ? "Music filter on" : "Music filter"}
@@ -231,7 +238,6 @@ export default function Studio() {
           <div className="grid gap-3 lg:grid-cols-2">
             <MonitorWell tally="preview" title="Preview" live={false}>
               <canvas ref={s.previewCanvasRef} className="aspect-video w-full bg-black" />
-              <video ref={s.videoRef} className="hidden" playsInline muted />
             </MonitorWell>
             <MonitorWell tally="program" title="Program / live" live={s.programOverlay.visible}>
               <canvas ref={s.canvasRef} className="aspect-video w-full bg-black" />
@@ -457,9 +463,11 @@ export default function Studio() {
             <Meter label="On air" value={s.meters.outputRms} color="bg-emerald-400" />
           </div>
           <p className="mt-3 text-[11px] leading-relaxed text-ink-400">
-            {s.musicFilter
-              ? "Music filter is on: lighter mix so worship is not as heavy as preaching. Switch it off when the music stops so every instrument and voice comes through clearly."
-              : "Speech mix is louder and fuller for preaching. Turn on Music filter when worship starts."}
+            {!s.soundSettings.auto
+              ? `Automatic is off. Style is locked to ${getAudioPreset(s.soundSettings.preset).label}. Open advanced audio to change it.`
+              : s.musicFilter
+                ? "Music filter is on: lighter mix so worship is not as heavy as preaching. Switch it off when the music stops so every instrument and voice comes through clearly."
+                : "Speech mix is louder and fuller for preaching. Turn on Music filter when worship starts."}
           </p>
           <label className="mt-3 flex items-center gap-2 text-sm text-ink-200">
             <input
@@ -470,7 +478,6 @@ export default function Studio() {
             />
             Monitor in this room
           </label>
-          <audio ref={s.programmeAudioRef} className="hidden" />
           {s.recordingUrl ? (
             <a
               href={s.recordingUrl}
@@ -480,6 +487,12 @@ export default function Studio() {
               <Clapperboard className="h-4 w-4" /> Download recording
             </a>
           ) : null}
+          <Link
+            to="/app/studio/audio"
+            className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-brand-50 text-sm font-medium text-brand-800 hover:bg-brand-100"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" /> Advanced audio
+          </Link>
         </DeskCard>
       </div>
 
