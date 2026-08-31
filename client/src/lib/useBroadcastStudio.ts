@@ -47,6 +47,23 @@ const DEFAULT_LOOK: VideoLook = {
   mirror: true,
 };
 
+function studioStartMessage(err: unknown): string {
+  const name = (err as { name?: string })?.name;
+  if (name === "NotAllowedError") {
+    return "Allow camera and microphone in the browser, then start again.";
+  }
+  if (name === "NotFoundError") {
+    return "No camera or microphone was found on this computer. Plug one in and start again.";
+  }
+  if (name === "NotReadableError") {
+    return "The camera or microphone is already in use by another app.";
+  }
+  if (name === "OverconstrainedError") {
+    return "That camera or microphone is not available. Pick another source or start again.";
+  }
+  return (err as Error)?.message || "Could not start the studio.";
+}
+
 export function useBroadcastStudio() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -310,11 +327,7 @@ export function useBroadcastStudio() {
       stream?.getTracks().forEach((t) => t.stop());
       stopGraph();
       setStatus("error");
-      setError(
-        (e as Error).name === "NotAllowedError"
-          ? "Allow camera and microphone in the browser, then start again."
-          : (e as Error).message || "Could not start the studio.",
-      );
+      setError(studioStartMessage(e));
     }
   }, [cameraId, listDevices, micId, paint, recordingUrl, sampleLuma, stopGraph, tickMeters]);
 
