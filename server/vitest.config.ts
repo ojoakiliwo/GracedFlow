@@ -5,5 +5,6 @@ export default defineConfig({
     // Tests share one Postgres database and reset the schema in beforeAll, so
     // they must not run in parallel across files.
     fileParallelism: false,
+    include: ["test/**/*.test.ts", "../client/test/studioEngine.test.ts"],
   },
 });

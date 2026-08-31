@@ -8,7 +8,7 @@ import {
   tickAudio,
   updateNoiseFloor,
   INITIAL_AUDIO_STATE,
-} from "../../client/src/lib/studioEngine";
+} from "../src/lib/studioEngine";
 
 describe("Broadcast studio adaptive engine", () => {
   it("measures RMS and peak from a buffer", () => {
