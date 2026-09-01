@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -14,8 +14,10 @@ import { useApi } from "../../lib/useApi";
 import { apiPut } from "../../lib/api";
 import { useBroadcastStudio } from "../../lib/useBroadcastStudio";
 import {
-  draftsFromConfig,
+  keepTypedKeys,
+  mergeConfigWithStored,
   savePayload,
+  writeStoredLiveDrafts,
   type StudioLiveConfig,
   type StudioLiveDraft,
 } from "../../lib/studioLive";
@@ -38,32 +40,79 @@ function platformIcon(id: string) {
 export default function StudioLive() {
   const s = useBroadcastStudio();
   const live = s.status === "live";
-  const { data, loading, error, reload } = useApi<StudioLiveConfig>("/studio/live");
+  const { data, loading, error } = useApi<StudioLiveConfig>("/studio/live");
   const [drafts, setDrafts] = useState<StudioLiveDraft[]>([]);
   const [saving, setSaving] = useState(false);
+  const [kept, setKept] = useState(false);
   const { notify } = useToast();
+  const draftsRef = useRef(drafts);
+  const dirtyRef = useRef(false);
+  draftsRef.current = drafts;
 
   useEffect(() => {
-    if (data) setDrafts(draftsFromConfig(data));
+    if (!data) return;
+    setDrafts((prev) => {
+      const incoming = mergeConfigWithStored(data);
+      return keepTypedKeys(incoming, prev);
+    });
   }, [data]);
 
+  useEffect(() => {
+    if (drafts.length === 0) return;
+    writeStoredLiveDrafts(drafts);
+  }, [drafts]);
+
+  async function persist(silent: boolean) {
+    const current = draftsRef.current;
+    if (current.length === 0) return;
+    writeStoredLiveDrafts(current);
+    if (!silent) setSaving(true);
+    try {
+      const saved = await apiPut<StudioLiveConfig>("/studio/live", savePayload(current));
+      dirtyRef.current = false;
+      setKept(true);
+      setDrafts((prev) => keepTypedKeys(
+        (saved.destinations ?? []).map((d) => ({ ...d, streamKey: "" })),
+        prev,
+      ));
+      if (!silent) notify("Destinations saved");
+    } catch (err) {
+      notify((err as Error).message, "error");
+    } finally {
+      if (!silent) setSaving(false);
+    }
+  }
+
+  useEffect(() => {
+    if (drafts.length === 0 || !dirtyRef.current) return;
+    const timer = window.setTimeout(() => {
+      void persist(true);
+    }, 700);
+    return () => window.clearTimeout(timer);
+    // persist reads draftsRef; drafts is the dirty signal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drafts]);
+
+  useEffect(() => {
+    return () => {
+      const current = draftsRef.current;
+      if (!current.length) return;
+      writeStoredLiveDrafts(current);
+      if (!dirtyRef.current) return;
+      void apiPut("/studio/live", savePayload(current)).catch(() => {});
+    };
+  }, []);
+
   function patch(platform: string, next: Partial<StudioLiveDraft>) {
+    dirtyRef.current = true;
+    setKept(false);
     setDrafts((prev) => prev.map((d) => (d.platform === platform ? { ...d, ...next } : d)));
   }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    try {
-      const saved = await apiPut<StudioLiveConfig>("/studio/live", savePayload(drafts));
-      setDrafts(draftsFromConfig(saved));
-      notify("Destinations saved");
-      reload();
-    } catch (err) {
-      notify((err as Error).message, "error");
-    } finally {
-      setSaving(false);
-    }
+    dirtyRef.current = true;
+    await persist(false);
   }
 
   if (s.outputFocus) {
@@ -88,14 +137,18 @@ export default function StudioLive() {
         <div>
           <Link
             to="/app/studio"
+            onClick={() => {
+              writeStoredLiveDrafts(draftsRef.current);
+              if (dirtyRef.current) void persist(true);
+            }}
             className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-gold-300 hover:underline"
           >
             <ArrowLeft className="h-4 w-4" /> Back to studio
           </Link>
           <h1 className="font-display text-2xl text-white sm:text-3xl">Go live</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-400">
-            Paste each platform’s stream key once. Then Go live from this desk — Program goes
-            straight on air. You do not open OBS.
+            Paste each platform’s stream key. They save as you type and stay when you leave
+            this page. Then Go live from this desk — you do not open OBS.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -193,14 +246,14 @@ export default function StudioLive() {
                   </label>
                   <label className="block">
                     <span className="mb-1 block text-[11px] text-ink-400">
-                      Stream key{d.streamKeySet ? ` · saved ${d.streamKeyHint}` : ""}
+                      Stream key{d.streamKeySet ? ` · kept ${d.streamKeyHint}` : ""}
                     </span>
                     <Input
                       type="password"
                       autoComplete="off"
                       value={d.streamKey}
                       onChange={(e) => patch(d.platform, { streamKey: e.target.value })}
-                      placeholder={d.streamKeySet ? "Leave blank to keep the saved key" : "Paste stream key"}
+                      placeholder={d.streamKeySet ? "Key is kept — paste only to replace" : "Paste stream key"}
                     />
                   </label>
                   <ol className="mt-3 list-decimal space-y-1 pl-4 text-[11px] leading-relaxed text-ink-400">
@@ -220,9 +273,14 @@ export default function StudioLive() {
               );
             })}
           </div>
-          <Button type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Save destinations"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="submit" disabled={saving}>
+              {saving ? "Saving…" : "Save destinations"}
+            </Button>
+            {kept ? (
+              <span className="text-[11px] text-gold-300">Keys are kept on this church.</span>
+            ) : null}
+          </div>
         </form>
       )}
     </div>
