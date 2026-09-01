@@ -15,6 +15,6 @@ describe("Vercel Express entry for graced-flow-server", () => {
     expect(read("src/app.ts")).not.toMatch(/export default/);
     expect(existsSync(resolve(root, "src/index.ts"))).toBe(false);
     expect(read("src/listen.ts")).toMatch(/app\.listen/);
-    expect(read("vercel.json")).toMatch(/"framework": "express"/);
+    expect(read("vercel.json")).toMatch(/"ignoreCommand": "true"/);
   });
 });

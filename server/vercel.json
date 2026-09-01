@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "express",
-  "installCommand": "npm install",
-  "buildCommand": "mkdir -p public client/dist && printf '%s\\n' '<!doctype html><title>GracedFlow API</title>' > public/index.html && cp public/index.html client/dist/index.html"
+  "framework": null,
+  "ignoreCommand": "true"
 }
