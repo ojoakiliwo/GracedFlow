@@ -110,6 +110,10 @@ export const config = {
       .map((s) => s.trim())
       .filter(Boolean),
   },
+  stream: {
+    accountId: firstEnv("CF_ACCOUNT_ID", "CLOUDFLARE_ACCOUNT_ID"),
+    apiToken: firstEnv("CF_STREAM_API_TOKEN", "CLOUDFLARE_STREAM_API_TOKEN"),
+  },
   scheduler: {
     enabled: bool(process.env.SCHEDULER_ENABLED, true),
     timezone: process.env.TZ_NAME ?? "Africa/Lagos",

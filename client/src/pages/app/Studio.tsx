@@ -164,8 +164,15 @@ export default function Studio() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/app/studio/live"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-gold-400 px-3 text-sm font-semibold text-brand-950 hover:bg-gold-300"
+          >
+            <Radio className="h-4 w-4" /> Go live
+          </Link>
           <Badge color={live ? "red" : "gray"}>{live ? "On air" : "Standby"}</Badge>
           {s.recording ? <Badge color="red">Recording</Badge> : null}
+          {s.socialLive ? <Badge color="red">Social live</Badge> : null}
           {s.listening ? <Badge color="green">Listening</Badge> : null}
           {s.musicFilter ? <Badge color="gold">Music filter</Badge> : null}
           {!s.soundSettings.auto ? (
@@ -488,8 +495,14 @@ export default function Studio() {
             </a>
           ) : null}
           <Link
+            to="/app/studio/live"
+            className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-gold-400 text-sm font-semibold text-brand-950 hover:bg-gold-300"
+          >
+            <Radio className="h-3.5 w-3.5" /> Go live to social
+          </Link>
+          <Link
             to="/app/studio/audio"
-            className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-brand-50 text-sm font-medium text-brand-800 hover:bg-brand-100"
+            className="mt-2 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-brand-50 text-sm font-medium text-brand-800 hover:bg-brand-100"
           >
             <SlidersHorizontal className="h-3.5 w-3.5" /> Advanced audio
           </Link>

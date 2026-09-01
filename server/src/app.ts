@@ -20,6 +20,7 @@ import { prayerRouter } from "./routes/prayer.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { publicRouter } from "./routes/public.js";
 import { settingsRouter } from "./routes/settings.js";
+import { studioRouter } from "./routes/studio.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { cronRouter } from "./routes/cron.js";
 
@@ -93,6 +94,7 @@ export function createApp() {
   app.use("/api/events", eventsRouter);
   app.use("/api/prayer-requests", prayerRouter);
   app.use("/api/settings", settingsRouter);
+  app.use("/api/studio", studioRouter);
   app.use("/api/cron", cronRouter);
 
   app.use((_req, res) => {

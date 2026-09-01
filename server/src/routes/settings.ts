@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { config, emailIsConfigured, resolveSmsProvider } from "../config.js";
+import { restreamConfigured } from "../studioLive.js";
 import { authenticate, requireRole } from "../auth.js";
 import { sendEmail, sendSms } from "../comms.js";
 import { isFlutterwaveLive, isOnlineLive, isPaystackLive } from "../payments.js";
@@ -72,6 +73,14 @@ settingsRouter.get(
             config.social.connected.length > 0
               ? `Connected: ${config.social.connected.join(", ")}`
               : "Simulated — set SOCIAL_CONNECTED to go live",
+        },
+        {
+          key: "livestream",
+          name: "Studio livestream",
+          live: restreamConfigured(),
+          detail: restreamConfigured()
+            ? "Live from the desk via Cloudflare Stream → YouTube / Facebook / Instagram / TikTok"
+            : "Save stream keys in Broadcast studio → Go live. Add CF_ACCOUNT_ID + CF_STREAM_API_TOKEN to send from this browser",
         },
       ],
     });

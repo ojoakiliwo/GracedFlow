@@ -359,5 +359,20 @@ export async function initSchema(): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS idx_meeting_reviews_meeting ON meeting_reviews(meeting_id);
+
+    CREATE TABLE IF NOT EXISTS studio_live_destinations (
+      id TEXT PRIMARY KEY,
+      platform TEXT NOT NULL UNIQUE,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      ingest_url TEXT NOT NULL DEFAULT '',
+      stream_key TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS studio_live_bridge (
+      id TEXT PRIMARY KEY,
+      cf_live_input_id TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 }

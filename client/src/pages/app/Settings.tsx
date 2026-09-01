@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageSquare, Mail, CreditCard, Share2, Send, CheckCircle2, Circle } from "lucide-react";
+import { MessageSquare, Mail, CreditCard, Share2, Radio, Send, CheckCircle2, Circle } from "lucide-react";
 import { apiPost } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import {
@@ -24,6 +24,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   email: Mail,
   payments: CreditCard,
   social: Share2,
+  livestream: Radio,
 };
 
 export default function Settings() {
@@ -168,6 +169,11 @@ export default function Settings() {
                 </li>
                 <li>
                   <strong>Social:</strong> <code>SOCIAL_CONNECTED=facebook,twitter,...</code>
+                </li>
+                <li>
+                  <strong>Studio livestream:</strong> save YouTube / Facebook / Instagram /
+                  TikTok stream keys in Broadcast studio → Go live. One-click send needs{" "}
+                  <code>CF_ACCOUNT_ID</code> and <code>CF_STREAM_API_TOKEN</code>.
                 </li>
               </ul>
             </div>

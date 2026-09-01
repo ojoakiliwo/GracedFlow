@@ -55,6 +55,8 @@ import {
   speechChunkFromEvent,
   type StudioSpeechRecognition,
 } from "./studioSpeech";
+import { apiPost } from "./api";
+import { connectWhip } from "./studioWhip";
 
 export type StudioStatus = "idle" | "live" | "error";
 
@@ -224,6 +226,8 @@ export function useBroadcastStudioEngine() {
     chunks?: Blob[];
     raf?: number;
     mixed?: MediaStream;
+    whip?: RTCPeerConnection;
+    whipStream?: MediaStream;
   }>({});
   const meterTimer = useRef<number | null>(null);
   const lumaTimer = useRef<number | null>(null);
@@ -257,6 +261,10 @@ export function useBroadcastStudioEngine() {
   const [listening, setListening] = useState(false);
   const [postingVerse, setPostingVerse] = useState(false);
   const [searchingQuotes, setSearchingQuotes] = useState(false);
+  const [socialLive, setSocialLive] = useState(false);
+  const [socialConnecting, setSocialConnecting] = useState(false);
+  const [socialPlatforms, setSocialPlatforms] = useState<string[]>([]);
+  const [outputFocus, setOutputFocus] = useState(false);
   const [selectedVerseRefs, setSelectedVerseRefs] = useState<string[]>([]);
   const [musicFilter, setMusicFilterState] = useState(false);
   const [soundSettings, setSoundSettingsState] = useState<StudioSoundSettings>(() => loadSoundSettings());
@@ -397,6 +405,8 @@ export function useBroadcastStudioEngine() {
     meterTimer.current = null;
     lumaTimer.current = null;
     if (n.recorder?.state === "recording") n.recorder.stop();
+    n.whip?.close();
+    n.whipStream?.getTracks().forEach((t) => t.stop());
     n.rawVideo?.getTracks().forEach((t) => t.stop());
     n.rawAudio?.getTracks().forEach((t) => t.stop());
     n.mixed?.getTracks().forEach((t) => t.stop());
@@ -405,6 +415,10 @@ export function useBroadcastStudioEngine() {
     audioState.current = { ...INITIAL_AUDIO_STATE };
     videoAuto.current = { ...INITIAL_VIDEO_AUTO };
     attachProgrammeAudio(undefined);
+    setSocialLive(false);
+    setSocialConnecting(false);
+    setSocialPlatforms([]);
+    setOutputFocus(false);
   }, [attachProgrammeAudio]);
 
   const listDevices = useCallback(async (prefer?: { camera?: string; mic?: string }) => {
@@ -829,6 +843,19 @@ export function useBroadcastStudioEngine() {
     if (el) el.muted = !on;
   }, []);
 
+  const programmeMix = useCallback((): MediaStream | null => {
+    const canvas = canvasRef.current;
+    const dest = nodes.current.dest;
+    if (!canvas || !dest || statusRef.current !== "live") return null;
+    if (nodes.current.ctx?.state === "suspended") {
+      void nodes.current.ctx.resume();
+    }
+    const mixed = canvas.captureStream(30);
+    const audioTracks = dest.stream.getAudioTracks().filter((t) => t.readyState === "live");
+    for (const track of audioTracks) mixed.addTrack(track);
+    return mixed;
+  }, []);
+
   const startRecording = useCallback(() => {
     const canvas = canvasRef.current;
     const dest = nodes.current.dest;
@@ -876,6 +903,55 @@ export function useBroadcastStudioEngine() {
     const rec = nodes.current.recorder;
     if (rec && rec.state === "recording") rec.stop();
   }, []);
+
+  const stopSocialLive = useCallback(() => {
+    const n = nodes.current;
+    n.whip?.close();
+    n.whip = undefined;
+    n.whipStream?.getTracks().forEach((t) => t.stop());
+    n.whipStream = undefined;
+    setSocialLive(false);
+    setSocialConnecting(false);
+    setSocialPlatforms([]);
+  }, []);
+
+  const startSocialLive = useCallback(async () => {
+    if (statusRef.current !== "live") {
+      setError("Start capture first, then go live to social.");
+      return;
+    }
+    const mixed = programmeMix();
+    if (!mixed || mixed.getVideoTracks().length === 0) {
+      mixed?.getTracks().forEach((t) => t.stop());
+      setError("Program has no picture yet. Start capture, then go live.");
+      return;
+    }
+    if (mixed.getAudioTracks().length === 0) {
+      mixed.getTracks().forEach((t) => t.stop());
+      setError("Program has no audio track. Choose the Yamaha USB input, then go live.");
+      return;
+    }
+    setSocialConnecting(true);
+    setError(null);
+    try {
+      const session = await apiPost<{ mode: string; whipUrl: string; platforms: string[] }>(
+        "/studio/live/session",
+      );
+      const pc = await connectWhip(mixed, session.whipUrl);
+      nodes.current.whip?.close();
+      nodes.current.whipStream?.getTracks().forEach((t) => t.stop());
+      nodes.current.whip = pc;
+      nodes.current.whipStream = mixed;
+      setSocialPlatforms(session.platforms ?? []);
+      setSocialLive(true);
+    } catch (e) {
+      mixed.getTracks().forEach((t) => t.stop());
+      setSocialLive(false);
+      setError((e as Error).message || "Could not go live to social.");
+    } finally {
+      setSocialConnecting(false);
+    }
+  }, [programmeMix]);
 
   const paintIdlePreview = useCallback(() => {
     if (statusRef.current === "live") return;
@@ -1045,6 +1121,13 @@ export function useBroadcastStudioEngine() {
     stop,
     startRecording,
     stopRecording,
+    startSocialLive,
+    stopSocialLive,
+    socialLive,
+    socialConnecting,
+    socialPlatforms,
+    outputFocus,
+    setOutputFocus,
     updateOverlay,
     takeToLive,
     clearLive,
