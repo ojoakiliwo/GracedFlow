@@ -84,6 +84,13 @@ describe("Studio livestream destinations", () => {
       "tiktok",
     ]);
     expect(res.body.destinations.every((d: { streamKey?: string }) => d.streamKey == null)).toBe(true);
+    const byId = Object.fromEntries(
+      res.body.destinations.map((d: { platform: string; helpUrl: string }) => [d.platform, d.helpUrl]),
+    );
+    expect(byId.youtube).toContain("youtube.com");
+    expect(byId.instagram).toContain("instagram.com");
+    expect(byId.instagram).not.toContain("facebook.com");
+    expect(byId.tiktok).toContain("tiktok.com");
   });
 
   it("saves a YouTube key, keeps it on a later save that sends a placeholder, and rejects a live session without a restreamer", async () => {
