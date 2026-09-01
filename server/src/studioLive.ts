@@ -40,11 +40,11 @@ export const LIVE_PLATFORMS = [
     id: "tiktok",
     label: "TikTok",
     defaultIngest: "",
-    helpUrl: "https://www.tiktok.com/studio",
+    helpUrl: "https://livecenter.tiktok.com/producer",
     steps: [
-      "Install TikTok LIVE Studio only to copy credentials. Sunday still goes live from this desk, not from TikTok’s app.",
-      "In LIVE Studio or LIVE Center choose Custom RTMP / third-party software (not Go LIVE inside TikTok).",
-      "Paste TikTok’s Server URL and Stream key here. TikTok’s URL is unique — do not reuse YouTube’s.",
+      "Installing LIVE Studio does not show a key by itself. You need PC / third-party LIVE access on this TikTok account.",
+      "Computer: tiktok.com → Go LIVE (or livecenter.tiktok.com/producer) → title → Stream settings → Server URL and Stream key. Phone: + → LIVE → Cast to PC / Connect to PC.",
+      "If those fields are missing, open LIVE Studio → Your LIVE access (top right) and apply. Leave TikTok Off here until a key appears — YouTube, Facebook and Instagram still go out from this desk.",
     ],
   },
 ] as const;
