@@ -3,9 +3,11 @@ import request from "supertest";
 import type { Express } from "express";
 import {
   isPlaceholderKey,
+  livepeerWhipUrl,
   maskStreamKey,
   readyOutputs,
   restreamConfigured,
+  rtmpTargetUrl,
 } from "../src/studioLive.js";
 
 process.env.DATABASE_URL =
@@ -13,8 +15,8 @@ process.env.DATABASE_URL =
   "postgres://igc:igc@127.0.0.1:5432/gracedflow_test";
 process.env.SCHEDULER_ENABLED = "false";
 process.env.SEED_DEMO = "true";
-delete process.env.CF_ACCOUNT_ID;
-delete process.env.CF_STREAM_API_TOKEN;
+delete process.env.LIVEPEER_API_KEY;
+delete process.env.LIVEPEER_STUDIO_API_KEY;
 
 let app: Express;
 let token: string;
@@ -34,8 +36,8 @@ beforeAll(async () => {
 });
 
 afterEach(() => {
-  delete process.env.CF_ACCOUNT_ID;
-  delete process.env.CF_STREAM_API_TOKEN;
+  delete process.env.LIVEPEER_API_KEY;
+  delete process.env.LIVEPEER_STUDIO_API_KEY;
   vi.unstubAllGlobals();
 });
 
@@ -54,8 +56,7 @@ describe("Studio livestream destinations", () => {
   });
 
   it("only restreams destinations that are on and have a key", () => {
-    expect(
-      readyOutputs([
+    expect(readyOutputs([
         { platform: "youtube", enabled: 1, ingest_url: "rtmps://a.rtmps.youtube.com/live2", stream_key: "ytk" },
         { platform: "tiktok", enabled: 1, ingest_url: "", stream_key: "ttk" },
         { platform: "facebook", enabled: 0, ingest_url: "rtmps://fb", stream_key: "fbk" },
@@ -63,6 +64,13 @@ describe("Studio livestream destinations", () => {
     ).toEqual([
       { platform: "youtube", url: "rtmps://a.rtmps.youtube.com/live2", streamKey: "ytk" },
     ]);
+    expect(rtmpTargetUrl("rtmps://a.rtmps.youtube.com/live2", "yt-key")).toBe(
+      "rtmps://a.rtmps.youtube.com/live2/yt-key",
+    );
+    expect(rtmpTargetUrl("rtmps://live-api-s.facebook.com:443/rtmp/", "fb-key")).toBe(
+      "rtmps://live-api-s.facebook.com:443/rtmp/fb-key",
+    );
+    expect(livepeerWhipUrl("whipkey")).toBe("https://livepeercdn.studio/webrtc/whipkey");
   });
 
   it("lists YouTube, Facebook, Instagram and TikTok without exposing saved keys", async () => {
@@ -111,12 +119,11 @@ describe("Studio livestream destinations", () => {
 
     const session = await auth(request(app).post("/api/studio/live/session"));
     expect(session.status).toBe(409);
-    expect(session.body.error).toMatch(/Cloudflare Stream|OBS/i);
+    expect(session.body.error).toMatch(/LIVEPEER_API_KEY/i);
   });
 
-  it("opens a WHIP session and fans destinations out to Cloudflare Stream when configured", async () => {
-    process.env.CF_ACCOUNT_ID = "acc_test";
-    process.env.CF_STREAM_API_TOKEN = "tok_test";
+  it("opens a WHIP session and fans destinations out through Livepeer when configured", async () => {
+    process.env.LIVEPEER_API_KEY = "lp_test";
     expect(restreamConfigured()).toBe(true);
 
     const calls: { url: string; method: string; body?: string }[] = [];
@@ -126,22 +133,16 @@ describe("Studio livestream destinations", () => {
         const href = String(url);
         const method = (init?.method || "GET").toUpperCase();
         calls.push({ url: href, method, body: typeof init?.body === "string" ? init.body : undefined });
-        if (href.includes("/stream/live_inputs") && method === "POST" && !href.includes("/outputs")) {
+        if (href.endsWith("/api/stream") && method === "POST") {
           return {
             ok: true,
-            json: async () => ({
-              success: true,
-              result: { uid: "li_1", webRTC: { url: "https://stream.example/whip" } },
-            }),
+            json: async () => ({ id: "st_1", streamKey: "whip-secret" }),
           };
         }
-        if (href.includes("/outputs") && method === "GET") {
-          return { ok: true, json: async () => ({ success: true, result: [] }) };
+        if (href.includes("/api/stream/st_1") && method === "PATCH") {
+          return { ok: true, json: async () => ({ id: "st_1", streamKey: "whip-secret" }) };
         }
-        if (href.includes("/outputs") && method === "POST") {
-          return { ok: true, json: async () => ({ success: true, result: { uid: "out_1" } }) };
-        }
-        return { ok: true, json: async () => ({ success: true, result: {} }) };
+        return { ok: true, json: async () => ({ id: "st_1", streamKey: "whip-secret" }) };
       },
     );
 
@@ -159,11 +160,12 @@ describe("Studio livestream destinations", () => {
     expect(session.status).toBe(200);
     expect(session.body).toEqual({
       mode: "whip",
-      whipUrl: "https://stream.example/whip",
+      whipUrl: "https://livepeercdn.studio/webrtc/whip-secret",
       platforms: ["youtube", "facebook"],
     });
-    const outputPost = calls.find((c) => c.method === "POST" && c.url.includes("/outputs"));
-    expect(outputPost?.body).toContain("yt-key");
-    expect(outputPost?.body).toContain("rtmps://a.rtmps.youtube.com/live2");
+    const create = calls.find((c) => c.method === "POST" && c.url.endsWith("/api/stream"));
+    expect(create?.body).toContain("yt-key");
+    expect(create?.body).toContain("rtmps://a.rtmps.youtube.com/live2/yt-key");
+    expect(create?.body).toContain("rtmps://live-api-s.facebook.com:443/rtmp/fb-key");
   });
 });

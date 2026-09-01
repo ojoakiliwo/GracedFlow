@@ -166,10 +166,25 @@ export default function Studio() {
         <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/app/studio/live"
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-gold-400 px-3 text-sm font-semibold text-brand-950 hover:bg-gold-300"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10"
           >
-            <Radio className="h-4 w-4" /> Go live
+            Destinations
           </Link>
+          {s.socialLive ? (
+            <Button variant="danger" size="sm" onClick={s.stopSocialLive}>
+              <Square className="h-4 w-4" /> End live
+            </Button>
+          ) : (
+            <Button
+              variant="gold"
+              size="sm"
+              disabled={s.socialConnecting}
+              onClick={() => void s.goLiveToAir()}
+            >
+              <Radio className="h-4 w-4" />
+              {s.socialConnecting ? "Going live…" : "Go live"}
+            </Button>
+          )}
           <Badge color={live ? "red" : "gray"}>{live ? "On air" : "Standby"}</Badge>
           {s.recording ? <Badge color="red">Recording</Badge> : null}
           {s.socialLive ? <Badge color="red">Social live</Badge> : null}
@@ -498,7 +513,7 @@ export default function Studio() {
             to="/app/studio/live"
             className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-gold-400 text-sm font-semibold text-brand-950 hover:bg-gold-300"
           >
-            <Radio className="h-3.5 w-3.5" /> Go live to social
+            <Radio className="h-3.5 w-3.5" /> Destinations
           </Link>
           <Link
             to="/app/studio/audio"

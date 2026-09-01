@@ -79,8 +79,8 @@ settingsRouter.get(
           name: "Studio livestream",
           live: restreamConfigured(),
           detail: restreamConfigured()
-            ? "Live from the desk via Cloudflare Stream → YouTube / Facebook / Instagram / TikTok"
-            : "Save stream keys in Broadcast studio → Go live. Add CF_ACCOUNT_ID + CF_STREAM_API_TOKEN to send from this browser",
+            ? "This desk goes live to YouTube / Facebook / Instagram / TikTok without OBS"
+            : "Save stream keys in Broadcast studio → Go live. Add LIVEPEER_API_KEY once so the desk can send to air",
         },
       ],
     });

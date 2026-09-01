@@ -172,8 +172,8 @@ export default function Settings() {
                 </li>
                 <li>
                   <strong>Studio livestream:</strong> save YouTube / Facebook / Instagram /
-                  TikTok stream keys in Broadcast studio → Go live. One-click send needs{" "}
-                  <code>CF_ACCOUNT_ID</code> and <code>CF_STREAM_API_TOKEN</code>.
+                  TikTok stream keys in Broadcast studio → Go live. Set{" "}
+                  <code>LIVEPEER_API_KEY</code> so the desk can send to air without OBS.
                 </li>
               </ul>
             </div>

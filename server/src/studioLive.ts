@@ -2,14 +2,6 @@ import { config } from "./config.js";
 import { db } from "./db.js";
 import { HttpError, newId } from "./util.js";
 
-function streamAccountId(): string {
-  return process.env.CF_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || config.stream.accountId;
-}
-
-function streamApiToken(): string {
-  return process.env.CF_STREAM_API_TOKEN || process.env.CLOUDFLARE_STREAM_API_TOKEN || config.stream.apiToken;
-}
-
 export const LIVE_PLATFORMS = [
   {
     id: "youtube",
@@ -93,8 +85,31 @@ export function isPlaceholderKey(key: string | undefined): boolean {
   return !t || /[•*]/.test(t);
 }
 
+function livepeerApiKey(): string {
+  return process.env.LIVEPEER_API_KEY || process.env.LIVEPEER_STUDIO_API_KEY || config.stream.livepeerApiKey;
+}
+
 export function restreamConfigured(): boolean {
-  return Boolean(streamAccountId() && streamApiToken());
+  return Boolean(livepeerApiKey());
+}
+
+export function restreamDetail(): string {
+  return restreamConfigured()
+    ? "This desk goes live to YouTube, Facebook, Instagram and TikTok. You do not open OBS."
+    : "Save the four stream keys, then add LIVEPEER_API_KEY once (Livepeer Studio → Developers → API Key). After that, Start capture and Go live from this desk.";
+}
+
+export function rtmpTargetUrl(ingestUrl: string, streamKey: string): string {
+  const url = ingestUrl.trim();
+  const key = streamKey.trim();
+  if (!url || !key) return "";
+  if (url.endsWith(key)) return url;
+  return url.endsWith("/") ? `${url}${key}` : `${url}/${key}`;
+}
+
+export function livepeerWhipUrl(streamKey: string): string {
+  const base = (process.env.LIVEPEER_WHIP_BASE || "https://livepeercdn.studio/webrtc").replace(/\/$/, "");
+  return `${base}/${streamKey}`;
 }
 
 export function platformById(id: string) {
@@ -195,52 +210,54 @@ export async function saveDestinations(input: LiveDestinationInput[]): Promise<L
   return listDestinationRows();
 }
 
-interface CfLiveInput {
-  uid: string;
-  webRTC?: { url?: string };
+interface LivepeerStream {
+  id: string;
+  streamKey?: string;
+  errors?: string[];
+  error?: string;
+  message?: string;
 }
 
-interface CfOutput {
-  uid: string;
-  url?: string;
-}
-
-async function cfFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const accountId = streamAccountId();
-  const apiToken = streamApiToken();
-  if (!accountId || !apiToken) {
-    throw new HttpError(409, "Cloudflare Stream is not configured");
+async function livepeerFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const key = livepeerApiKey();
+  if (!key) {
+    throw new HttpError(
+      409,
+      "Add LIVEPEER_API_KEY on the server (Livepeer Studio → Developers → API Key). After that, this desk goes live to YouTube, Facebook, Instagram and TikTok without OBS.",
+    );
   }
-  const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}${path}`, {
+  const res = await fetch(`https://livepeer.studio/api${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${apiToken}`,
+      Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },
   });
-  const payload = (await res.json().catch(() => ({}))) as {
-    success?: boolean;
-    result?: T;
-    errors?: { message?: string }[];
+  const payload = (await res.json().catch(() => ({}))) as T & {
+    errors?: string[];
+    error?: string;
+    message?: string;
   };
-  if (!res.ok || payload.success === false) {
-    throw new HttpError(
-      502,
-      payload.errors?.[0]?.message || `Cloudflare Stream ${res.status}`,
-    );
+  if (!res.ok) {
+    const msg =
+      (Array.isArray(payload.errors) && payload.errors[0]) ||
+      payload.error ||
+      payload.message ||
+      `Livepeer ${res.status}`;
+    throw new HttpError(res.status >= 400 && res.status < 500 ? res.status : 502, String(msg));
   }
-  return payload.result as T;
+  return payload;
 }
 
-async function getBridgeInputId(): Promise<string | null> {
+async function getBridgeStreamId(): Promise<string | null> {
   const row = (await db
     .prepare("SELECT cf_live_input_id FROM studio_live_bridge WHERE id = ?")
     .get(BRIDGE_ID)) as { cf_live_input_id?: string | null } | undefined;
   return row?.cf_live_input_id || null;
 }
 
-async function setBridgeInputId(uid: string): Promise<void> {
+async function setBridgeStreamId(uid: string): Promise<void> {
   await db
     .prepare(
       `INSERT INTO studio_live_bridge (id, cf_live_input_id, updated_at)
@@ -257,61 +274,50 @@ export async function ensureWhipSession(outputs: ReadyLiveOutput[]): Promise<{
   if (!restreamConfigured()) {
     throw new HttpError(
       409,
-      "This browser cannot send RTMP itself. Add CF_ACCOUNT_ID and CF_STREAM_API_TOKEN (Cloudflare Stream) to go live from the desk, or capture Program with OBS using the stream keys you saved.",
+      "Add LIVEPEER_API_KEY on the server (Livepeer Studio → Developers → API Key). After that, this desk goes live to YouTube, Facebook, Instagram and TikTok without OBS.",
     );
   }
   if (outputs.length === 0) {
     throw new HttpError(400, "Turn on at least one destination with a stream key");
   }
 
-  let uid = await getBridgeInputId();
-  let input: CfLiveInput | null = null;
-  if (uid) {
+  const targets = outputs.map((dest) => ({
+    profile: "source",
+    spec: {
+      name: dest.platform,
+      url: rtmpTargetUrl(dest.url, dest.streamKey),
+    },
+  }));
+
+  let id = await getBridgeStreamId();
+  let stream: LivepeerStream | null = null;
+  if (id) {
     try {
-      input = await cfFetch<CfLiveInput>(`/stream/live_inputs/${uid}`);
+      stream = await livepeerFetch<LivepeerStream>(`/stream/${id}`);
     } catch {
-      input = null;
-      uid = null;
+      stream = null;
+      id = null;
     }
   }
-  if (!input) {
-    input = await cfFetch<CfLiveInput>("/stream/live_inputs", {
+  if (!stream?.id) {
+    stream = await livepeerFetch<LivepeerStream>("/stream", {
       method: "POST",
       body: JSON.stringify({
-        meta: { name: "IGC Broadcast studio" },
-        recording: { mode: "off" },
+        name: "IGC Broadcast studio",
+        record: false,
+        multistream: { targets },
       }),
     });
-    uid = input.uid;
-    await setBridgeInputId(uid);
-  }
-
-  if (!input?.uid) {
-    throw new HttpError(502, "Cloudflare Stream did not return a live input");
-  }
-  const liveInputId = input.uid;
-
-  const whipUrl = input.webRTC?.url?.trim();
-  if (!whipUrl) {
-    throw new HttpError(502, "Cloudflare Stream did not return a WHIP publish URL");
-  }
-
-  const existingRaw = await cfFetch<CfOutput[] | { outputs?: CfOutput[] }>(
-    `/stream/live_inputs/${liveInputId}/outputs`,
-  ).catch(() => [] as CfOutput[]);
-  const existing = Array.isArray(existingRaw) ? existingRaw : existingRaw?.outputs ?? [];
-  for (const out of existing ?? []) {
-    if (!out.uid) continue;
-    await cfFetch(`/stream/live_inputs/${liveInputId}/outputs/${out.uid}`, { method: "DELETE" }).catch(
-      () => undefined,
-    );
-  }
-  for (const dest of outputs) {
-    await cfFetch(`/stream/live_inputs/${liveInputId}/outputs`, {
-      method: "POST",
-      body: JSON.stringify({ url: dest.url, streamKey: dest.streamKey }),
+    if (!stream.id) throw new HttpError(502, "Livepeer did not create a stream");
+    await setBridgeStreamId(stream.id);
+  } else {
+    await livepeerFetch(`/stream/${stream.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ multistream: { targets } }),
     });
   }
-
-  return { whipUrl, liveInputId };
+  if (!stream.streamKey) {
+    throw new HttpError(502, "Livepeer did not return a stream key");
+  }
+  return { whipUrl: livepeerWhipUrl(stream.streamKey), liveInputId: stream.id };
 }

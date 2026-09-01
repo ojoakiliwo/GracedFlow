@@ -953,6 +953,14 @@ export function useBroadcastStudioEngine() {
     }
   }, [programmeMix]);
 
+  const goLiveToAir = useCallback(async () => {
+    if (statusRef.current !== "live") {
+      await start();
+    }
+    if (statusRef.current !== "live") return;
+    await startSocialLive();
+  }, [start, startSocialLive]);
+
   const paintIdlePreview = useCallback(() => {
     if (statusRef.current === "live") return;
     const lookNow = lookRef.current;
@@ -1122,6 +1130,7 @@ export function useBroadcastStudioEngine() {
     startRecording,
     stopRecording,
     startSocialLive,
+    goLiveToAir,
     stopSocialLive,
     socialLive,
     socialConnecting,

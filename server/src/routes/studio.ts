@@ -9,6 +9,7 @@ import {
   publicDestinations,
   readyOutputs,
   restreamConfigured,
+  restreamDetail,
   saveDestinations,
 } from "../studioLive.js";
 
@@ -33,9 +34,7 @@ studioRouter.get(
     const rows = await listDestinationRows();
     res.json({
       restream: restreamConfigured(),
-      restreamDetail: restreamConfigured()
-        ? "Live from this browser via Cloudflare Stream"
-        : "Keys save here. Add CF_ACCOUNT_ID and CF_STREAM_API_TOKEN to go live from this desk, or capture Program with OBS.",
+      restreamDetail: restreamDetail(),
       destinations: publicDestinations(rows),
     });
   }),
@@ -51,9 +50,7 @@ studioRouter.put(
     });
     res.json({
       restream: restreamConfigured(),
-      restreamDetail: restreamConfigured()
-        ? "Live from this browser via Cloudflare Stream"
-        : "Keys save here. Add CF_ACCOUNT_ID and CF_STREAM_API_TOKEN to go live from this desk, or capture Program with OBS.",
+      restreamDetail: restreamDetail(),
       destinations: publicDestinations(rows),
     });
   }),

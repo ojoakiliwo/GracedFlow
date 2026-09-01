@@ -111,8 +111,7 @@ export const config = {
       .filter(Boolean),
   },
   stream: {
-    accountId: firstEnv("CF_ACCOUNT_ID", "CLOUDFLARE_ACCOUNT_ID"),
-    apiToken: firstEnv("CF_STREAM_API_TOKEN", "CLOUDFLARE_STREAM_API_TOKEN"),
+    livepeerApiKey: firstEnv("LIVEPEER_API_KEY", "LIVEPEER_STUDIO_API_KEY"),
   },
   scheduler: {
     enabled: bool(process.env.SCHEDULER_ENABLED, true),

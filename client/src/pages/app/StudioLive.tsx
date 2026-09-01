@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Facebook,
   Instagram,
-  Maximize2,
   Radio,
   Square,
   Youtube,
@@ -95,8 +94,8 @@ export default function StudioLive() {
           </Link>
           <h1 className="font-display text-2xl text-white sm:text-3xl">Go live</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-400">
-            Connect YouTube, Facebook, Instagram and TikTok with their stream keys. This desk then
-            sends Program (picture + living sound + verses) to every destination you turn on.
+            Paste each platform’s stream key once. Then Go live from this desk — Program goes
+            straight on air. You do not open OBS.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -134,30 +133,19 @@ export default function StudioLive() {
         <div className="rounded-2xl border border-white/10 bg-[#14161d] p-4">
           <p className="text-sm leading-relaxed text-ink-300">
             {data?.restreamDetail ||
-              "Save stream keys here. Chrome cannot talk RTMP to YouTube by itself."}
+              "Save the four stream keys, then Go live from this desk."}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            {s.status === "idle" || s.status === "error" ? (
-              <Button onClick={() => void s.start()}>
-                <Radio className="h-4 w-4" /> Start capture
-              </Button>
-            ) : s.socialLive ? (
+            {s.socialLive ? (
               <Button variant="danger" onClick={s.stopSocialLive}>
-                <Square className="h-4 w-4" /> End social live
+                <Square className="h-4 w-4" /> End live
               </Button>
             ) : (
-              <Button
-                variant="gold"
-                disabled={!live || s.socialConnecting}
-                onClick={() => void s.startSocialLive()}
-              >
+              <Button variant="gold" disabled={s.socialConnecting} onClick={() => void s.goLiveToAir()}>
                 <Radio className="h-4 w-4" />
-                {s.socialConnecting ? "Connecting…" : "Go live to social"}
+                {s.socialConnecting ? "Going live…" : "Go live"}
               </Button>
             )}
-            <Button variant="secondary" onClick={() => s.setOutputFocus(true)}>
-              <Maximize2 className="h-4 w-4" /> Fill screen for OBS
-            </Button>
           </div>
           {s.socialPlatforms.length > 0 ? (
             <p className="mt-3 text-[11px] text-gold-300">
@@ -165,8 +153,9 @@ export default function StudioLive() {
             </p>
           ) : null}
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">
-            One-click Go live needs Cloudflare Stream on the server. Until that is set, save the
-            keys, fill the screen, and let OBS (or TikTok LIVE Studio) send those same URLs.
+            {data?.restream
+              ? "Start capture is included in Go live. Destinations that are On receive Program together."
+              : "Ask an admin to set LIVEPEER_API_KEY on Vercel (Livepeer Studio → Developers → API Key), then redeploy. That is a one-time pipe — not an app you open on Sunday."}
           </p>
         </div>
       </div>

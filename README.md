@@ -183,7 +183,7 @@ Copy `server/.env.example` to `server/.env` to enable real integrations.
 | Payments (Flutterwave v4) | `FLW_CLIENT_ID`, `FLW_CLIENT_SECRET`, `FLW_ENCRYPTION_KEY`, `FLW_ENV`, `PAYMENT_CURRENCY`, `APP_URL` |
 | Payments (Paystack) | `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `PAYMENT_CURRENCY`, `APP_URL` |
 | Social | `SOCIAL_CONNECTED=facebook,twitter,...` |
-| Studio livestream | Stream keys in **Broadcast studio → Go live**. One-click send needs `CF_ACCOUNT_ID` + `CF_STREAM_API_TOKEN` (Cloudflare Stream Live Inputs). |
+| Studio livestream | Stream keys in **Broadcast studio → Go live**. `LIVEPEER_API_KEY` sends Program from this desk to YouTube / Facebook / Instagram / TikTok (no OBS). |
 | Giving (bank) | `GIVING_BANK_NAME`, `GIVING_ACCOUNT_NAME`, `GIVING_ACCOUNT_NUMBER`, `GIVING_ONLINE_URL` |
 | Scheduler | `SCHEDULER_ENABLED`, `TZ_NAME` (default `Africa/Lagos`) |
 
@@ -248,13 +248,13 @@ X/Twitter, Instagram, YouTube, Telegram, WhatsApp Cloud API), and plug the token
 `server/src/comms.ts` (`publishToPlatform`).
 
 ### Studio livestream — YouTube, Facebook, Instagram, TikTok
-The browser cannot speak RTMP to those apps from Vercel. Save each platform’s stream
-URL and key in **Broadcast studio → Go live**. Then either:
+Save each platform’s stream URL and key in **Broadcast studio → Go live**. Chrome cannot
+speak RTMP, so the desk sends WebRTC to Livepeer, which restreams to those four apps.
+You do not open OBS.
 
-1. **One-click from the desk:** set `CF_ACCOUNT_ID` and `CF_STREAM_API_TOKEN` (Cloudflare
-   Stream token with Account → Stream → Edit). Go live copies Program (camera, living
-   sound, verses) to every destination you turned on.
-2. **OBS / TikTok LIVE Studio:** Fill screen for OBS and send the same saved keys.
+1. Create a Livepeer Studio account and copy an API key (Developers → API Key).
+2. Set `LIVEPEER_API_KEY` on Vercel (project **graced-flow**) and redeploy.
+3. On Sunday: Start capture → Go live. Program (camera, living sound, verses) goes on air.
 
 ## Cloud Agent environment
 
