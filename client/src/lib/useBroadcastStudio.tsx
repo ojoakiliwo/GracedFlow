@@ -953,6 +953,10 @@ export function useBroadcastStudioEngine() {
     }
   }, [programmeMix]);
 
+  const syncSocialPlatforms = useCallback((platforms: string[]) => {
+    setSocialPlatforms(platforms);
+  }, []);
+
   const goLiveToAir = useCallback(async () => {
     if (statusRef.current !== "live") {
       await start();
@@ -1132,6 +1136,7 @@ export function useBroadcastStudioEngine() {
     startSocialLive,
     goLiveToAir,
     stopSocialLive,
+    syncSocialPlatforms,
     socialLive,
     socialConnecting,
     socialPlatforms,

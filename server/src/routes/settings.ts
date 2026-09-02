@@ -79,7 +79,7 @@ settingsRouter.get(
           name: "Studio livestream",
           live: restreamConfigured(),
           detail: restreamConfigured()
-            ? "This desk goes live to YouTube / Facebook / Instagram / TikTok. Stay on Livepeer’s free Sandbox — viewers watch those apps, not Livepeer"
+            ? "Go live with any destinations that are On and have a key. One is enough; add the rest later"
             : "Save stream keys in Broadcast studio → Go live. Add LIVEPEER_API_KEY once so the desk can send to air",
         },
       ],

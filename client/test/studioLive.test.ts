@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  applySavedDestinations,
   draftsFromConfig,
   enabledWithKeys,
   keepTypedKeys,
@@ -117,6 +118,16 @@ describe("Studio live drafts", () => {
     const kept = keepTypedKeys(incoming, typed);
     expect(kept[0]?.streamKey).toBe("still-here");
     expect(kept[0]?.enabled).toBe(true);
+  });
+
+  it("turns Off destinations that saved without a key so others can stay live", () => {
+    const typed = draftsFromConfig(sampleConfig);
+    typed[1]!.enabled = true;
+    typed[1]!.streamKey = "";
+    const saved = applySavedDestinations(sampleConfig, typed);
+    expect(saved[0]?.enabled).toBe(true);
+    expect(saved[0]?.streamKey).toBe("");
+    expect(saved[1]?.enabled).toBe(false);
   });
 });
 

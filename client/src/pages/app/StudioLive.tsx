@@ -14,6 +14,7 @@ import { useApi } from "../../lib/useApi";
 import { apiPut } from "../../lib/api";
 import { useBroadcastStudio } from "../../lib/useBroadcastStudio";
 import {
+  applySavedDestinations,
   keepTypedKeys,
   mergeConfigWithStored,
   savePayload,
@@ -71,10 +72,8 @@ export default function StudioLive() {
       const saved = await apiPut<StudioLiveConfig>("/studio/live", savePayload(current));
       dirtyRef.current = false;
       setKept(true);
-      setDrafts((prev) => keepTypedKeys(
-        (saved.destinations ?? []).map((d) => ({ ...d, streamKey: "" })),
-        prev,
-      ));
+      setDrafts((prev) => applySavedDestinations(saved, prev));
+      if (s.socialLive && saved.platforms) s.syncSocialPlatforms(saved.platforms);
       if (!silent) notify("Destinations saved");
     } catch (err) {
       notify((err as Error).message, "error");
@@ -147,8 +146,8 @@ export default function StudioLive() {
           </Link>
           <h1 className="font-display text-2xl text-white sm:text-3xl">Go live</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-400">
-            Paste each platform’s stream key. They save as you type and stay when you leave
-            this page. Then Go live from this desk — you do not open OBS.
+            Paste a key and turn that platform On. One destination is enough.
+            Leave the rest Off until you have their keys — then Save and they join.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -186,7 +185,7 @@ export default function StudioLive() {
         <div className="rounded-2xl border border-white/10 bg-[#14161d] p-4">
           <p className="text-sm leading-relaxed text-ink-300">
             {data?.restreamDetail ||
-              "Save the four stream keys, then Go live from this desk."}
+              "Turn On only platforms that have a key, then Go live from this desk."}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {s.socialLive ? (
@@ -207,7 +206,7 @@ export default function StudioLive() {
           ) : null}
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">
             {data?.restream
-              ? "Start capture is included in Go live. Destinations that are On receive Program together."
+              ? "Destinations that are On and have a key receive Program. Add another later and Save — it joins without stopping the others."
               : "Ask an admin to set LIVEPEER_API_KEY on Vercel (Livepeer Studio → Developers → API Key), then redeploy. That is a one-time pipe — not an app you open on Sunday."}
           </p>
         </div>

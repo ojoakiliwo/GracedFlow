@@ -175,4 +175,56 @@ describe("Studio livestream destinations", () => {
     expect(create?.body).toContain("rtmps://a.rtmps.youtube.com/live2/yt-key");
     expect(create?.body).toContain("rtmps://live-api-s.facebook.com:443/rtmp/fb-key");
   });
+
+  it("goes live with one ready destination and lets another join later", async () => {
+    process.env.LIVEPEER_API_KEY = "lp_test";
+    const calls: { url: string; method: string; body?: string }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      async (url: string | URL, init?: RequestInit) => {
+        const href = String(url);
+        const method = (init?.method || "GET").toUpperCase();
+        calls.push({ url: href, method, body: typeof init?.body === "string" ? init.body : undefined });
+        if (href.endsWith("/api/stream") && method === "POST") {
+          return { ok: true, json: async () => ({ id: "st_join", streamKey: "whip-join" }) };
+        }
+        return { ok: true, json: async () => ({ id: "st_join", streamKey: "whip-join" }) };
+      },
+    );
+
+    const onlyYt = await auth(request(app).put("/api/studio/live")).send({
+      destinations: [
+        { platform: "youtube", enabled: true, ingestUrl: "rtmps://a.rtmps.youtube.com/live2", streamKey: "yt-only" },
+        { platform: "facebook", enabled: false, ingestUrl: "rtmps://live-api-s.facebook.com:443/rtmp/", streamKey: "" },
+        { platform: "instagram", enabled: true, ingestUrl: "rtmps://live-upload.instagram.com:443/rtmp/", streamKey: "" },
+        { platform: "tiktok", enabled: true, ingestUrl: "", streamKey: "" },
+      ],
+    });
+    expect(onlyYt.status).toBe(200);
+    const byPlat = Object.fromEntries(
+      onlyYt.body.destinations.map((d: { platform: string; enabled: boolean }) => [d.platform, d.enabled]),
+    );
+    expect(byPlat.youtube).toBe(true);
+    expect(byPlat.facebook).toBe(false);
+    expect(byPlat.instagram).toBe(false);
+    expect(byPlat.tiktok).toBe(false);
+    expect(onlyYt.body.platforms).toEqual(["youtube"]);
+
+    const session = await auth(request(app).post("/api/studio/live/session"));
+    expect(session.status).toBe(200);
+    expect(session.body.platforms).toEqual(["youtube"]);
+
+    const addFb = await auth(request(app).put("/api/studio/live")).send({
+      destinations: [
+        { platform: "youtube", enabled: true, ingestUrl: "rtmps://a.rtmps.youtube.com/live2", streamKey: "••••key" },
+        { platform: "facebook", enabled: true, ingestUrl: "rtmps://live-api-s.facebook.com:443/rtmp/", streamKey: "fb-later" },
+        { platform: "instagram", enabled: false, ingestUrl: "rtmps://live-upload.instagram.com:443/rtmp/", streamKey: "" },
+        { platform: "tiktok", enabled: false, ingestUrl: "", streamKey: "" },
+      ],
+    });
+    expect(addFb.status).toBe(200);
+    expect(addFb.body.platforms).toEqual(["youtube", "facebook"]);
+    const patch = calls.find((c) => c.method === "PATCH" && c.body?.includes("fb-later"));
+    expect(patch).toBeTruthy();
+  });
 });

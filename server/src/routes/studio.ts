@@ -11,6 +11,7 @@ import {
   restreamConfigured,
   restreamDetail,
   saveDestinations,
+  syncLiveRestream,
 } from "../studioLive.js";
 
 export const studioRouter = Router();
@@ -45,6 +46,7 @@ studioRouter.put(
   asyncHandler(async (req, res) => {
     const input = parseBody(saveSchema, req.body);
     const rows = await saveDestinations(input.destinations);
+    const platforms = await syncLiveRestream();
     audit("update", "studio_live", "destinations", req.user, {
       enabled: rows.filter((r) => r.enabled).map((r) => r.platform),
     });
@@ -52,6 +54,7 @@ studioRouter.put(
       restream: restreamConfigured(),
       restreamDetail: restreamDetail(),
       destinations: publicDestinations(rows),
+      platforms,
     });
   }),
 );

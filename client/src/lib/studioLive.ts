@@ -16,6 +16,7 @@ export interface StudioLiveConfig {
   restream: boolean;
   restreamDetail: string;
   destinations: StudioLiveDestination[];
+  platforms?: string[];
 }
 
 export interface StudioLiveDraft extends StudioLiveDestination {
@@ -111,6 +112,16 @@ export function keepTypedKeys(incoming: StudioLiveDraft[], current: StudioLiveDr
       streamKey: prev.streamKey || d.streamKey,
     };
   });
+}
+
+/** After a server save, keep typed keys but trust which destinations are actually On. */
+export function applySavedDestinations(saved: StudioLiveConfig, prev: StudioLiveDraft[]): StudioLiveDraft[] {
+  const prevBy = new Map(prev.map((d) => [d.platform, d]));
+  return (saved.destinations ?? []).map((d) => ({
+    ...d,
+    ingestUrl: prevBy.get(d.platform)?.ingestUrl || d.ingestUrl,
+    streamKey: prevBy.get(d.platform)?.streamKey || "",
+  }));
 }
 
 export function enabledWithKeys(drafts: StudioLiveDraft[]): StudioLiveDraft[] {

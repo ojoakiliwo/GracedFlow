@@ -95,8 +95,8 @@ export function restreamConfigured(): boolean {
 
 export function restreamDetail(): string {
   return restreamConfigured()
-    ? "This desk goes live to YouTube, Facebook, Instagram and TikTok. Stay on Livepeer’s free Sandbox — the congregation watches those apps, not Livepeer (the 30-viewer cap does not apply). You do not open OBS."
-    : "Save the four stream keys, then add LIVEPEER_API_KEY once (Livepeer Studio → Developers → API Key, free Sandbox). After that, Start capture and Go live from this desk.";
+    ? "Go live with whichever destinations are On and have a key — one is enough. Add the rest later and Save; they join YouTube / Facebook / Instagram / TikTok. Stay on Livepeer’s free Sandbox. You do not open OBS."
+    : "Turn On only the platforms you have keys for. Add LIVEPEER_API_KEY once (Livepeer Studio → Developers → API Key, free Sandbox). Then Start capture and Go live from this desk.";
 }
 
 export function rtmpTargetUrl(ingestUrl: string, streamKey: string): string {
@@ -189,23 +189,19 @@ export async function saveDestinations(input: LiveDestinationInput[]): Promise<L
     seen.add(item.platform);
     const prev = current.find((r) => r.platform === item.platform);
     const ingestUrl = item.ingestUrl.trim() || meta.defaultIngest;
-    if (item.enabled && !ingestUrl) {
-      throw new HttpError(400, `${meta.label} needs a stream URL`);
-    }
     let streamKey = prev?.stream_key ?? "";
     if (!isPlaceholderKey(item.streamKey)) {
       streamKey = item.streamKey!.trim();
     }
-    if (item.enabled && !streamKey) {
-      throw new HttpError(400, `${meta.label} needs a stream key before you turn it on`);
-    }
+    // Incomplete destinations stay Off so YouTube (etc.) can go live without TikTok/Instagram.
+    const enabled = Boolean(item.enabled && ingestUrl && streamKey);
     await db
       .prepare(
         `UPDATE studio_live_destinations
          SET enabled = ?, ingest_url = ?, stream_key = ?, updated_at = now()
          WHERE platform = ?`,
       )
-      .run(item.enabled ? 1 : 0, ingestUrl, streamKey, item.platform);
+      .run(enabled ? 1 : 0, ingestUrl, streamKey, item.platform);
   }
   return listDestinationRows();
 }
@@ -267,6 +263,34 @@ async function setBridgeStreamId(uid: string): Promise<void> {
     .run(BRIDGE_ID, uid);
 }
 
+function livepeerTargets(outputs: ReadyLiveOutput[]) {
+  return outputs.map((dest) => ({
+    profile: "source",
+    spec: {
+      name: dest.platform,
+      url: rtmpTargetUrl(dest.url, dest.streamKey),
+    },
+  }));
+}
+
+/** Push the current On destinations to Livepeer so a later key can join a live Sunday. */
+export async function syncLiveRestream(): Promise<string[]> {
+  const outputs = readyOutputs(await listDestinationRows());
+  const platforms = outputs.map((o) => o.platform);
+  if (!restreamConfigured() || outputs.length === 0) return platforms;
+  const id = await getBridgeStreamId();
+  if (!id) return platforms;
+  try {
+    await livepeerFetch(`/stream/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ multistream: { targets: livepeerTargets(outputs) } }),
+    });
+  } catch {
+    // Stream may have expired; the next Go live creates it again.
+  }
+  return platforms;
+}
+
 export async function ensureWhipSession(outputs: ReadyLiveOutput[]): Promise<{
   whipUrl: string;
   liveInputId: string;
@@ -278,16 +302,10 @@ export async function ensureWhipSession(outputs: ReadyLiveOutput[]): Promise<{
     );
   }
   if (outputs.length === 0) {
-    throw new HttpError(400, "Turn on at least one destination with a stream key");
+    throw new HttpError(400, "Turn On at least one destination that has a stream key. The others can wait.");
   }
 
-  const targets = outputs.map((dest) => ({
-    profile: "source",
-    spec: {
-      name: dest.platform,
-      url: rtmpTargetUrl(dest.url, dest.streamKey),
-    },
-  }));
+  const targets = livepeerTargets(outputs);
 
   let id = await getBridgeStreamId();
   let stream: LivepeerStream | null = null;
