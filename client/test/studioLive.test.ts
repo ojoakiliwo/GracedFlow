@@ -14,6 +14,7 @@ import {
 import {
   iceServersForWhipHost,
   iceIsConnected,
+  livepeerIceHost,
   preferH264Codecs,
   streamKeyFromWhipUrl,
   waitForIce,
@@ -182,18 +183,23 @@ describe("WHIP ICE wait", () => {
   });
 
   it("builds Livepeer TURN servers from the regional WHIP host", () => {
-    expect(streamKeyFromWhipUrl("https://lax-prod-catalyst-0.lp-playback.studio/webrtc/whip-secret")).toBe(
-      "whip-secret",
-    );
+    expect(
+      streamKeyFromWhipUrl("https://nyc-prod-catalyst-0.lp-playback.studio:443/webrtc/video+whip-secret"),
+    ).toBe("video+whip-secret");
+    expect(whipHostLooksRegional("nyc-prod-catalyst-0.lp-playback.studio:443")).toBe(true);
     expect(whipHostLooksRegional("lax-prod-catalyst-0.lp-playback.studio")).toBe(true);
     expect(whipHostLooksRegional("livepeer.studio")).toBe(false);
-    const ice = iceServersForWhipHost("lax-prod-catalyst-0.lp-playback.studio");
+    expect(livepeerIceHost("nyc-prod-catalyst-0.lp-playback.studio:443")).toBe("nyc.livepeer.com");
+    const ice = iceServersForWhipHost("nyc-prod-catalyst-0.lp-playback.studio:443");
     expect(ice).toEqual(
       expect.arrayContaining([
-        { urls: "stun:lax-prod-catalyst-0.lp-playback.studio" },
-        { urls: "turn:lax-prod-catalyst-0.lp-playback.studio", username: "livepeer", credential: "livepeer" },
+        { urls: "stun:nyc.livepeer.com:3478" },
+        { urls: "turn:nyc.livepeer.com:3478", username: "livepeer", credential: "livepeer" },
+        { urls: "turn:nyc.livepeer.com:3478?transport=tcp", username: "livepeer", credential: "livepeer" },
+        { urls: "turn:nyc.livepeer.com:5349", username: "livepeer", credential: "livepeer" },
       ]),
     );
+    expect(ice.some((s) => String(s.urls).includes("lp-playback.studio"))).toBe(false);
   });
 
   it("waits until ICE is connected before treating WHIP as live", async () => {

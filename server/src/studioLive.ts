@@ -154,22 +154,62 @@ export interface WhipIceServer {
   credential?: string;
 }
 
+/** `nyc-prod-catalyst-0.lp-playback.studio:443` → `nyc.livepeer.com` (Livepeer TURN, not the HTTPS ingest host). */
+export function iceHostFromWhipUrl(whipUrl: string): string {
+  let hostname = whipUrl;
+  try {
+    hostname = new URL(whipUrl).hostname;
+  } catch {
+    hostname = whipUrl.replace(/^https?:\/\//, "").split("/")[0]?.replace(/:\d+$/, "") || whipUrl;
+  }
+  const region = hostname.match(/^([a-z0-9]+)-prod-catalyst/i)?.[1];
+  return region ? `${region}.livepeer.com` : hostname;
+}
+
 export function livepeerIceServers(host: string): WhipIceServer[] {
+  const h = host.replace(/:\d+$/, "");
   return [
-    { urls: `stun:${host}` },
-    { urls: `turn:${host}`, username: "livepeer", credential: "livepeer" },
+    { urls: `stun:${h}:3478` },
+    { urls: `turn:${h}:3478`, username: "livepeer", credential: "livepeer" },
+    { urls: `turn:${h}:3478?transport=tcp`, username: "livepeer", credential: "livepeer" },
+    { urls: `stun:${h}:5349` },
+    { urls: `turn:${h}:5349`, username: "livepeer", credential: "livepeer" },
+    { urls: `turn:${h}:5349?transport=tcp`, username: "livepeer", credential: "livepeer" },
     { urls: "stun:stun.cloudflare.com:3478" },
   ];
 }
 
-async function readWhipRedirect(url: string, streamKey: string): Promise<string | null> {
+/** WHIP `Link: stun:nyc.livepeer.com:3478; rel="ice-server"` (with or without <angle brackets>). */
+export function parseIceLinkHeader(linkHeader: string | null | undefined): WhipIceServer[] {
+  if (!linkHeader) return [];
+  const parts = linkHeader.split(/,(?=\s*(?:<?(?:stun|turn|turns):))/i);
+  const out: WhipIceServer[] = [];
+  for (const part of parts) {
+    if (!/rel\s*=\s*"?ice-server"?/i.test(part)) continue;
+    const urlMatch = part.match(/<((?:stun|turn|turns):[^>]+)>/i) || part.match(/((?:stun|turn|turns):[^\s;]+)/i);
+    if (!urlMatch?.[1]) continue;
+    const urls = urlMatch[1].trim();
+    const username = part.match(/username="?([^";]+)"?/i)?.[1];
+    const credential = part.match(/credential="?([^";]+)"?/i)?.[1];
+    out.push(username ? { urls, username, credential } : { urls });
+  }
+  return out;
+}
+
+function withTcpTurn(servers: WhipIceServer[]): WhipIceServer[] {
+  const extra: WhipIceServer[] = [];
+  for (const server of servers) {
+    const urls = String(server.urls);
+    if (!/^turn:/i.test(urls) || /[?&]transport=/i.test(urls) || !server.username) continue;
+    extra.push({ ...server, urls: `${urls}${urls.includes("?") ? "&" : "?"}transport=tcp` });
+  }
+  return extra.length ? [...servers, ...extra] : servers;
+}
+
+async function readWhipRedirect(url: string): Promise<string | null> {
   for (const method of ["HEAD", "GET"] as const) {
     try {
-      const res = await fetch(url, {
-        method,
-        redirect: "manual",
-        headers: { Authorization: `Bearer ${streamKey}` },
-      });
+      const res = await fetch(url, { method, redirect: "manual" });
       const loc = res.headers?.get?.("location") ?? null;
       if (loc) return new URL(loc, url).href.split("?")[0];
       if (res.ok) return url;
@@ -178,6 +218,17 @@ async function readWhipRedirect(url: string, streamKey: string): Promise<string 
     }
   }
   return null;
+}
+
+async function iceServersFromWhip(whipUrl: string): Promise<WhipIceServer[]> {
+  try {
+    const res = await fetch(whipUrl, { method: "OPTIONS" });
+    const parsed = parseIceLinkHeader(res.headers?.get?.("link"));
+    if (parsed.length) return withTcpTurn(parsed);
+  } catch {
+    // Fall back to the regional Livepeer TURN host derived from the catalyst URL.
+  }
+  return livepeerIceServers(iceHostFromWhipUrl(whipUrl));
 }
 
 /** Follow Livepeer GeoDNS to the regional catalyst so ICE/TURN can complete. */
@@ -192,22 +243,16 @@ export async function resolveWhipIngest(streamKey: string): Promise<{
   ].filter((base, i, all) => all.indexOf(base) === i);
   for (const base of bases) {
     const start = `${base.replace(/\/$/, "")}/${streamKey}`;
-    const resolved = await readWhipRedirect(start, streamKey);
+    const resolved = await readWhipRedirect(start);
     if (!resolved) continue;
     try {
-      return { whipUrl: resolved, iceServers: livepeerIceServers(new URL(resolved).host) };
+      return { whipUrl: resolved, iceServers: await iceServersFromWhip(resolved) };
     } catch {
       continue;
     }
   }
   const fallback = livepeerWhipUrl(streamKey);
-  let host = "livepeer.studio";
-  try {
-    host = new URL(fallback).host;
-  } catch {
-    // Keep the Livepeer GeoDNS host.
-  }
-  return { whipUrl: fallback, iceServers: livepeerIceServers(host) };
+  return { whipUrl: fallback, iceServers: livepeerIceServers(iceHostFromWhipUrl(fallback)) };
 }
 
 export function platformById(id: string) {

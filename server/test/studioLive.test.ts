@@ -2,10 +2,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 import {
+  iceHostFromWhipUrl,
   isPlaceholderKey,
   LIVE_PLATFORMS,
   livepeerWhipUrl,
   maskStreamKey,
+  parseIceLinkHeader,
   readyOutputs,
   resolveWhipIngest,
   restreamConfigured,
@@ -60,15 +62,30 @@ function stubLivepeer(stream: { id: string; streamKey: string }) {
       const href = String(url);
       const method = (init?.method || "GET").toUpperCase();
       calls.push({ url: href, method, body: typeof init?.body === "string" ? init.body : undefined });
+      if (method === "OPTIONS") {
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (name: string) =>
+              name.toLowerCase() === "link"
+                ? 'stun:lax.livepeer.com:3478; rel="ice-server";, turn:lax.livepeer.com:3478; rel="ice-server"; username="livepeer"; credential="livepeer";, stun:lax.livepeer.com:5349; rel="ice-server";, turn:lax.livepeer.com:5349; rel="ice-server"; username="livepeer"; credential="livepeer";'
+                : null,
+          },
+          json: async () => ({}),
+          text: async () => "",
+        };
+      }
       if (method === "HEAD" || (href.includes("/webrtc/") && !href.includes("/api/"))) {
         const key = href.split("/").pop()?.split("?")[0] || stream.streamKey;
+        const streamKey = key.replace(/^video\+/, "");
         return {
           ok: false,
           status: 307,
           headers: {
             get: (name: string) =>
               name.toLowerCase() === "location"
-                ? `https://lax-prod-catalyst-0.lp-playback.studio/webrtc/${key}`
+                ? `https://lax-prod-catalyst-0.lp-playback.studio:443/webrtc/video+${streamKey}`
                 : null,
           },
           json: async () => ({}),
@@ -147,6 +164,17 @@ describe("Studio livestream destinations", () => {
     expect(restreamProfileName({ profiles: [{ name: "720p00" }] })).toBe("720p00");
     expect(restreamProfileName({ profiles: [{ name: "480p0", height: 480 }] })).toBe("480p0");
     expect(restreamProfileName({ profiles: [{ name: "custom", height: 720 }] })).toBe("custom");
+    expect(iceHostFromWhipUrl("https://nyc-prod-catalyst-0.lp-playback.studio:443/webrtc/video+abc")).toBe(
+      "nyc.livepeer.com",
+    );
+    expect(
+      parseIceLinkHeader(
+        'stun:nyc.livepeer.com:3478; rel="ice-server";, turn:nyc.livepeer.com:3478; rel="ice-server"; username="livepeer"; credential="livepeer";',
+      ),
+    ).toEqual([
+      { urls: "stun:nyc.livepeer.com:3478" },
+      { urls: "turn:nyc.livepeer.com:3478", username: "livepeer", credential: "livepeer" },
+    ]);
   });
 
   it("tells Facebook operators that the Page stays dark until they go live in Producer", () => {
@@ -233,12 +261,14 @@ describe("Studio livestream destinations", () => {
     const session = await auth(request(app).post("/api/studio/live/session"));
     expect(session.status).toBe(200);
     expect(session.body.mode).toBe("whip");
-    expect(session.body.whipUrl).toBe("https://lax-prod-catalyst-0.lp-playback.studio/webrtc/whip-secret");
+    expect(session.body.whipUrl).toBe(
+      "https://lax-prod-catalyst-0.lp-playback.studio/webrtc/video+whip-secret",
+    );
     expect(session.body.platforms).toEqual(["youtube", "facebook"]);
     expect(session.body.iceServers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          urls: "turn:lax-prod-catalyst-0.lp-playback.studio",
+          urls: "turn:lax.livepeer.com:3478",
           username: "livepeer",
           credential: "livepeer",
         }),
@@ -336,8 +366,13 @@ describe("Studio livestream destinations", () => {
   it("resolves the Livepeer regional WHIP host for ICE/TURN", async () => {
     const calls = stubLivepeer({ id: "st_whip", streamKey: "whip-geo" });
     const ingest = await resolveWhipIngest("whip-geo");
-    expect(ingest.whipUrl).toBe("https://lax-prod-catalyst-0.lp-playback.studio/webrtc/whip-geo");
-    expect(ingest.iceServers.some((s) => String(s.urls).startsWith("turn:"))).toBe(true);
+    expect(ingest.whipUrl).toBe("https://lax-prod-catalyst-0.lp-playback.studio/webrtc/video+whip-geo");
+    expect(ingest.iceServers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ urls: "turn:lax.livepeer.com:3478", username: "livepeer", credential: "livepeer" }),
+      ]),
+    );
     expect(calls.some((c) => c.method === "HEAD" && c.url.includes("/webrtc/whip-geo"))).toBe(true);
+    expect(calls.some((c) => c.method === "OPTIONS")).toBe(true);
   });
 });

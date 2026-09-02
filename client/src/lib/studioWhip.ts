@@ -86,27 +86,38 @@ export function streamKeyFromWhipUrl(url: string): string {
   }
 }
 
+export function livepeerIceHost(host: string): string {
+  const hostname = host.replace(/:\d+$/, "");
+  const region = hostname.match(/^([a-z0-9]+)-prod-catalyst/i)?.[1];
+  return region ? `${region}.livepeer.com` : hostname;
+}
+
 export function iceServersForWhipHost(host: string): WhipIceServer[] {
+  const h = livepeerIceHost(host);
   return [
-    { urls: `stun:${host}` },
-    { urls: `turn:${host}`, username: "livepeer", credential: "livepeer" },
+    { urls: `stun:${h}:3478` },
+    { urls: `turn:${h}:3478`, username: "livepeer", credential: "livepeer" },
+    { urls: `turn:${h}:3478?transport=tcp`, username: "livepeer", credential: "livepeer" },
+    { urls: `stun:${h}:5349` },
+    { urls: `turn:${h}:5349`, username: "livepeer", credential: "livepeer" },
+    { urls: `turn:${h}:5349?transport=tcp`, username: "livepeer", credential: "livepeer" },
     { urls: "stun:stun.cloudflare.com:3478" },
   ];
 }
 
-/** GeoDNS fronts. Regional catalysts look like lax-prod-catalyst-2.lp-playback.studio. */
+/** GeoDNS fronts. Regional catalysts look like nyc-prod-catalyst-0.lp-playback.studio:443. */
 export function whipHostLooksRegional(host: string): boolean {
-  return /\.lp-playback\.studio$/i.test(host) || /catalyst/i.test(host);
+  return /\.lp-playback\.studio(?::\d+)?$/i.test(host) || /catalyst/i.test(host);
 }
 
 export async function resolveWhipEndpoint(whipUrl: string): Promise<{ url: string; iceServers: WhipIceServer[] }> {
   try {
     const res = await fetch(whipUrl, { method: "HEAD", redirect: "follow", mode: "cors" });
     const url = (res.url || whipUrl).split("?")[0];
-    return { url, iceServers: iceServersForWhipHost(new URL(url).host) };
+    return { url, iceServers: iceServersForWhipHost(new URL(url).hostname) };
   } catch {
     try {
-      return { url: whipUrl, iceServers: iceServersForWhipHost(new URL(whipUrl).host) };
+      return { url: whipUrl, iceServers: iceServersForWhipHost(new URL(whipUrl).hostname) };
     } catch {
       return { url: whipUrl, iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }] };
     }
@@ -118,11 +129,14 @@ async function postWhipOffer(url: string, sdp: string, streamKey: string): Promi
     "Content-Type": "application/sdp",
     Accept: "application/sdp",
   };
-  if (streamKey) headers.Authorization = `Bearer ${streamKey}`;
   let res = await fetch(url, { method: "POST", mode: "cors", headers, body: sdp });
   if ((res.status === 401 || res.status === 403) && streamKey) {
-    const { Authorization: _auth, ...rest } = headers;
-    res = await fetch(url, { method: "POST", mode: "cors", headers: rest, body: sdp });
+    res = await fetch(url, {
+      method: "POST",
+      mode: "cors",
+      headers: { ...headers, Authorization: `Bearer ${streamKey}` },
+      body: sdp,
+    });
   }
   return res;
 }
@@ -133,25 +147,28 @@ export async function connectWhip(
   iceServers?: WhipIceServer[],
 ): Promise<RTCPeerConnection> {
   let url = whipUrl;
-  let servers = iceServers;
+  let servers = iceServers?.length ? [...iceServers] : [];
   let host = "";
   try {
     host = new URL(whipUrl).host;
   } catch {
     throw new Error("Live ingest URL is invalid.");
   }
-  if (!servers?.length || !whipHostLooksRegional(host)) {
+  if (!whipHostLooksRegional(host)) {
     const resolved = await resolveWhipEndpoint(whipUrl);
     url = resolved.url;
-    servers = resolved.iceServers;
+    if (!servers.length) servers = resolved.iceServers;
     try {
       host = new URL(url).host;
     } catch {
       host = "";
     }
   }
+  if (!servers.length) {
+    servers = iceServersForWhipHost(host || new URL(url).hostname);
+  }
   const pc = new RTCPeerConnection({
-    iceServers: (servers?.length ? servers : iceServersForWhipHost(host)) as RTCIceServer[],
+    iceServers: servers as RTCIceServer[],
   });
   for (const track of stream.getTracks()) {
     const transceiver = pc.addTransceiver(track, { direction: "sendonly" });
