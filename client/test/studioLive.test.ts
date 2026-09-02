@@ -23,7 +23,7 @@ import {
   waitForIceConnected,
   whipHostLooksRegional,
 } from "../src/lib/studioWhip";
-import { obsEncoderBlock } from "../src/lib/studioProgramOutput";
+import { obsEncoderBlock, programOutputHtml } from "../src/lib/studioProgramOutput";
 
 function memoryStore(): Storage {
   const data = new Map<string, string>();
@@ -243,6 +243,14 @@ describe("WHIP ICE wait", () => {
 });
 
 describe("OBS encoder from this church desk", () => {
+  it("builds a 1280x720 Program page for OBS to Window Capture", () => {
+    const html = programOutputHtml();
+    expect(html).toContain('id="igc-program"');
+    expect(html).toContain('width="1280"');
+    expect(html).toContain('height="720"');
+    expect(html).toContain("IGC Program");
+  });
+
   it("copies Custom RTMP server and key for OBS", () => {
     expect(obsEncoderBlock("YouTube", "rtmps://a.rtmps.youtube.com/live2/", "yt-key")).toBe(
       [
