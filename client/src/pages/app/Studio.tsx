@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Clapperboard,
   Film,
+  Image as ImageIcon,
   Mic,
   MonitorPlay,
   Music,
@@ -28,6 +29,35 @@ import {
   Type,
   Video,
 } from "lucide-react";
+
+function FilePick({
+  accept,
+  label,
+  disabled,
+  onFile,
+}: {
+  accept: string;
+  label: string;
+  disabled?: boolean;
+  onFile: (file: File) => void;
+}) {
+  return (
+    <label className="inline-flex h-8 cursor-pointer items-center rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10">
+      <input
+        type="file"
+        accept={accept}
+        className="hidden"
+        disabled={disabled}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) onFile(file);
+        }}
+      />
+      {label}
+    </label>
+  );
+}
 
 function formatClock(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -461,15 +491,15 @@ export default function Studio() {
                 ))}
               </Select>
             </StudioField>
-            <StudioField label="Microphone">
+            <StudioField label="Audio input">
               <Select
                 value={s.micId}
                 onChange={(e) => void s.selectMic(e.target.value)}
                 disabled={Boolean(s.busySource) || s.mics.length === 0}
               >
-                {s.mics.length === 0 ? <option value="">No microphone found</option> : null}
+                <option value="">Any available microphone</option>
                 {s.mics.map((m) => (
-                  <option key={m.deviceId} value={m.deviceId}>
+                  <option key={m.deviceId || m.label} value={m.deviceId}>
                     {m.label}
                   </option>
                 ))}
@@ -486,16 +516,71 @@ export default function Studio() {
             <RefreshCw className="h-3.5 w-3.5" /> Refresh devices
           </Button>
           <p className="mt-2 text-[11px] text-ink-500">
-            Yamaha USB: pick the mixer as microphone. Listen-for-verses uses the browser default mic.
+            Uses whichever input you pick — mixer, USB, laptop mic, or desktop/loopback. Listen-for-verses uses the
+            browser default mic.
           </p>
           <p className="mt-2 text-[11px] text-ink-300">
             Program picture: {pictureKindLabel(s.pictureKind)}. Sound: {soundKindLabel(s.soundKind)}.
           </p>
+          <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-400">Recorded media</p>
+            <p className="mt-1 truncate text-[11px] text-ink-400">
+              {s.videoClip?.name || s.stillClip?.name || s.audioClip?.name
+                ? [s.videoClip?.name, s.stillClip?.name, s.audioClip?.name].filter(Boolean).join(" · ")
+                : "Choose a video, picture, or audio file on this desk."}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <FilePick
+                accept="video/*"
+                label={s.videoClip ? "Replace video" : "Choose video"}
+                disabled={Boolean(s.busySource)}
+                onFile={(file) => void s.loadStudioFile("video", file)}
+              />
+              <FilePick
+                accept="image/*"
+                label={s.stillClip ? "Replace picture" : "Choose picture"}
+                disabled={Boolean(s.busySource)}
+                onFile={(file) => void s.loadStudioFile("picture", file)}
+              />
+              <FilePick
+                accept="audio/*"
+                label={s.audioClip ? "Replace audio" : "Choose audio"}
+                disabled={Boolean(s.busySource)}
+                onFile={(file) => void s.loadStudioFile("audio", file)}
+              />
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="gold"
+                disabled={!s.videoClip || Boolean(s.busySource)}
+                onClick={() => void s.useStudioMedia("video", "both")}
+              >
+                Send video + sound
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={!s.stillClip || Boolean(s.busySource)}
+                onClick={() => void s.useStudioMedia("picture", "picture")}
+              >
+                <ImageIcon className="h-3.5 w-3.5" /> Send picture
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={!s.audioClip || Boolean(s.busySource)}
+                onClick={() => void s.useStudioMedia("audio", "sound")}
+              >
+                Send audio
+              </Button>
+            </div>
+          </div>
           <Link
             to="/app/studio/media"
             className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-white/15 text-sm font-medium text-ink-100 hover:bg-white/10"
           >
-            <Film className="h-3.5 w-3.5" /> Recorded video, picture or audio
+            <Film className="h-3.5 w-3.5" /> Open recorded media room
           </Link>
         </DeskCard>
 

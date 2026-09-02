@@ -251,7 +251,7 @@ export default function StudioMedia() {
             Send picture to Program
           </Button>
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">
-            A still can go out with recorded audio, the Yamaha mix, or silence. It does not need the camera.
+            A still can go out with recorded audio, the desk mic, or silence. It does not need the camera.
           </p>
         </DeskCard>
 

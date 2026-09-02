@@ -15,6 +15,8 @@ import {
   soundKindLabel,
   isLiveAudioTrack,
   tracksToStop,
+  PROGRAM_AUDIO_MISSING,
+  RECORDING_AUDIO_MISSING,
 } from "../src/lib/studioMedia";
 
 describe("Recorded media room", () => {
@@ -107,5 +109,8 @@ describe("Recorded media room", () => {
     expect(soundKindLabel("silent")).toBe("Silent");
     expect(formatClipClock(125)).toBe("02:05");
     expect(formatClipClock(-1)).toBe("00:00");
+    expect(PROGRAM_AUDIO_MISSING).toMatch(/any audio input/i);
+    expect(PROGRAM_AUDIO_MISSING).not.toMatch(/Yamaha/i);
+    expect(RECORDING_AUDIO_MISSING).not.toMatch(/Yamaha/i);
   });
 });

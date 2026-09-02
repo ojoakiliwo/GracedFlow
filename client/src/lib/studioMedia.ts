@@ -9,6 +9,12 @@ export type SoundKind = "mic" | "file-audio" | "file-video" | "silent";
 export type MediaSlot = "video" | "picture" | "audio";
 export type MediaUse = "picture" | "sound" | "both";
 
+export const PROGRAM_AUDIO_MISSING =
+  "Program has no audio track. Pick any audio input in Sources, send recorded sound, or choose Silent, then go live.";
+
+export const RECORDING_AUDIO_MISSING =
+  "Recording did not get an audio track. Pick any audio input, send recorded sound, or choose Silent, then record again.";
+
 export type StudioClip = {
   name: string;
   url: string;

@@ -68,6 +68,8 @@ import {
   shouldAdaptExposure,
   shouldMirrorPicture,
   isLiveAudioTrack,
+  PROGRAM_AUDIO_MISSING,
+  RECORDING_AUDIO_MISSING,
   tracksToStop,
   type MediaSlot,
   type MediaUse,
@@ -132,13 +134,9 @@ function studioStartMessage(err: unknown): string {
 }
 
 async function getAudioStream(deviceId: string): Promise<MediaStream> {
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      audio: audioConstraintsFor(deviceId),
-      video: false,
-    });
-  } catch {
-    return await navigator.mediaDevices.getUserMedia({
+  const attempts: MediaStreamConstraints[] = [
+    { audio: audioConstraintsFor(deviceId), video: false },
+    {
       audio: {
         deviceId: deviceId ? { exact: deviceId } : undefined,
         echoCancellation: false,
@@ -146,8 +144,18 @@ async function getAudioStream(deviceId: string): Promise<MediaStream> {
         autoGainControl: false,
       },
       video: false,
-    });
+    },
+    { audio: true, video: false },
+  ];
+  let last: unknown;
+  for (const constraints of attempts) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      last = err;
+    }
   }
+  throw last instanceof Error ? last : new Error("Could not open an audio input.");
 }
 
 function pickMime(): string {
@@ -271,6 +279,7 @@ export function useBroadcastStudioEngine() {
   const stillClipRef = useRef<StudioClip | null>(null);
   const audioClipRef = useRef<StudioClip | null>(null);
   const mediaLoopRef = useRef(true);
+  const preferredMicLabelRef = useRef("");
 
   lookRef.current = look;
   overlayRef.current = overlay;
@@ -453,7 +462,7 @@ export function useBroadcastStudioEngine() {
     }
   }, [attachProgrammeAudio, stopOutgoing]);
 
-  const listDevices = useCallback(async (prefer?: { camera?: string; mic?: string }) => {
+  const listDevices = useCallback(async (prefer?: { camera?: string; mic?: string; micLabel?: string }) => {
     const all = await navigator.mediaDevices.enumerateDevices();
     const cam = all
       .filter((d) => d.kind === "videoinput")
@@ -472,7 +481,8 @@ export function useBroadcastStudioEngine() {
     setCameras(cam);
     setMics(mic);
     setCameraIdState((id) => keepDeviceId(prefer?.camera || id, cam));
-    setMicIdState((id) => keepDeviceId(prefer?.mic || id, mic as NamedDevice[]));
+    if (prefer?.micLabel) preferredMicLabelRef.current = prefer.micLabel;
+    setMicIdState((id) => keepDeviceId(prefer?.mic || id, mic as NamedDevice[], preferredMicLabelRef.current));
   }, []);
 
   const currentFrame = useCallback((): PictureFrame => {
@@ -929,14 +939,12 @@ export function useBroadcastStudioEngine() {
     }
 
     if (sound === "mic") {
-      const liveMicTrack = nodes.current.rawAudio?.getAudioTracks()[0];
-      if (!liveMicTrack || liveMicTrack.readyState !== "live") {
-        const stream = await getAudioStream(micId);
-        connectAudioSource(ctx, stream);
-        const liveMic = deviceIdFromStream(stream, "audio") || micId;
-        setMicIdState(liveMic);
-        await listDevices({ mic: liveMic });
-      }
+      const stream = await getAudioStream(micId);
+      connectAudioSource(ctx, stream);
+      const liveMic = deviceIdFromStream(stream, "audio") || micId;
+      if (liveMic) preferredMicLabelRef.current = "";
+      setMicIdState(liveMic);
+      await listDevices({ mic: liveMic });
     } else if (sound === "file-audio" && audioEl) {
       connectElementAudio(ctx, audioEl);
     } else if (sound === "file-video" && videoEl) {
@@ -1042,6 +1050,8 @@ export function useBroadcastStudioEngine() {
 
   const selectMic = useCallback(
     async (id: string) => {
+      const chosen = mics.find((m) => m.deviceId === id);
+      preferredMicLabelRef.current = chosen?.label || preferredMicLabelRef.current;
       setMicIdState(id);
       if (statusRef.current !== "live" || !nodes.current.ctx) return;
       setBusySource("mic");
@@ -1051,16 +1061,17 @@ export function useBroadcastStudioEngine() {
         setSoundKindState("mic");
         const stream = await getAudioStream(id);
         connectAudioSource(nodes.current.ctx, stream);
-        setMicIdState(deviceIdFromStream(stream, "audio") || id);
+        const liveMic = deviceIdFromStream(stream, "audio") || id;
+        setMicIdState(liveMic);
         if (nodes.current.dest) attachProgrammeAudio(nodes.current.dest.stream);
-        await listDevices({ mic: deviceIdFromStream(stream, "audio") || id });
+        await listDevices({ mic: liveMic, micLabel: preferredMicLabelRef.current });
       } catch (e) {
         setError(studioStartMessage(e));
       } finally {
         setBusySource(null);
       }
     },
-    [attachProgrammeAudio, connectAudioSource, listDevices],
+    [attachProgrammeAudio, connectAudioSource, listDevices, mics],
   );
 
   const setMonitor = useCallback((on: boolean) => {
@@ -1090,9 +1101,7 @@ export function useBroadcastStudioEngine() {
       const mixed = canvas.captureStream(30);
       const audioTracks = dest.stream.getAudioTracks().filter(isLiveAudioTrack);
       if (audioTracks.length === 0) {
-        setError(
-          "Recording did not get an audio track. Send recorded audio, pick the Yamaha USB input, or go silent, then record again.",
-        );
+        setError(RECORDING_AUDIO_MISSING);
         return;
       }
       for (const track of audioTracks) mixed.addTrack(track.clone());
@@ -1109,7 +1118,7 @@ export function useBroadcastStudioEngine() {
         if (ev.data.size) chunks.push(ev.data);
       };
       recorder.onerror = () => {
-        setError("Recording failed. Try Chrome or Edge, and confirm the mixer is selected.");
+        setError("Recording failed. Try Chrome or Edge, and confirm an audio input is selected.");
         setRecording(false);
       };
       recorder.onstop = () => {
@@ -1155,7 +1164,7 @@ export function useBroadcastStudioEngine() {
     }
     if (mixed.getAudioTracks().filter(isLiveAudioTrack).length === 0) {
       stopOutgoing(mixed);
-      setError("Program has no audio track. Send picture + sound again, or choose Silent, then go live.");
+      setError(PROGRAM_AUDIO_MISSING);
       return;
     }
     setSocialConnecting(true);
