@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
+  Copy,
   Facebook,
   Instagram,
+  MonitorPlay,
   Radio,
   Square,
   Youtube,
@@ -23,6 +25,7 @@ import {
   type StudioLiveConfig,
   type StudioLiveDraft,
 } from "../../lib/studioLive";
+import { obsEncoderBlock } from "../../lib/studioProgramOutput";
 
 function TikTokIcon({ className }: { className?: string }) {
   return (
@@ -118,6 +121,16 @@ export default function StudioLive() {
     await persist(false);
   }
 
+  async function copyForObs(d: StudioLiveDraft) {
+    const block = obsEncoderBlock(d.label, d.ingestUrl, d.streamKey);
+    try {
+      await navigator.clipboard.writeText(block);
+      notify(`Copied ${d.label} for OBS`);
+    } catch {
+      notify(block, "error");
+    }
+  }
+
   if (s.outputFocus) {
     return (
       <div className="fixed inset-0 z-50 bg-black">
@@ -150,8 +163,8 @@ export default function StudioLive() {
           </Link>
           <h1 className="font-display text-2xl text-white sm:text-3xl">Go live</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-400">
-            Paste a key and turn that platform On. One destination is enough.
-            Leave the rest Off until you have their keys — then Save and they join.
+            This church desk stays the studio. Paste a key and turn that platform On. Stream from here with Go live, or
+            let OBS send the same keys.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -202,6 +215,17 @@ export default function StudioLive() {
                 {s.socialConnecting ? "Going live…" : "Go live"}
               </Button>
             )}
+            <Button
+              variant="secondary"
+              onClick={() => {
+                void (async () => {
+                  if (s.status !== "live") await s.start();
+                  s.openProgramOutput();
+                })();
+              }}
+            >
+              <MonitorPlay className="h-4 w-4" /> Open Program for OBS
+            </Button>
           </div>
           {s.socialPlatforms.length > 0 ? (
             <p className="mt-3 text-[11px] leading-relaxed text-gold-300">
@@ -210,8 +234,12 @@ export default function StudioLive() {
           ) : null}
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">
             {data?.restream
-              ? "YouTube and Facebook only accept RTMP, which a browser cannot send. This desk sends Program to Livepeer, and Livepeer restreams your saved keys. If both stay empty after Go live, End live and Go live again with Program on screen."
-              : "Ask an admin to set LIVEPEER_API_KEY on Vercel (Livepeer Studio → Developers → API Key), then redeploy. That is a one-time pipe — not an app you open on Sunday."}
+              ? "Path 1: Go live sends Program through Livepeer. Path 2: Open Program for OBS, Window Capture “IGC Program”, paste the same Server and Stream key, then Start Streaming in OBS. Do not run both to the same Facebook or YouTube key."
+              : "Open Program for OBS and stream the saved keys from OBS if Go live is not set up yet. Ask an admin for LIVEPEER_API_KEY only if you want Go live without OBS."}
+          </p>
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+            OBS audio: add Application Audio Capture for Chrome, or turn on Monitor in this room and mute the computer
+            speakers so the sanctuary mics do not hear the desk.
           </p>
         </div>
       </div>
@@ -264,6 +292,13 @@ export default function StudioLive() {
                       <li key={step}>{step}</li>
                     ))}
                   </ol>
+                  <button
+                    type="button"
+                    onClick={() => void copyForObs(d)}
+                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-gold-300 hover:underline"
+                  >
+                    <Copy className="h-3.5 w-3.5" /> Copy for OBS
+                  </button>
                   <a
                     href={d.helpUrl}
                     target="_blank"

@@ -95,8 +95,8 @@ export function restreamConfigured(): boolean {
 
 export function restreamDetail(): string {
   return restreamConfigured()
-    ? "This desk cannot talk to YouTube or Facebook directly (they only accept RTMP). Go live sends Program to Livepeer, which restreams those keys. Start capture, take picture to Program, then Go live. Leave YouTube waiting for encoder and Facebook Live Producer open."
-    : "Turn On only the platforms you have keys for. Add LIVEPEER_API_KEY once (Livepeer Studio → Developers → API Key, free Sandbox). Then Start capture and Go live from this desk.";
+    ? "This church desk is still the studio. YouTube and Facebook only accept RTMP: Go live (Livepeer) from this page, or Open Program for OBS and let OBS stream those same keys. Start capture first. Leave YouTube waiting for encoder and Facebook Live Producer open."
+    : "This church desk is still the studio. Turn On platforms that have keys, then either Go live from this page or Open Program for OBS. If Go live has no Livepeer key yet, OBS can still stream the saved YouTube/Facebook keys.";
 }
 
 export function rtmpTargetUrl(ingestUrl: string, streamKey: string): string {

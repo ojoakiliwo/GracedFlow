@@ -23,6 +23,7 @@ import {
   waitForIceConnected,
   whipHostLooksRegional,
 } from "../src/lib/studioWhip";
+import { obsEncoderBlock } from "../src/lib/studioProgramOutput";
 
 function memoryStore(): Storage {
   const data = new Map<string, string>();
@@ -238,5 +239,33 @@ describe("WHIP ICE wait", () => {
     } as unknown as RTCPeerConnection;
     const pending = waitForIceConnected(pc, 20);
     await expect(pending).rejects.toThrow(/Could not reach Livepeer/);
+  });
+});
+
+describe("OBS encoder from this church desk", () => {
+  it("copies Custom RTMP server and key for OBS", () => {
+    expect(obsEncoderBlock("YouTube", "rtmps://a.rtmps.youtube.com/live2/", "yt-key")).toBe(
+      [
+        "OBS → Settings → Stream → Service: Custom",
+        "Server: rtmps://a.rtmps.youtube.com/live2",
+        "Stream key: yt-key",
+      ].join("\n"),
+    );
+  });
+
+  it("treats a full rtmps paste as the OBS server", () => {
+    const block = obsEncoderBlock(
+      "Facebook",
+      "rtmps://live-api-s.facebook.com:443/rtmp/",
+      "rtmps://live-api-s.facebook.com:443/rtmp/fb-key",
+    );
+    expect(block).toContain("Server: rtmps://live-api-s.facebook.com:443/rtmp/fb-key");
+    expect(block).toContain("leave empty");
+  });
+
+  it("asks for the saved key when the form field is blank", () => {
+    expect(obsEncoderBlock("YouTube", "rtmps://a.rtmps.youtube.com/live2", "")).toContain(
+      "paste the same key saved for YouTube",
+    );
   });
 });

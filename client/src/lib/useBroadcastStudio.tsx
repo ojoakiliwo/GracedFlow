@@ -56,6 +56,7 @@ import {
 } from "./studioSpeech";
 import { apiGet, apiPost } from "./api";
 import { connectWhip, kickCanvasFrames, waitForOutboundRtp, type WhipIceServer } from "./studioWhip";
+import { openProgramOutputWindow, paintProgramOutputWindow } from "./studioProgramOutput";
 import type { RestreamHealth } from "./studioLive";
 import {
   applyMediaUse,
@@ -245,6 +246,7 @@ export function useBroadcastStudioEngine() {
   const meterTimer = useRef<number | null>(null);
   const lumaTimer = useRef<number | null>(null);
   const metersLumaRef = useRef(120);
+  const programOutputRef = useRef<Window | null>(null);
 
   const [status, setStatus] = useState<StudioStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -281,6 +283,7 @@ export function useBroadcastStudioEngine() {
   const [socialPlatforms, setSocialPlatforms] = useState<string[]>([]);
   const [restreamHealth, setRestreamHealth] = useState<RestreamHealth | null>(null);
   const [outputFocus, setOutputFocus] = useState(false);
+  const [programOutputOpen, setProgramOutputOpen] = useState(false);
   const [selectedVerseRefs, setSelectedVerseRefs] = useState<string[]>([]);
   const [musicFilter, setMusicFilterState] = useState(false);
   const [soundSettings, setSoundSettingsState] = useState<StudioSoundSettings>(() => loadSoundSettings());
@@ -527,6 +530,10 @@ export function useBroadcastStudioEngine() {
     paintStudioMonitor(previewCanvasRef.current, frame, overlayRef.current, lookNow, auto, true);
     paintStudioMonitor(canvasRef.current, frame, programOverlayRef.current, lookNow, auto, false);
     kickCanvasFrames(nodes.current.whipStream);
+    if (programOutputRef.current && !paintProgramOutputWindow(programOutputRef.current, captureCanvasRef.current || canvasRef.current)) {
+      programOutputRef.current = null;
+      setProgramOutputOpen(false);
+    }
     n.raf = requestAnimationFrame(paint);
   }, [currentFrame]);
 
@@ -1232,6 +1239,29 @@ export function useBroadcastStudioEngine() {
     setRestreamHealth(null);
   }, [stopOutgoing]);
 
+  const closeProgramOutput = useCallback(() => {
+    try {
+      programOutputRef.current?.close();
+    } catch {
+      // Window may already be gone.
+    }
+    programOutputRef.current = null;
+    setProgramOutputOpen(false);
+  }, []);
+
+  const openProgramOutput = useCallback(() => {
+    const next = openProgramOutputWindow(programOutputRef.current);
+    if (!next) {
+      setError("Allow the Program window, then click Open Program for OBS again.");
+      return false;
+    }
+    programOutputRef.current = next;
+    setProgramOutputOpen(true);
+    setError(null);
+    paintProgramOutputWindow(next, captureCanvasRef.current || canvasRef.current);
+    return true;
+  }, []);
+
   const startSocialLive = useCallback(async () => {
     if (statusRef.current !== "live") {
       setError("Send a video, picture or audio to Program first, then go live.");
@@ -1349,6 +1379,10 @@ export function useBroadcastStudioEngine() {
     paintStudioMonitor(captureCanvasRef.current, frame, programOverlayRef.current, lookNow, auto, false);
     paintStudioMonitor(previewCanvasRef.current, frame, overlayRef.current, lookNow, auto, true);
     paintStudioMonitor(canvasRef.current, frame, programOverlayRef.current, lookNow, auto, false);
+    if (programOutputRef.current && !paintProgramOutputWindow(programOutputRef.current, captureCanvasRef.current || canvasRef.current)) {
+      programOutputRef.current = null;
+      setProgramOutputOpen(false);
+    }
   }, [currentFrame]);
 
   const updateOverlay = useCallback((patch: Partial<ProgrammeOverlay>) => {
@@ -1689,6 +1723,12 @@ export function useBroadcastStudioEngine() {
       for (const clip of [videoClipRef.current, stillClipRef.current, audioClipRef.current]) {
         if (clip?.url) URL.revokeObjectURL(clip.url);
       }
+      try {
+        programOutputRef.current?.close();
+      } catch {
+        // Popup may already be closed.
+      }
+      programOutputRef.current = null;
     };
   }, [listDevices, stopGraph, stopListening]);
 
@@ -1812,6 +1852,9 @@ export function useBroadcastStudioEngine() {
     restreamHealth,
     outputFocus,
     setOutputFocus,
+    programOutputOpen,
+    openProgramOutput,
+    closeProgramOutput,
     updateOverlay,
     takeToLive,
     clearLive,
