@@ -95,8 +95,8 @@ export function restreamConfigured(): boolean {
 
 export function restreamDetail(): string {
   return restreamConfigured()
-    ? "This desk goes live to YouTube, Facebook, Instagram and TikTok. You do not open OBS."
-    : "Save the four stream keys, then add LIVEPEER_API_KEY once (Livepeer Studio → Developers → API Key). After that, Start capture and Go live from this desk.";
+    ? "This desk goes live to YouTube, Facebook, Instagram and TikTok. Stay on Livepeer’s free Sandbox — the congregation watches those apps, not Livepeer (the 30-viewer cap does not apply). You do not open OBS."
+    : "Save the four stream keys, then add LIVEPEER_API_KEY once (Livepeer Studio → Developers → API Key, free Sandbox). After that, Start capture and Go live from this desk.";
 }
 
 export function rtmpTargetUrl(ingestUrl: string, streamKey: string): string {

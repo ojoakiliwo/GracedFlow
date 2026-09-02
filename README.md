@@ -250,7 +250,11 @@ X/Twitter, Instagram, YouTube, Telegram, WhatsApp Cloud API), and plug the token
 ### Studio livestream — YouTube, Facebook, Instagram, TikTok
 Save each platform’s stream URL and key in **Broadcast studio → Go live**. Chrome cannot
 speak RTMP, so the desk sends WebRTC to Livepeer, which restreams to those four apps.
-You do not open OBS.
+You do not open OBS. Stay on Livepeer’s **free Sandbox**. The 30-viewer cap is for
+people watching on Livepeer; the congregation watches YouTube / Facebook /
+Instagram / TikTok, which have their own free viewers. Do not upgrade to Growth
+($100/month). There is no hosted WHIP restreamer that matches this desk for $0
+with unlimited Livepeer-style playback.
 
 1. Create a Livepeer Studio account and copy an API key (Developers → API Key).
 2. Set `LIVEPEER_API_KEY` on Vercel (project **graced-flow**) and redeploy.
