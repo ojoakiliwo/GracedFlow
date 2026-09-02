@@ -206,18 +206,6 @@ export default function Studio() {
           >
             Destinations
           </Link>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              void (async () => {
-                if (s.status !== "live") await s.start();
-                s.openProgramOutput();
-              })();
-            }}
-          >
-            <MonitorPlay className="h-4 w-4" /> {s.programOutputOpen ? "Program for OBS" : "Open Program for OBS"}
-          </Button>
           <Link
             to="/app/studio/media"
             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10"
