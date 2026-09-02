@@ -11,7 +11,15 @@ import {
   STUDIO_LIVE_DRAFTS_KEY,
   writeStoredLiveDrafts,
 } from "../src/lib/studioLive";
-import { waitForIce, preferH264Codecs } from "../src/lib/studioWhip";
+import {
+  iceServersForWhipHost,
+  iceIsConnected,
+  preferH264Codecs,
+  streamKeyFromWhipUrl,
+  waitForIce,
+  waitForIceConnected,
+  whipHostLooksRegional,
+} from "../src/lib/studioWhip";
 
 function memoryStore(): Storage {
   const data = new Map<string, string>();
@@ -142,8 +150,14 @@ describe("social restream hint", () => {
       socialRestreamHint(["facebook"], { ingesting: false, profiles: [], targets: [] }),
     ).toMatch(/has not received Program yet/);
     expect(
+      socialRestreamHint(["youtube", "facebook"], { ingesting: false, profiles: [], targets: [] }),
+    ).toMatch(/YouTube and Facebook stay dark/);
+    expect(
       socialRestreamHint(["facebook"], { ingesting: true, profiles: ["720p0"], targets: [{ platform: "facebook", profile: "720p0" }] }),
     ).toMatch(/Livepeer is receiving Program/);
+    expect(
+      socialRestreamHint(["youtube"], { ingesting: true, profiles: ["720p0"], targets: [{ platform: "youtube", profile: "720p0" }] }),
+    ).toMatch(/waiting in YouTube Studio/);
   });
 });
 
@@ -165,5 +179,37 @@ describe("WHIP ICE wait", () => {
       { mimeType: "video/VP9" },
     ]);
     expect(ordered[0]?.mimeType).toBe("video/H264");
+  });
+
+  it("builds Livepeer TURN servers from the regional WHIP host", () => {
+    expect(streamKeyFromWhipUrl("https://lax-prod-catalyst-0.lp-playback.studio/webrtc/whip-secret")).toBe(
+      "whip-secret",
+    );
+    expect(whipHostLooksRegional("lax-prod-catalyst-0.lp-playback.studio")).toBe(true);
+    expect(whipHostLooksRegional("livepeer.studio")).toBe(false);
+    const ice = iceServersForWhipHost("lax-prod-catalyst-0.lp-playback.studio");
+    expect(ice).toEqual(
+      expect.arrayContaining([
+        { urls: "stun:lax-prod-catalyst-0.lp-playback.studio" },
+        { urls: "turn:lax-prod-catalyst-0.lp-playback.studio", username: "livepeer", credential: "livepeer" },
+      ]),
+    );
+  });
+
+  it("waits until ICE is connected before treating WHIP as live", async () => {
+    expect(
+      iceIsConnected({ iceConnectionState: "checking", connectionState: "connecting" } as RTCPeerConnection),
+    ).toBe(false);
+    expect(
+      iceIsConnected({ iceConnectionState: "connected", connectionState: "connecting" } as RTCPeerConnection),
+    ).toBe(true);
+    const pc = {
+      iceConnectionState: "checking",
+      connectionState: "connecting",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as RTCPeerConnection;
+    const pending = waitForIceConnected(pc, 20);
+    await expect(pending).rejects.toThrow(/Could not reach Livepeer/);
   });
 });

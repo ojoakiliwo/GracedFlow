@@ -11,7 +11,7 @@ export const LIVE_PLATFORMS = [
     steps: [
       "YouTube Studio → Create → Go live. Choose Stream (encoder), not Webcam.",
       "Stream URL is the server. Ignore Backup server URL. Stream key is the next field — click Show if it is dots.",
-      "Paste URL and key here, turn On, then create/schedule the YouTube live event before Sunday Go live.",
+      "Paste URL and key here, turn On, then leave a YouTube live event waiting (Go live / waiting for encoder) before Sunday Go live. YouTube stays dark until this desk’s Program reaches Livepeer.",
     ],
   },
   {
@@ -113,9 +113,12 @@ export function rtmpTargetUrl(ingestUrl: string, streamKey: string): string {
 /** H.264 720p so Facebook/YouTube RTMP can ingest browser WHIP (VP8/Opus cannot ride `source`). */
 export const SOCIAL_TRANSCODE_PROFILE = "720p0";
 
+/** Livepeer suffixes fps onto this name, so `720p` becomes restream profile `720p0`. Naming it `720p0` can become `720p00`. */
+export const SOCIAL_TRANSCODE_SOURCE_NAME = "720p";
+
 export const SOCIAL_TRANSCODE_PROFILES = [
   {
-    name: SOCIAL_TRANSCODE_PROFILE,
+    name: SOCIAL_TRANSCODE_SOURCE_NAME,
     width: 1280,
     height: 720,
     bitrate: 2500000,
@@ -125,13 +128,86 @@ export const SOCIAL_TRANSCODE_PROFILES = [
   },
 ];
 
+export function restreamProfileName(stream: { profiles?: { name?: string; height?: number }[] } | null): string {
+  const profiles = stream?.profiles ?? [];
+  const named = profiles.find((p) => p.name && /720p/i.test(p.name));
+  if (named?.name) return named.name;
+  const byHeight = profiles.find((p) => p.height === 720 && p.name);
+  if (byHeight?.name) return byHeight.name;
+  const by480 = profiles.find((p) => p.name && /480p/i.test(p.name));
+  if (by480?.name) return by480.name;
+  return SOCIAL_TRANSCODE_PROFILE;
+}
+
 export function streamHasSocialTranscode(stream: { profiles?: { name?: string }[] } | null): boolean {
-  return Boolean(stream?.profiles?.some((p) => p.name === SOCIAL_TRANSCODE_PROFILE));
+  return Boolean(stream?.profiles?.some((p) => p.name && /720p/i.test(p.name)));
 }
 
 export function livepeerWhipUrl(streamKey: string): string {
-  const base = (process.env.LIVEPEER_WHIP_BASE || "https://livepeercdn.studio/webrtc").replace(/\/$/, "");
+  const base = (process.env.LIVEPEER_WHIP_BASE || "https://livepeer.studio/webrtc").replace(/\/$/, "");
   return `${base}/${streamKey}`;
+}
+
+export interface WhipIceServer {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
+
+export function livepeerIceServers(host: string): WhipIceServer[] {
+  return [
+    { urls: `stun:${host}` },
+    { urls: `turn:${host}`, username: "livepeer", credential: "livepeer" },
+    { urls: "stun:stun.cloudflare.com:3478" },
+  ];
+}
+
+async function readWhipRedirect(url: string, streamKey: string): Promise<string | null> {
+  for (const method of ["HEAD", "GET"] as const) {
+    try {
+      const res = await fetch(url, {
+        method,
+        redirect: "manual",
+        headers: { Authorization: `Bearer ${streamKey}` },
+      });
+      const loc = res.headers?.get?.("location") ?? null;
+      if (loc) return new URL(loc, url).href.split("?")[0];
+      if (res.ok) return url;
+    } catch {
+      // Try the next method or ingest base.
+    }
+  }
+  return null;
+}
+
+/** Follow Livepeer GeoDNS to the regional catalyst so ICE/TURN can complete. */
+export async function resolveWhipIngest(streamKey: string): Promise<{
+  whipUrl: string;
+  iceServers: WhipIceServer[];
+}> {
+  const bases = [
+    process.env.LIVEPEER_WHIP_BASE || "https://livepeer.studio/webrtc",
+    "https://livepeer.studio/webrtc",
+    "https://livepeercdn.studio/webrtc",
+  ].filter((base, i, all) => all.indexOf(base) === i);
+  for (const base of bases) {
+    const start = `${base.replace(/\/$/, "")}/${streamKey}`;
+    const resolved = await readWhipRedirect(start, streamKey);
+    if (!resolved) continue;
+    try {
+      return { whipUrl: resolved, iceServers: livepeerIceServers(new URL(resolved).host) };
+    } catch {
+      continue;
+    }
+  }
+  const fallback = livepeerWhipUrl(streamKey);
+  let host = "livepeer.studio";
+  try {
+    host = new URL(fallback).host;
+  } catch {
+    // Keep the Livepeer GeoDNS host.
+  }
+  return { whipUrl: fallback, iceServers: livepeerIceServers(host) };
 }
 
 export function platformById(id: string) {
@@ -301,9 +377,9 @@ async function setBridgeStreamId(uid: string): Promise<void> {
     .run(BRIDGE_ID, uid);
 }
 
-function livepeerTargets(outputs: ReadyLiveOutput[]) {
+function livepeerTargets(outputs: ReadyLiveOutput[], profile = SOCIAL_TRANSCODE_PROFILE) {
   return outputs.map((dest) => ({
-    profile: SOCIAL_TRANSCODE_PROFILE,
+    profile,
     videoOnly: false,
     spec: {
       name: dest.platform,
@@ -379,7 +455,7 @@ export async function restreamHealth(): Promise<RestreamHealth> {
       profiles: (stream.profiles ?? []).map((p) => p.name).filter((name): name is string => Boolean(name)),
       targets: outputs.map((dest, i) => ({
         platform: dest.platform,
-        profile: attached[i]?.profile || SOCIAL_TRANSCODE_PROFILE,
+        profile: attached[i]?.profile || restreamProfileName(stream),
       })),
     };
   } catch {
@@ -389,6 +465,7 @@ export async function restreamHealth(): Promise<RestreamHealth> {
 
 export async function ensureWhipSession(outputs: ReadyLiveOutput[]): Promise<{
   whipUrl: string;
+  iceServers: WhipIceServer[];
   liveInputId: string;
 }> {
   if (!restreamConfigured()) {
@@ -426,11 +503,12 @@ export async function ensureWhipSession(outputs: ReadyLiveOutput[]): Promise<{
   }
   if (!stream.id) throw new HttpError(502, "Livepeer did not create a stream");
   await setBridgeStreamId(stream.id);
-  if (!stream.streamKey) {
+  if (!stream.streamKey || !(stream.profiles ?? []).length) {
     stream = await livepeerFetch<LivepeerStream>(`/stream/${stream.id}`);
   }
   if (!stream.streamKey) {
     throw new HttpError(502, "Livepeer did not return a stream key");
   }
-  return { whipUrl: livepeerWhipUrl(stream.streamKey), liveInputId: stream.id };
+  const ingest = await resolveWhipIngest(stream.streamKey);
+  return { ...ingest, liveInputId: stream.id };
 }

@@ -79,6 +79,7 @@ studioRouter.post(
     res.json({
       mode: "whip",
       whipUrl: session.whipUrl,
+      iceServers: session.iceServers,
       platforms: outputs.map((o) => o.platform),
     });
   }),

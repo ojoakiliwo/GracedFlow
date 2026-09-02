@@ -7,9 +7,12 @@ import {
   livepeerWhipUrl,
   maskStreamKey,
   readyOutputs,
+  resolveWhipIngest,
   restreamConfigured,
+  restreamProfileName,
   rtmpTargetUrl,
   SOCIAL_TRANSCODE_PROFILE,
+  SOCIAL_TRANSCODE_SOURCE_NAME,
   streamHasSocialTranscode,
 } from "../src/studioLive.js";
 
@@ -57,6 +60,21 @@ function stubLivepeer(stream: { id: string; streamKey: string }) {
       const href = String(url);
       const method = (init?.method || "GET").toUpperCase();
       calls.push({ url: href, method, body: typeof init?.body === "string" ? init.body : undefined });
+      if (method === "HEAD" || (href.includes("/webrtc/") && !href.includes("/api/"))) {
+        const key = href.split("/").pop()?.split("?")[0] || stream.streamKey;
+        return {
+          ok: false,
+          status: 307,
+          headers: {
+            get: (name: string) =>
+              name.toLowerCase() === "location"
+                ? `https://lax-prod-catalyst-0.lp-playback.studio/webrtc/${key}`
+                : null,
+          },
+          json: async () => ({}),
+          text: async () => "",
+        };
+      }
       if (href.includes("/api/multistream/target") && method === "POST") {
         targetSeq += 1;
         return { ok: true, json: async () => ({ id: `tgt_${targetSeq}` }) };
@@ -123,9 +141,12 @@ describe("Studio livestream destinations", () => {
         "rtmps://live-api-s.facebook.com:443/rtmp/fb-key",
       ),
     ).toBe("rtmps://live-api-s.facebook.com:443/rtmp/fb-key");
-    expect(livepeerWhipUrl("whipkey")).toBe("https://livepeercdn.studio/webrtc/whipkey");
+    expect(livepeerWhipUrl("whipkey")).toBe("https://livepeer.studio/webrtc/whipkey");
     expect(streamHasSocialTranscode({ profiles: [{ name: "720p0" }] })).toBe(true);
     expect(streamHasSocialTranscode({ profiles: [] })).toBe(false);
+    expect(restreamProfileName({ profiles: [{ name: "720p00" }] })).toBe("720p00");
+    expect(restreamProfileName({ profiles: [{ name: "480p0", height: 480 }] })).toBe("480p0");
+    expect(restreamProfileName({ profiles: [{ name: "custom", height: 720 }] })).toBe("custom");
   });
 
   it("tells Facebook operators that the Page stays dark until they go live in Producer", () => {
@@ -134,6 +155,8 @@ describe("Studio livestream destinations", () => {
     expect(steps).toMatch(/preview/i);
     expect(steps).toMatch(/Go live on Facebook/);
     expect(steps).toMatch(/persistent key/i);
+    const youtube = LIVE_PLATFORMS.find((p) => p.id === "youtube");
+    expect(youtube?.steps.join(" ") ?? "").toMatch(/waiting for encoder/i);
   });
 
   it("lists YouTube, Facebook, Instagram and TikTok without exposing saved keys", async () => {
@@ -209,11 +232,18 @@ describe("Studio livestream destinations", () => {
 
     const session = await auth(request(app).post("/api/studio/live/session"));
     expect(session.status).toBe(200);
-    expect(session.body).toEqual({
-      mode: "whip",
-      whipUrl: "https://livepeercdn.studio/webrtc/whip-secret",
-      platforms: ["youtube", "facebook"],
-    });
+    expect(session.body.mode).toBe("whip");
+    expect(session.body.whipUrl).toBe("https://lax-prod-catalyst-0.lp-playback.studio/webrtc/whip-secret");
+    expect(session.body.platforms).toEqual(["youtube", "facebook"]);
+    expect(session.body.iceServers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          urls: "turn:lax-prod-catalyst-0.lp-playback.studio",
+          username: "livepeer",
+          credential: "livepeer",
+        }),
+      ]),
+    );
     const targetPosts = calls.filter((c) => c.method === "POST" && c.url.includes("/api/multistream/target"));
     expect(targetPosts.some((c) => c.body?.includes("yt-key"))).toBe(true);
     expect(targetPosts.some((c) => c.body?.includes("rtmps://a.rtmps.youtube.com/live2/yt-key"))).toBe(true);
@@ -221,7 +251,7 @@ describe("Studio livestream destinations", () => {
     const create = calls.find((c) => c.method === "POST" && c.url.endsWith("/api/stream"));
     expect(create?.body).toContain(`"profile":"${SOCIAL_TRANSCODE_PROFILE}"`);
     expect(create?.body).toContain('"videoOnly":false');
-    expect(create?.body).toContain('"name":"720p0"');
+    expect(create?.body).toContain(`"name":"${SOCIAL_TRANSCODE_SOURCE_NAME}"`);
     expect(create?.body).toContain("H264Baseline");
     expect(create?.body).not.toContain('"profile":"source"');
 
@@ -298,8 +328,16 @@ describe("Studio livestream destinations", () => {
     expect(calls.some((c) => c.method === "POST" && c.body?.includes("fb-fresh"))).toBe(true);
     const create = calls.find((c) => c.method === "POST" && c.url.endsWith("/api/stream"));
     expect(create?.body).toContain(`"profile":"${SOCIAL_TRANSCODE_PROFILE}"`);
-    expect(create?.body).toContain('"name":"720p0"');
+    expect(create?.body).toContain(`"name":"${SOCIAL_TRANSCODE_SOURCE_NAME}"`);
     expect(create?.body).toContain("H264Baseline");
     expect(create?.body).not.toContain('"profile":"source"');
+  });
+
+  it("resolves the Livepeer regional WHIP host for ICE/TURN", async () => {
+    const calls = stubLivepeer({ id: "st_whip", streamKey: "whip-geo" });
+    const ingest = await resolveWhipIngest("whip-geo");
+    expect(ingest.whipUrl).toBe("https://lax-prod-catalyst-0.lp-playback.studio/webrtc/whip-geo");
+    expect(ingest.iceServers.some((s) => String(s.urls).startsWith("turn:"))).toBe(true);
+    expect(calls.some((c) => c.method === "HEAD" && c.url.includes("/webrtc/whip-geo"))).toBe(true);
   });
 });

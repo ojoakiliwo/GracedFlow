@@ -55,7 +55,7 @@ import {
   type StudioSpeechRecognition,
 } from "./studioSpeech";
 import { apiGet, apiPost } from "./api";
-import { connectWhip } from "./studioWhip";
+import { connectWhip, type WhipIceServer } from "./studioWhip";
 import type { RestreamHealth } from "./studioLive";
 import {
   applyMediaUse,
@@ -1171,16 +1171,38 @@ export function useBroadcastStudioEngine() {
     setError(null);
     setRestreamHealth(null);
     try {
-      const session = await apiPost<{ mode: string; whipUrl: string; platforms: string[] }>(
-        "/studio/live/session",
-      );
-      const pc = await connectWhip(mixed, session.whipUrl);
+      const session = await apiPost<{
+        mode: string;
+        whipUrl: string;
+        iceServers?: WhipIceServer[];
+        platforms: string[];
+      }>("/studio/live/session");
+      const pc = await connectWhip(mixed, session.whipUrl, session.iceServers);
       nodes.current.whip?.close();
       stopOutgoing(nodes.current.whipStream);
       nodes.current.whip = pc;
       nodes.current.whipStream = mixed;
       setSocialPlatforms(session.platforms ?? []);
       setSocialLive(true);
+      let ingesting = false;
+      for (let i = 0; i < 6; i++) {
+        try {
+          const health = await apiGet<RestreamHealth>("/studio/live/health");
+          setRestreamHealth(health);
+          if (health.ingesting) {
+            ingesting = true;
+            break;
+          }
+        } catch {
+          // Livepeer isActive can lag a few seconds behind ICE.
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      }
+      if (!ingesting) {
+        setError(
+          "Livepeer has not received Program yet, so YouTube and Facebook have nothing to play. Stay on this page with Program running. If this stays, End live and Go live again.",
+        );
+      }
     } catch (e) {
       stopOutgoing(mixed);
       setSocialLive(false);
@@ -1591,7 +1613,12 @@ export function useBroadcastStudioEngine() {
     const tick = async () => {
       try {
         const health = await apiGet<RestreamHealth>("/studio/live/health");
-        if (!cancelled) setRestreamHealth(health);
+        if (!cancelled) {
+          setRestreamHealth(health);
+          if (health.ingesting) {
+            setError((prev) => (prev?.includes("Livepeer has not received Program yet") ? null : prev));
+          }
+        }
       } catch {
         if (!cancelled) setRestreamHealth(null);
       }

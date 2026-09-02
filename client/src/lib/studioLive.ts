@@ -20,12 +20,15 @@ export function socialRestreamHint(platforms: string[], health?: RestreamHealth 
   if (platforms.length === 0) return "";
   const names = platforms.map((p) => PLATFORM_LABELS[p] ?? p).join(", ");
   if (health && !health.ingesting) {
-    return `This desk is sending to Livepeer for ${names}, but Livepeer has not received Program yet. Wait a few seconds. If Facebook never previews, End live and Go live again.`;
+    return `This desk opened a Livepeer session for ${names}, but Livepeer has not received Program yet. YouTube and Facebook stay dark until that ingest starts. Stay on this page with Program running. If this does not change, End live and Go live again.`;
   }
   const ingesting = Boolean(health?.ingesting);
   let text = ingesting
     ? `Livepeer is receiving Program and restreaming to ${names}.`
     : `This desk is live. Livepeer is restreaming Program to ${names}.`;
+  if (platforms.includes("youtube")) {
+    text += " YouTube needs a live event already waiting in YouTube Studio.";
+  }
   if (platforms.includes("facebook")) {
     text +=
       " Facebook Live Producer still has to show a preview, then you click Go live on Facebook. The Page stays dark until that click.";
