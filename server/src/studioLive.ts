@@ -110,11 +110,10 @@ export function rtmpTargetUrl(ingestUrl: string, streamKey: string): string {
   return `${base}/${key}`;
 }
 
-/** H.264 720p so Facebook/YouTube RTMP can ingest browser WHIP (VP8/Opus cannot ride `source`). */
-export const SOCIAL_TRANSCODE_PROFILE = "720p0";
+/** H.264 720p so Facebook/YouTube RTMP can ingest browser WHIP (`source` is VP8). Livepeer keeps this name as `720p`, not `720p0`. */
+export const SOCIAL_TRANSCODE_PROFILE = "720p";
 
-/** Livepeer suffixes fps onto this name, so `720p` becomes restream profile `720p0`. Naming it `720p0` can become `720p00`. */
-export const SOCIAL_TRANSCODE_SOURCE_NAME = "720p";
+export const SOCIAL_TRANSCODE_SOURCE_NAME = SOCIAL_TRANSCODE_PROFILE;
 
 export const SOCIAL_TRANSCODE_PROFILES = [
   {
@@ -129,14 +128,18 @@ export const SOCIAL_TRANSCODE_PROFILES = [
 ];
 
 export function restreamProfileName(stream: { profiles?: { name?: string; height?: number }[] } | null): string {
-  const profiles = stream?.profiles ?? [];
-  const named = profiles.find((p) => p.name && /720p/i.test(p.name));
-  if (named?.name) return named.name;
+  const profiles = (stream?.profiles ?? []).filter((p) => p.name && p.name.toLowerCase() !== "source");
+  const names = profiles.map((p) => p.name).filter((name): name is string => Boolean(name));
+  const named =
+    names.find((n) => /^720p0$/i.test(n)) ||
+    names.find((n) => /^720p$/i.test(n)) ||
+    names.find((n) => /720p/i.test(n));
+  if (named) return named;
   const byHeight = profiles.find((p) => p.height === 720 && p.name);
   if (byHeight?.name) return byHeight.name;
-  const by480 = profiles.find((p) => p.name && /480p/i.test(p.name));
-  if (by480?.name) return by480.name;
-  return SOCIAL_TRANSCODE_PROFILE;
+  const by480 = names.find((n) => /480p/i.test(n));
+  if (by480) return by480;
+  return names[0] || SOCIAL_TRANSCODE_PROFILE;
 }
 
 export function streamHasSocialTranscode(stream: { profiles?: { name?: string }[] } | null): boolean {
@@ -434,13 +437,13 @@ function livepeerTargets(outputs: ReadyLiveOutput[], profile = SOCIAL_TRANSCODE_
 }
 
 function livepeerStreamBody(
-  targets: ReturnType<typeof livepeerTargets> | { id: string; profile: string; videoOnly: boolean }[],
+  targets?: ReturnType<typeof livepeerTargets> | { id: string; profile: string; videoOnly: boolean }[],
 ) {
   return {
     name: "IGC Broadcast studio",
     record: false,
     profiles: SOCIAL_TRANSCODE_PROFILES,
-    multistream: { targets },
+    ...(targets && targets.length > 0 ? { multistream: { targets } } : {}),
   };
 }
 
@@ -526,29 +529,40 @@ export async function ensureWhipSession(outputs: ReadyLiveOutput[]): Promise<{
   const previousId = await getBridgeStreamId();
   await retireBridgeStream(previousId);
 
-  let stream: LivepeerStream | null = null;
+  let stream = await livepeerFetch<LivepeerStream>("/stream", {
+    method: "POST",
+    body: JSON.stringify(livepeerStreamBody()),
+  });
+  if (!stream.id) throw new HttpError(502, "Livepeer did not create a stream");
+  await setBridgeStreamId(stream.id);
+  if (!stream.streamKey || !(stream.profiles ?? []).length) {
+    stream = await livepeerFetch<LivepeerStream>(`/stream/${stream.id}`);
+  }
+  const profile = restreamProfileName(stream);
   try {
     const dedicated = [];
     for (const dest of outputs) {
       dedicated.push({
         id: await createMultistreamTarget(dest.platform, rtmpTargetUrl(dest.url, dest.streamKey)),
-        profile: SOCIAL_TRANSCODE_PROFILE,
+        profile,
         videoOnly: false,
       });
     }
-    stream = await livepeerFetch<LivepeerStream>("/stream", {
-      method: "POST",
-      body: JSON.stringify(livepeerStreamBody(dedicated)),
+    const patched = await livepeerFetch<LivepeerStream>(`/stream/${stream.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ multistream: { targets: dedicated } }),
     });
+    stream = { ...stream, ...patched };
   } catch {
+    await retireBridgeStream(stream.id);
     stream = await livepeerFetch<LivepeerStream>("/stream", {
       method: "POST",
-      body: JSON.stringify(livepeerStreamBody(livepeerTargets(outputs))),
+      body: JSON.stringify(livepeerStreamBody(livepeerTargets(outputs, profile))),
     });
+    if (!stream.id) throw new HttpError(502, "Livepeer did not create a stream");
+    await setBridgeStreamId(stream.id);
   }
-  if (!stream.id) throw new HttpError(502, "Livepeer did not create a stream");
-  await setBridgeStreamId(stream.id);
-  if (!stream.streamKey || !(stream.profiles ?? []).length) {
+  if (!stream.streamKey) {
     stream = await livepeerFetch<LivepeerStream>(`/stream/${stream.id}`);
   }
   if (!stream.streamKey) {

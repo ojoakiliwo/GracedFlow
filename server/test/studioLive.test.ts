@@ -13,7 +13,6 @@ import {
   restreamConfigured,
   restreamProfileName,
   rtmpTargetUrl,
-  SOCIAL_TRANSCODE_PROFILE,
   SOCIAL_TRANSCODE_SOURCE_NAME,
   streamHasSocialTranscode,
 } from "../src/studioLive.js";
@@ -100,13 +99,25 @@ function stubLivepeer(stream: { id: string; streamKey: string }) {
         return { ok: true, json: async () => ({}) };
       }
       if (href.endsWith("/api/stream") && method === "POST") {
+        const body = typeof init?.body === "string" ? init.body : "";
+        if (body.includes('"profile":"720p0"')) {
+          return {
+            ok: false,
+            status: 422,
+            json: async () => ({
+              errors: ['multistream target profile not found: "720p0". available: ["720p","source"]'],
+            }),
+          };
+        }
         return {
           ok: true,
           json: async () => ({
             ...stream,
-            profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
+            profiles: [{ name: "720p" }, { name: "source" }],
             isActive: false,
-            multistream: { targets: [{ id: "tgt_1", profile: SOCIAL_TRANSCODE_PROFILE }] },
+            multistream: body.includes("multistream")
+              ? { targets: [{ id: "tgt_1", profile: "720p" }] }
+              : { targets: [] },
           }),
         };
       }
@@ -114,9 +125,9 @@ function stubLivepeer(stream: { id: string; streamKey: string }) {
         ok: true,
         json: async () => ({
           ...stream,
-          profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
+          profiles: [{ name: "720p" }, { name: "source" }],
           isActive: true,
-          multistream: { targets: [{ id: "tgt_1", profile: SOCIAL_TRANSCODE_PROFILE }] },
+          multistream: { targets: [{ id: "tgt_1", profile: "720p" }] },
         }),
       };
     },
@@ -161,6 +172,8 @@ describe("Studio livestream destinations", () => {
     expect(livepeerWhipUrl("whipkey")).toBe("https://livepeer.studio/webrtc/whipkey");
     expect(streamHasSocialTranscode({ profiles: [{ name: "720p0" }] })).toBe(true);
     expect(streamHasSocialTranscode({ profiles: [] })).toBe(false);
+    expect(restreamProfileName({ profiles: [{ name: "720p" }, { name: "source" }] })).toBe("720p");
+    expect(restreamProfileName({ profiles: [{ name: "source" }, { name: "720p0" }] })).toBe("720p0");
     expect(restreamProfileName({ profiles: [{ name: "720p00" }] })).toBe("720p00");
     expect(restreamProfileName({ profiles: [{ name: "480p0", height: 480 }] })).toBe("480p0");
     expect(restreamProfileName({ profiles: [{ name: "custom", height: 720 }] })).toBe("custom");
@@ -279,11 +292,16 @@ describe("Studio livestream destinations", () => {
     expect(targetPosts.some((c) => c.body?.includes("rtmps://a.rtmps.youtube.com/live2/yt-key"))).toBe(true);
     expect(targetPosts.some((c) => c.body?.includes("rtmps://live-api-s.facebook.com:443/rtmp/fb-key"))).toBe(true);
     const create = calls.find((c) => c.method === "POST" && c.url.endsWith("/api/stream"));
-    expect(create?.body).toContain(`"profile":"${SOCIAL_TRANSCODE_PROFILE}"`);
-    expect(create?.body).toContain('"videoOnly":false');
     expect(create?.body).toContain(`"name":"${SOCIAL_TRANSCODE_SOURCE_NAME}"`);
     expect(create?.body).toContain("H264Baseline");
     expect(create?.body).not.toContain('"profile":"source"');
+    expect(create?.body).not.toContain('"profile":"720p0"');
+    const attach = calls.find(
+      (c) => c.method === "PATCH" && c.url.includes("/api/stream") && Boolean(c.body?.includes("multistream")),
+    );
+    expect(attach?.body).toContain('"profile":"720p"');
+    expect(attach?.body).not.toContain('"profile":"720p0"');
+    expect(calls.some((c) => c.body?.includes('"profile":"720p0"'))).toBe(false);
 
     const health = await auth(request(app).get("/api/studio/live/health"));
     expect(health.status).toBe(200);
@@ -357,10 +375,11 @@ describe("Studio livestream destinations", () => {
     expect(calls.some((c) => c.method === "DELETE")).toBe(true);
     expect(calls.some((c) => c.method === "POST" && c.body?.includes("fb-fresh"))).toBe(true);
     const create = calls.find((c) => c.method === "POST" && c.url.endsWith("/api/stream"));
-    expect(create?.body).toContain(`"profile":"${SOCIAL_TRANSCODE_PROFILE}"`);
     expect(create?.body).toContain(`"name":"${SOCIAL_TRANSCODE_SOURCE_NAME}"`);
     expect(create?.body).toContain("H264Baseline");
     expect(create?.body).not.toContain('"profile":"source"');
+    expect(calls.some((c) => c.method === "PATCH" && c.body?.includes('"profile":"720p"'))).toBe(true);
+    expect(calls.some((c) => c.body?.includes('"profile":"720p0"'))).toBe(false);
   });
 
   it("resolves the Livepeer regional WHIP host for ICE/TURN", async () => {
