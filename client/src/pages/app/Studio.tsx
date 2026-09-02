@@ -11,6 +11,7 @@ import {
 } from "../../lib/studioOverlays";
 import { getAudioPreset } from "../../lib/studioSound";
 import { pictureKindLabel, soundKindLabel } from "../../lib/studioMedia";
+import { socialRestreamHint } from "../../lib/studioLive";
 import {
   BookOpen,
   ChevronLeft,
@@ -208,6 +209,9 @@ export default function Studio() {
 
       {s.error ? (
         <p className="mb-3 rounded-lg border border-rose-800 bg-rose-950/60 px-3 py-2 text-sm text-rose-200">{s.error}</p>
+      ) : null}
+      {s.socialLive && s.socialPlatforms.length > 0 ? (
+        <p className="mb-3 text-[11px] leading-relaxed text-gold-300">{socialRestreamHint(s.socialPlatforms)}</p>
       ) : null}
 
       <div className="sticky top-16 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-[#12141a]/95 p-2 shadow-lg backdrop-blur">

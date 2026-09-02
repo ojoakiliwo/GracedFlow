@@ -20,9 +20,9 @@ export const LIVE_PLATFORMS = [
     defaultIngest: "rtmps://live-api-s.facebook.com:443/rtmp/",
     helpUrl: "https://www.facebook.com/live/producer",
     steps: [
-      "Open Facebook Live Producer for the church Page.",
-      "Choose Use stream key. Copy Server URL and Stream key.",
-      "Paste both here. Go live on Facebook after this desk is already sending.",
+      "Open Facebook Live Producer for the church Page. Choose Use stream key. A persistent key (Advanced) is more reliable than a one-session key.",
+      "Copy Stream URL and Stream key from this Producer session, paste them here, turn On, and Save. If preview never appears later, paste a fresh key, Save, End live, then Go live again.",
+      "Click Go live on this desk first. Stay on Live Producer until a preview appears (often 10–20 seconds; refresh Facebook if it still says connect streaming software). Then click Go live on Facebook — the Page will not show this live until that click.",
     ],
   },
   {
@@ -103,8 +103,19 @@ export function rtmpTargetUrl(ingestUrl: string, streamKey: string): string {
   const url = ingestUrl.trim();
   const key = streamKey.trim();
   if (!url || !key) return "";
-  if (url.endsWith(key)) return url;
+  if (url.endsWith(key) || url.endsWith(`${key}/`)) return url.replace(/\/$/, "");
   return url.endsWith("/") ? `${url}${key}` : `${url}/${key}`;
+}
+
+/** H.264 720p so Facebook/YouTube RTMP can ingest browser WHIP (VP8/Opus cannot ride `source`). */
+export const SOCIAL_TRANSCODE_PROFILE = "720p0";
+
+export const SOCIAL_TRANSCODE_PROFILES = [
+  { name: SOCIAL_TRANSCODE_PROFILE, width: 1280, height: 720, bitrate: 2500000, fps: 30 },
+];
+
+export function streamHasSocialTranscode(stream: { profiles?: { name?: string }[] } | null): boolean {
+  return Boolean(stream?.profiles?.some((p) => p.name === SOCIAL_TRANSCODE_PROFILE));
 }
 
 export function livepeerWhipUrl(streamKey: string): string {
@@ -209,6 +220,7 @@ export async function saveDestinations(input: LiveDestinationInput[]): Promise<L
 interface LivepeerStream {
   id: string;
   streamKey?: string;
+  profiles?: { name?: string }[];
   errors?: string[];
   error?: string;
   message?: string;
@@ -265,12 +277,22 @@ async function setBridgeStreamId(uid: string): Promise<void> {
 
 function livepeerTargets(outputs: ReadyLiveOutput[]) {
   return outputs.map((dest) => ({
-    profile: "source",
+    profile: SOCIAL_TRANSCODE_PROFILE,
+    videoOnly: false,
     spec: {
       name: dest.platform,
       url: rtmpTargetUrl(dest.url, dest.streamKey),
     },
   }));
+}
+
+function livepeerStreamBody(targets: ReturnType<typeof livepeerTargets>) {
+  return {
+    name: "IGC Broadcast studio",
+    record: false,
+    profiles: SOCIAL_TRANSCODE_PROFILES,
+    multistream: { targets },
+  };
 }
 
 /** Push the current On destinations to Livepeer so a later key can join a live Sunday. */
@@ -283,7 +305,10 @@ export async function syncLiveRestream(): Promise<string[]> {
   try {
     await livepeerFetch(`/stream/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ multistream: { targets: livepeerTargets(outputs) } }),
+      body: JSON.stringify({
+        profiles: SOCIAL_TRANSCODE_PROFILES,
+        multistream: { targets: livepeerTargets(outputs) },
+      }),
     });
   } catch {
     // Stream may have expired; the next Go live creates it again.
@@ -306,6 +331,7 @@ export async function ensureWhipSession(outputs: ReadyLiveOutput[]): Promise<{
   }
 
   const targets = livepeerTargets(outputs);
+  const body = livepeerStreamBody(targets);
 
   let id = await getBridgeStreamId();
   let stream: LivepeerStream | null = null;
@@ -317,21 +343,28 @@ export async function ensureWhipSession(outputs: ReadyLiveOutput[]): Promise<{
       id = null;
     }
   }
-  if (!stream?.id) {
+  const reusable = Boolean(stream?.id && stream.streamKey && streamHasSocialTranscode(stream));
+  if (!reusable) {
+    if (stream?.id) {
+      try {
+        await livepeerFetch(`/stream/${stream.id}`, { method: "DELETE" });
+      } catch {
+        // Replace even if Livepeer already dropped the old stream.
+      }
+    }
     stream = await livepeerFetch<LivepeerStream>("/stream", {
       method: "POST",
-      body: JSON.stringify({
-        name: "IGC Broadcast studio",
-        record: false,
-        multistream: { targets },
-      }),
+      body: JSON.stringify(body),
     });
     if (!stream.id) throw new HttpError(502, "Livepeer did not create a stream");
     await setBridgeStreamId(stream.id);
   } else {
-    await livepeerFetch(`/stream/${stream.id}`, {
+    await livepeerFetch(`/stream/${stream!.id}`, {
       method: "PATCH",
-      body: JSON.stringify({ multistream: { targets } }),
+      body: JSON.stringify({
+        profiles: SOCIAL_TRANSCODE_PROFILES,
+        multistream: { targets },
+      }),
     });
   }
   if (!stream.streamKey) {

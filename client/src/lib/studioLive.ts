@@ -1,6 +1,28 @@
 export const LIVE_PLATFORM_IDS = ["youtube", "facebook", "instagram", "tiktok"] as const;
 export type LivePlatformId = (typeof LIVE_PLATFORM_IDS)[number];
 
+const PLATFORM_LABELS: Record<string, string> = {
+  youtube: "YouTube",
+  facebook: "Facebook",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+};
+
+/** Desk copy after WHIP succeeds. Restreaming a key is not the same as the Page being live. */
+export function socialRestreamHint(platforms: string[]): string {
+  if (platforms.length === 0) return "";
+  const names = platforms.map((p) => PLATFORM_LABELS[p] ?? p).join(", ");
+  let text = `This desk is live. Livepeer is restreaming Program to ${names}.`;
+  if (platforms.includes("facebook")) {
+    text +=
+      " Facebook will not appear on the Page until Live Producer shows a preview and you click Go live on Facebook.";
+  }
+  if (platforms.includes("instagram")) {
+    text += " Instagram also needs its own Go live click after a preview.";
+  }
+  return text;
+}
+
 export interface StudioLiveDestination {
   platform: LivePlatformId | string;
   label: string;

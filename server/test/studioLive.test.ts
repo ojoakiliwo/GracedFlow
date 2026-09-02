@@ -3,11 +3,14 @@ import request from "supertest";
 import type { Express } from "express";
 import {
   isPlaceholderKey,
+  LIVE_PLATFORMS,
   livepeerWhipUrl,
   maskStreamKey,
   readyOutputs,
   restreamConfigured,
   rtmpTargetUrl,
+  SOCIAL_TRANSCODE_PROFILE,
+  streamHasSocialTranscode,
 } from "../src/studioLive.js";
 
 process.env.DATABASE_URL =
@@ -70,7 +73,20 @@ describe("Studio livestream destinations", () => {
     expect(rtmpTargetUrl("rtmps://live-api-s.facebook.com:443/rtmp/", "fb-key")).toBe(
       "rtmps://live-api-s.facebook.com:443/rtmp/fb-key",
     );
+    expect(
+      rtmpTargetUrl("rtmps://live-api-s.facebook.com:443/rtmp/fb-key", "fb-key"),
+    ).toBe("rtmps://live-api-s.facebook.com:443/rtmp/fb-key");
     expect(livepeerWhipUrl("whipkey")).toBe("https://livepeercdn.studio/webrtc/whipkey");
+    expect(streamHasSocialTranscode({ profiles: [{ name: "720p0" }] })).toBe(true);
+    expect(streamHasSocialTranscode({ profiles: [] })).toBe(false);
+  });
+
+  it("tells Facebook operators that the Page stays dark until they go live in Producer", () => {
+    const facebook = LIVE_PLATFORMS.find((p) => p.id === "facebook");
+    const steps = facebook?.steps.join(" ") ?? "";
+    expect(steps).toMatch(/preview/i);
+    expect(steps).toMatch(/Go live on Facebook/);
+    expect(steps).toMatch(/persistent key/i);
   });
 
   it("lists YouTube, Facebook, Instagram and TikTok without exposing saved keys", async () => {
@@ -143,13 +159,31 @@ describe("Studio livestream destinations", () => {
         if (href.endsWith("/api/stream") && method === "POST") {
           return {
             ok: true,
-            json: async () => ({ id: "st_1", streamKey: "whip-secret" }),
+            json: async () => ({
+              id: "st_1",
+              streamKey: "whip-secret",
+              profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
+            }),
           };
         }
         if (href.includes("/api/stream/st_1") && method === "PATCH") {
-          return { ok: true, json: async () => ({ id: "st_1", streamKey: "whip-secret" }) };
+          return {
+            ok: true,
+            json: async () => ({
+              id: "st_1",
+              streamKey: "whip-secret",
+              profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
+            }),
+          };
         }
-        return { ok: true, json: async () => ({ id: "st_1", streamKey: "whip-secret" }) };
+        return {
+          ok: true,
+          json: async () => ({
+            id: "st_1",
+            streamKey: "whip-secret",
+            profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
+          }),
+        };
       },
     );
 
@@ -174,6 +208,10 @@ describe("Studio livestream destinations", () => {
     expect(create?.body).toContain("yt-key");
     expect(create?.body).toContain("rtmps://a.rtmps.youtube.com/live2/yt-key");
     expect(create?.body).toContain("rtmps://live-api-s.facebook.com:443/rtmp/fb-key");
+    expect(create?.body).toContain(`"profile":"${SOCIAL_TRANSCODE_PROFILE}"`);
+    expect(create?.body).toContain('"videoOnly":false');
+    expect(create?.body).toContain('"name":"720p0"');
+    expect(create?.body).not.toContain('"profile":"source"');
   });
 
   it("goes live with one ready destination and lets another join later", async () => {
@@ -186,9 +224,23 @@ describe("Studio livestream destinations", () => {
         const method = (init?.method || "GET").toUpperCase();
         calls.push({ url: href, method, body: typeof init?.body === "string" ? init.body : undefined });
         if (href.endsWith("/api/stream") && method === "POST") {
-          return { ok: true, json: async () => ({ id: "st_join", streamKey: "whip-join" }) };
+          return {
+            ok: true,
+            json: async () => ({
+              id: "st_join",
+              streamKey: "whip-join",
+              profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
+            }),
+          };
         }
-        return { ok: true, json: async () => ({ id: "st_join", streamKey: "whip-join" }) };
+        return {
+          ok: true,
+          json: async () => ({
+            id: "st_join",
+            streamKey: "whip-join",
+            profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
+          }),
+        };
       },
     );
 
@@ -226,5 +278,58 @@ describe("Studio livestream destinations", () => {
     expect(addFb.body.platforms).toEqual(["youtube", "facebook"]);
     const patch = calls.find((c) => c.method === "PATCH" && c.body?.includes("fb-later"));
     expect(patch).toBeTruthy();
+    expect(patch?.body).toContain(`"profile":"${SOCIAL_TRANSCODE_PROFILE}"`);
+    expect(patch?.body).not.toContain('"profile":"source"');
+  });
+
+  it("replaces a Livepeer stream that cannot transcode WHIP to H264 for Facebook", async () => {
+    process.env.LIVEPEER_API_KEY = "lp_test";
+    const calls: { url: string; method: string; body?: string }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      async (url: string | URL, init?: RequestInit) => {
+        const href = String(url);
+        const method = (init?.method || "GET").toUpperCase();
+        calls.push({ url: href, method, body: typeof init?.body === "string" ? init.body : undefined });
+        if (method === "DELETE") {
+          return { ok: true, json: async () => ({}) };
+        }
+        if (href.endsWith("/api/stream") && method === "POST") {
+          return {
+            ok: true,
+            json: async () => ({
+              id: "st_h264",
+              streamKey: "whip-h264",
+              profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
+            }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({ id: "st_stale", streamKey: "old-whip", profiles: [] }),
+        };
+      },
+    );
+
+    const save = await auth(request(app).put("/api/studio/live")).send({
+      destinations: [
+        { platform: "youtube", enabled: false, ingestUrl: "rtmps://a.rtmps.youtube.com/live2", streamKey: "yt-key" },
+        { platform: "facebook", enabled: true, ingestUrl: "rtmps://live-api-s.facebook.com:443/rtmp/", streamKey: "fb-fresh" },
+        { platform: "instagram", enabled: false, ingestUrl: "rtmps://live-upload.instagram.com:443/rtmp/", streamKey: "" },
+        { platform: "tiktok", enabled: false, ingestUrl: "", streamKey: "" },
+      ],
+    });
+    expect(save.status).toBe(200);
+
+    const session = await auth(request(app).post("/api/studio/live/session"));
+    expect(session.status).toBe(200);
+    expect(session.body.platforms).toEqual(["facebook"]);
+    expect(session.body.whipUrl).toContain("whip-h264");
+    expect(calls.some((c) => c.method === "DELETE")).toBe(true);
+    const create = calls.find((c) => c.method === "POST" && c.url.endsWith("/api/stream"));
+    expect(create?.body).toContain("fb-fresh");
+    expect(create?.body).toContain(`"profile":"${SOCIAL_TRANSCODE_PROFILE}"`);
+    expect(create?.body).toContain('"name":"720p0"');
+    expect(create?.body).not.toContain('"profile":"source"');
   });
 });

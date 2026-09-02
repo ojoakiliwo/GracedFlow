@@ -18,6 +18,7 @@ import {
   keepTypedKeys,
   mergeConfigWithStored,
   savePayload,
+  socialRestreamHint,
   writeStoredLiveDrafts,
   type StudioLiveConfig,
   type StudioLiveDraft,
@@ -200,8 +201,8 @@ export default function StudioLive() {
             )}
           </div>
           {s.socialPlatforms.length > 0 ? (
-            <p className="mt-3 text-[11px] text-gold-300">
-              Sending to {s.socialPlatforms.join(", ")}.
+            <p className="mt-3 text-[11px] leading-relaxed text-gold-300">
+              {socialRestreamHint(s.socialPlatforms)}
             </p>
           ) : null}
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">

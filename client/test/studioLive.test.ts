@@ -7,6 +7,7 @@ import {
   mergeConfigWithStored,
   readStoredLiveDrafts,
   savePayload,
+  socialRestreamHint,
   STUDIO_LIVE_DRAFTS_KEY,
   writeStoredLiveDrafts,
 } from "../src/lib/studioLive";
@@ -128,6 +129,15 @@ describe("Studio live drafts", () => {
     expect(saved[0]?.enabled).toBe(true);
     expect(saved[0]?.streamKey).toBe("");
     expect(saved[1]?.enabled).toBe(false);
+  });
+});
+
+describe("social restream hint", () => {
+  it("does not treat a Facebook destination as the Page already being live", () => {
+    expect(socialRestreamHint(["youtube", "facebook"])).toMatch(/Livepeer is restreaming Program to YouTube, Facebook/);
+    expect(socialRestreamHint(["youtube", "facebook"])).toMatch(/Go live on Facebook/);
+    expect(socialRestreamHint(["youtube", "facebook"])).not.toMatch(/^Sending to /);
+    expect(socialRestreamHint(["instagram"])).toMatch(/Instagram also needs its own Go live click/);
   });
 });
 
