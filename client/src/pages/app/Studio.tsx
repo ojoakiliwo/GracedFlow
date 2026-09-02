@@ -10,11 +10,13 @@ import {
   type OverlayPaletteId,
 } from "../../lib/studioOverlays";
 import { getAudioPreset } from "../../lib/studioSound";
+import { pictureKindLabel, soundKindLabel } from "../../lib/studioMedia";
 import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
   Clapperboard,
+  Film,
   Mic,
   MonitorPlay,
   Music,
@@ -169,6 +171,12 @@ export default function Studio() {
             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10"
           >
             Destinations
+          </Link>
+          <Link
+            to="/app/studio/media"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10"
+          >
+            Recorded media
           </Link>
           {s.socialLive ? (
             <Button variant="danger" size="sm" onClick={s.stopSocialLive}>
@@ -474,6 +482,15 @@ export default function Studio() {
           <p className="mt-2 text-[11px] text-ink-500">
             Yamaha USB: pick the mixer as microphone. Listen-for-verses uses the browser default mic.
           </p>
+          <p className="mt-2 text-[11px] text-ink-300">
+            Program picture: {pictureKindLabel(s.pictureKind)}. Sound: {soundKindLabel(s.soundKind)}.
+          </p>
+          <Link
+            to="/app/studio/media"
+            className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-white/15 text-sm font-medium text-ink-100 hover:bg-white/10"
+          >
+            <Film className="h-3.5 w-3.5" /> Recorded video, picture or audio
+          </Link>
         </DeskCard>
 
         <DeskCard>
@@ -514,6 +531,12 @@ export default function Studio() {
             className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-gold-400 text-sm font-semibold text-brand-950 hover:bg-gold-300"
           >
             <Radio className="h-3.5 w-3.5" /> Destinations
+          </Link>
+          <Link
+            to="/app/studio/media"
+            className="mt-2 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-brand-50 text-sm font-medium text-brand-800 hover:bg-brand-100"
+          >
+            <Film className="h-3.5 w-3.5" /> Recorded media
           </Link>
           <Link
             to="/app/studio/audio"

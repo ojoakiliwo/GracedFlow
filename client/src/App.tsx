@@ -32,6 +32,7 @@ import StudioLayout from "./pages/app/StudioLayout";
 import Studio from "./pages/app/Studio";
 import StudioAudio from "./pages/app/StudioAudio";
 import StudioLive from "./pages/app/StudioLive";
+import StudioMedia from "./pages/app/StudioMedia";
 import Giving from "./pages/app/Giving";
 import PrayerRequests from "./pages/app/PrayerRequests";
 import Settings from "./pages/app/Settings";
@@ -96,6 +97,7 @@ export default function App() {
           <Route index element={<Studio />} />
           <Route path="audio" element={<StudioAudio />} />
           <Route path="live" element={<StudioLive />} />
+          <Route path="media" element={<StudioMedia />} />
         </Route>
         <Route path="giving" element={<RoleGate min="admin"><Giving /></RoleGate>} />
         <Route path="prayer" element={<RoleGate min="pastor"><PrayerRequests /></RoleGate>} />

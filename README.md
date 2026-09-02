@@ -258,7 +258,7 @@ with unlimited Livepeer-style playback.
 
 1. Create a Livepeer Studio account and copy an API key (Developers → API Key).
 2. Set `LIVEPEER_API_KEY` on Vercel (project **graced-flow**) and redeploy.
-3. On Sunday: Start capture → Go live. Program (camera, living sound, verses) goes on air.
+3. On Sunday: Start capture, or send a recorded video / picture / audio from **Broadcast studio → Recorded media**, then Go live. Program goes on air.
 
 ## Cloud Agent environment
 

@@ -158,7 +158,7 @@ export default function Dashboard() {
           </div>
           <p className="mt-1 font-display text-2xl font-semibold text-ink-900">Live</p>
           <Link to="/app/studio" className="mt-1 text-xs text-brand-600 hover:underline">
-            Camera, living sound, record →
+            Camera, recorded media, living sound →
           </Link>
         </Card>
       </div>
