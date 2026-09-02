@@ -95,7 +95,7 @@ export function restreamConfigured(): boolean {
 
 export function restreamDetail(): string {
   return restreamConfigured()
-    ? "Go live with whichever destinations are On and have a key — one is enough. Add the rest later and Save; they join YouTube / Facebook / Instagram / TikTok. Stay on Livepeer’s free Sandbox. You do not open OBS."
+    ? "This desk cannot talk to YouTube or Facebook directly (they only accept RTMP). Go live sends Program to Livepeer, which restreams those keys. Start capture, take picture to Program, then Go live. Leave YouTube waiting for encoder and Facebook Live Producer open."
     : "Turn On only the platforms you have keys for. Add LIVEPEER_API_KEY once (Livepeer Studio → Developers → API Key, free Sandbox). Then Start capture and Go live from this desk.";
 }
 
@@ -170,14 +170,20 @@ export function iceHostFromWhipUrl(whipUrl: string): string {
 }
 
 export function livepeerIceServers(host: string): WhipIceServer[] {
-  const h = host.replace(/:\d+$/, "");
-  return [
+  const hostname = host.replace(/:\d+$/, "");
+  const region = iceHostFromWhipUrl(hostname);
+  const pair = (h: string): WhipIceServer[] => [
+    { urls: `stun:${h}` },
+    { urls: `turn:${h}`, username: "livepeer", credential: "livepeer" },
     { urls: `stun:${h}:3478` },
     { urls: `turn:${h}:3478`, username: "livepeer", credential: "livepeer" },
     { urls: `turn:${h}:3478?transport=tcp`, username: "livepeer", credential: "livepeer" },
     { urls: `turns:${h}:5349?transport=tcp`, username: "livepeer", credential: "livepeer" },
-    { urls: "stun:stun.cloudflare.com:3478" },
   ];
+  const out = [...pair(hostname)];
+  if (region !== hostname) out.push(...pair(region));
+  out.push({ urls: "stun:stun.cloudflare.com:3478" });
+  return out;
 }
 
 /** WHIP `Link: stun:nyc.livepeer.com:3478; rel="ice-server"` (with or without <angle brackets>). */
@@ -241,7 +247,7 @@ export async function resolveWhipIngest(streamKey: string): Promise<{
     const resolved = await readWhipRedirect(start);
     if (!resolved) continue;
     try {
-      return { whipUrl: resolved, iceServers: livepeerIceServers(iceHostFromWhipUrl(resolved)) };
+      return { whipUrl: resolved, iceServers: livepeerIceServers(new URL(resolved).hostname) };
     } catch {
       continue;
     }

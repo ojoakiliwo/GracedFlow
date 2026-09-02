@@ -15,7 +15,9 @@ import {
   iceServersForWhipHost,
   iceIsConnected,
   livepeerIceHost,
+  outboundRtpBytes,
   preferH264Codecs,
+  preferH264InSdp,
   streamKeyFromWhipUrl,
   waitForIce,
   waitForIceConnected,
@@ -197,9 +199,28 @@ describe("WHIP ICE wait", () => {
         { urls: "turn:nyc.livepeer.com:3478", username: "livepeer", credential: "livepeer" },
         { urls: "turn:nyc.livepeer.com:3478?transport=tcp", username: "livepeer", credential: "livepeer" },
         { urls: "turns:nyc.livepeer.com:5349?transport=tcp", username: "livepeer", credential: "livepeer" },
+        { urls: "stun:nyc-prod-catalyst-0.lp-playback.studio" },
+        { urls: "turn:nyc-prod-catalyst-0.lp-playback.studio", username: "livepeer", credential: "livepeer" },
       ]),
     );
-    expect(ice.some((s) => String(s.urls).includes("lp-playback.studio"))).toBe(false);
+  });
+
+  it("puts H264 first in the WHIP offer so Livepeer can transcode to Facebook", () => {
+    const sdp = [
+      "v=0",
+      "m=video 9 UDP/TLS/RTP/SAVPF 96 97",
+      "a=rtpmap:96 VP8/90000",
+      "a=rtpmap:97 H264/90000",
+    ].join("\r\n");
+    expect(preferH264InSdp(sdp)).toContain("m=video 9 UDP/TLS/RTP/SAVPF 97 96");
+  });
+
+  it("counts outbound RTP bytes to know whether Program left this computer", () => {
+    expect(
+      outboundRtpBytes({
+        values: () => [{ type: "outbound-rtp", bytesSent: 1200 }, { type: "inbound-rtp", bytesSent: 9 }],
+      }),
+    ).toBe(1200);
   });
 
   it("waits until ICE is connected before treating WHIP as live", async () => {

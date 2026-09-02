@@ -55,7 +55,7 @@ import {
   type StudioSpeechRecognition,
 } from "./studioSpeech";
 import { apiGet, apiPost } from "./api";
-import { connectWhip, type WhipIceServer } from "./studioWhip";
+import { connectWhip, kickCanvasFrames, waitForOutboundRtp, type WhipIceServer } from "./studioWhip";
 import type { RestreamHealth } from "./studioLive";
 import {
   applyMediaUse,
@@ -526,6 +526,7 @@ export function useBroadcastStudioEngine() {
     paintStudioMonitor(captureCanvasRef.current, frame, programOverlayRef.current, lookNow, auto, false);
     paintStudioMonitor(previewCanvasRef.current, frame, overlayRef.current, lookNow, auto, true);
     paintStudioMonitor(canvasRef.current, frame, programOverlayRef.current, lookNow, auto, false);
+    kickCanvasFrames(nodes.current.whipStream);
     n.raf = requestAnimationFrame(paint);
   }, [currentFrame]);
 
@@ -1105,6 +1106,7 @@ export function useBroadcastStudioEngine() {
     const mixed = canvas.captureStream(30);
     const audioTracks = dest.stream.getAudioTracks().filter(isLiveAudioTrack);
     for (const track of audioTracks) mixed.addTrack(track.clone());
+    kickCanvasFrames(mixed);
     return mixed;
   }, [ensureLiveProgrammeDest]);
 
@@ -1267,10 +1269,12 @@ export function useBroadcastStudioEngine() {
       stopOutgoing(nodes.current.whipStream);
       nodes.current.whip = pc;
       nodes.current.whipStream = mixed;
+      kickCanvasFrames(mixed);
       setSocialPlatforms(session.platforms ?? []);
       setSocialLive(true);
+      const sending = await waitForOutboundRtp(pc, 8000);
       let ingesting = false;
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 12; i++) {
         try {
           const health = await apiGet<RestreamHealth>("/studio/live/health");
           setRestreamHealth(health);
@@ -1285,7 +1289,9 @@ export function useBroadcastStudioEngine() {
       }
       if (!ingesting) {
         setError(
-          "Livepeer has not received Program yet, so YouTube and Facebook have nothing to play. Stay on this page with Program running. If this stays, End live and Go live again.",
+          sending
+            ? "This computer is sending Program, but Livepeer has not marked the stream active yet. Stay on this page. YouTube and Facebook stay dark until Livepeer receives it. If this stays, End live and Go live again."
+            : "This computer is not sending Program frames to Livepeer, so YouTube and Facebook have nothing to play. Keep Program on screen, then End live and Go live again.",
         );
       }
     } catch (e) {
@@ -1861,7 +1867,7 @@ export function BroadcastStudioProvider({ children }: { children: ReactNode }) {
         width={1280}
         height={720}
         aria-hidden
-        className="pointer-events-none fixed left-[-2000px] top-0 h-[720px] w-[1280px]"
+        className="pointer-events-none fixed bottom-0 left-0 z-0 h-20 w-36 opacity-[0.04]"
       />
       {children}
     </BroadcastStudioContext.Provider>

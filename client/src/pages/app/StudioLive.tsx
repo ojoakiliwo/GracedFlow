@@ -210,7 +210,7 @@ export default function StudioLive() {
           ) : null}
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">
             {data?.restream
-              ? "Destinations that are On and have a key receive Program only after Livepeer ingest starts. If YouTube and Facebook both stay empty, End live and Go live again from this desk."
+              ? "YouTube and Facebook only accept RTMP, which a browser cannot send. This desk sends Program to Livepeer, and Livepeer restreams your saved keys. If both stay empty after Go live, End live and Go live again with Program on screen."
               : "Ask an admin to set LIVEPEER_API_KEY on Vercel (Livepeer Studio → Developers → API Key), then redeploy. That is a one-time pipe — not an app you open on Sunday."}
           </p>
         </div>

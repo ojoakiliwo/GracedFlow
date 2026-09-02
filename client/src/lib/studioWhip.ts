@@ -92,15 +92,75 @@ export function livepeerIceHost(host: string): string {
   return region ? `${region}.livepeer.com` : hostname;
 }
 
-export function iceServersForWhipHost(host: string): WhipIceServer[] {
-  const h = livepeerIceHost(host);
+function turnPair(host: string): WhipIceServer[] {
+  const h = host.replace(/:\d+$/, "");
   return [
+    { urls: `stun:${h}` },
+    { urls: `turn:${h}`, username: "livepeer", credential: "livepeer" },
     { urls: `stun:${h}:3478` },
     { urls: `turn:${h}:3478`, username: "livepeer", credential: "livepeer" },
     { urls: `turn:${h}:3478?transport=tcp`, username: "livepeer", credential: "livepeer" },
     { urls: `turns:${h}:5349?transport=tcp`, username: "livepeer", credential: "livepeer" },
-    { urls: "stun:stun.cloudflare.com:3478" },
   ];
+}
+
+export function mergeIceServers(...groups: WhipIceServer[][]): WhipIceServer[] {
+  const seen = new Set<string>();
+  const out: WhipIceServer[] = [];
+  for (const group of groups) {
+    for (const server of group) {
+      const key = `${String(server.urls)}|${server.username ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(server);
+    }
+  }
+  return out;
+}
+
+/** Livepeer's own WHIP client uses the catalyst host as STUN/TURN, plus regional `*.livepeer.com`. */
+export function iceServersForWhipHost(host: string): WhipIceServer[] {
+  const hostname = host.replace(/:\d+$/, "");
+  const region = livepeerIceHost(hostname);
+  return mergeIceServers(turnPair(hostname), hostname === region ? [] : turnPair(region), [
+    { urls: "stun:stun.cloudflare.com:3478" },
+  ]);
+}
+
+export function preferH264InSdp(sdp: string): string {
+  const lines = sdp.split(/\r?\n/);
+  const mLineIndex = lines.findIndex((line) => line.startsWith("m=video"));
+  if (mLineIndex < 0) return sdp;
+  const codecLine = lines.find((line) => /a=rtpmap:(\d+) H264\//i.test(line));
+  const payload = codecLine?.match(/a=rtpmap:(\d+) H264\//i)?.[1];
+  if (!payload) return sdp;
+  const parts = lines[mLineIndex]!.split(" ");
+  if (parts.length < 4) return sdp;
+  lines[mLineIndex] = [...parts.slice(0, 3), payload, ...parts.slice(3).filter((p) => p !== payload)].join(" ");
+  return lines.join("\r\n");
+}
+
+export function outboundRtpBytes(
+  stats: { values: () => Iterable<{ type?: string; bytesSent?: number }> },
+): number {
+  let n = 0;
+  for (const row of stats.values()) {
+    if (row.type === "outbound-rtp") n += row.bytesSent ?? 0;
+  }
+  return n;
+}
+
+export async function waitForOutboundRtp(pc: RTCPeerConnection, timeoutMs = 8000): Promise<boolean> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      if (outboundRtpBytes(await pc.getStats()) > 0) return true;
+    } catch {
+      return false;
+    }
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 400));
+  }
+  return false;
 }
 
 /** GeoDNS fronts. Regional catalysts look like nyc-prod-catalyst-0.lp-playback.studio:443. */
@@ -140,44 +200,34 @@ async function postWhipOffer(url: string, sdp: string, streamKey: string): Promi
   return res;
 }
 
-function kickCanvasFrames(stream: MediaStream) {
+export function kickCanvasFrames(stream: MediaStream | undefined) {
+  if (!stream) return;
   for (const track of stream.getVideoTracks()) {
+    track.enabled = true;
+    if (track.kind === "video" && "contentHint" in track) {
+      try {
+        track.contentHint = "motion";
+      } catch {
+        // Older Chromium omits contentHint.
+      }
+    }
     const requestFrame = (track as MediaStreamTrack & { requestFrame?: () => void }).requestFrame;
     if (typeof requestFrame === "function") requestFrame.call(track);
   }
 }
 
-export async function connectWhip(
+async function negotiateWhip(
   stream: MediaStream,
+  url: string,
   whipUrl: string,
-  iceServers?: WhipIceServer[],
+  servers: WhipIceServer[],
+  iceTransportPolicy: RTCIceTransportPolicy,
   postOffer?: (sdp: string) => Promise<string>,
 ): Promise<RTCPeerConnection> {
-  let url = whipUrl;
-  let servers = iceServers?.length ? [...iceServers] : [];
-  let host = "";
-  try {
-    host = new URL(whipUrl).host;
-  } catch {
-    throw new Error("Live ingest URL is invalid.");
-  }
-  if (!whipHostLooksRegional(host)) {
-    const resolved = await resolveWhipEndpoint(whipUrl);
-    url = resolved.url;
-    if (!servers.length) servers = resolved.iceServers;
-    try {
-      host = new URL(url).host;
-    } catch {
-      host = "";
-    }
-  }
-  if (!servers.length) {
-    servers = iceServersForWhipHost(host || new URL(url).hostname);
-  }
   kickCanvasFrames(stream);
   const pc = new RTCPeerConnection({
     iceServers: servers as RTCIceServer[],
-    iceTransportPolicy: "relay",
+    iceTransportPolicy,
     bundlePolicy: "max-bundle",
   });
   for (const track of stream.getTracks()) {
@@ -186,9 +236,9 @@ export async function connectWhip(
   }
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  await waitForIce(pc);
-  const sdp = pc.localDescription?.sdp;
-  if (!sdp) {
+  await waitForIce(pc, 5000);
+  const sdp = preferH264InSdp(pc.localDescription?.sdp || "");
+  if (!sdp.startsWith("v=")) {
     pc.close();
     throw new Error("Could not create a live offer.");
   }
@@ -227,4 +277,41 @@ export async function connectWhip(
     throw e;
   }
   return pc;
+}
+
+export async function connectWhip(
+  stream: MediaStream,
+  whipUrl: string,
+  iceServers?: WhipIceServer[],
+  postOffer?: (sdp: string) => Promise<string>,
+): Promise<RTCPeerConnection> {
+  let url = whipUrl;
+  let host = "";
+  try {
+    host = new URL(whipUrl).host;
+  } catch {
+    throw new Error("Live ingest URL is invalid.");
+  }
+  if (!whipHostLooksRegional(host)) {
+    const resolved = await resolveWhipEndpoint(whipUrl);
+    url = resolved.url;
+    try {
+      host = new URL(url).host;
+    } catch {
+      host = "";
+    }
+  }
+  const servers = mergeIceServers(
+    iceServersForWhipHost(host || new URL(url).hostname),
+    iceServers ?? [],
+  );
+  try {
+    return await negotiateWhip(stream, url, whipUrl, servers, "all", postOffer);
+  } catch (first) {
+    try {
+      return await negotiateWhip(stream, url, whipUrl, servers, "relay", postOffer);
+    } catch {
+      throw first;
+    }
+  }
 }

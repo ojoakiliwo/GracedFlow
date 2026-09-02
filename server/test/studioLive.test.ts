@@ -297,6 +297,11 @@ describe("Studio livestream destinations", () => {
           username: "livepeer",
           credential: "livepeer",
         }),
+        expect.objectContaining({
+          urls: "turn:lax-prod-catalyst-0.lp-playback.studio",
+          username: "livepeer",
+          credential: "livepeer",
+        }),
       ]),
     );
     const targetPosts = calls.filter((c) => c.method === "POST" && c.url.includes("/api/multistream/target"));
@@ -401,6 +406,11 @@ describe("Studio livestream destinations", () => {
     expect(ingest.iceServers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ urls: "turn:lax.livepeer.com:3478", username: "livepeer", credential: "livepeer" }),
+        expect.objectContaining({
+          urls: "turn:lax-prod-catalyst-0.lp-playback.studio",
+          username: "livepeer",
+          credential: "livepeer",
+        }),
       ]),
     );
     expect(calls.some((c) => c.method === "HEAD" && c.url.includes("/webrtc/whip-geo"))).toBe(true);
