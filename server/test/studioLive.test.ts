@@ -3,6 +3,7 @@ import request from "supertest";
 import type { Express } from "express";
 import {
   iceHostFromWhipUrl,
+  isAllowedWhipUrl,
   isPlaceholderKey,
   LIVE_PLATFORMS,
   livepeerWhipUrl,
@@ -179,6 +180,8 @@ describe("Studio livestream destinations", () => {
       ),
     ).toBe("rtmps://live-api-s.facebook.com:443/rtmp/fb-key");
     expect(livepeerWhipUrl("whipkey")).toBe("https://livepeer.studio/webrtc/whipkey");
+    expect(isAllowedWhipUrl("https://lax-prod-catalyst-0.lp-playback.studio/webrtc/video+abc")).toBe(true);
+    expect(isAllowedWhipUrl("https://evil.example/webrtc/abc")).toBe(false);
     expect(streamHasSocialTranscode({ profiles: [{ name: "720p0" }] })).toBe(true);
     expect(streamHasSocialTranscode({ profiles: [] })).toBe(false);
     expect(restreamProfileName({ profiles: [{ name: "720p" }, { name: "source" }] })).toBe("720p");
@@ -401,10 +404,9 @@ describe("Studio livestream destinations", () => {
       ]),
     );
     expect(calls.some((c) => c.method === "HEAD" && c.url.includes("/webrtc/whip-geo"))).toBe(true);
-    expect(calls.some((c) => c.method === "OPTIONS")).toBe(true);
   });
 
-  it("exchanges the WHIP offer through the church API so the desk does not POST to Livepeer", async () => {
+  it("can exchange a WHIP offer through the church API as a fallback", async () => {
     process.env.LIVEPEER_API_KEY = "lp_test";
     const calls = stubLivepeer({ id: "st_offer", streamKey: "whip-offer" });
     const save = await auth(request(app).put("/api/studio/live")).send({
@@ -420,6 +422,7 @@ describe("Studio livestream destinations", () => {
     expect(session.status).toBe(200);
     const whip = await auth(request(app).post("/api/studio/live/whip")).send({
       sdp: "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n",
+      whipUrl: session.body.whipUrl,
     });
     expect(whip.status).toBe(200);
     expect(whip.body.sdp).toMatch(/^v=0/);

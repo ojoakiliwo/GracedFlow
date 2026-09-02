@@ -226,17 +226,6 @@ async function readWhipRedirect(url: string): Promise<string | null> {
   return null;
 }
 
-async function iceServersFromWhip(whipUrl: string): Promise<WhipIceServer[]> {
-  try {
-    const res = await fetch(whipUrl, { method: "OPTIONS" });
-    const parsed = parseIceLinkHeader(res.headers?.get?.("link"));
-    if (parsed.length) return withTcpTurn(parsed);
-  } catch {
-    // Fall back to the regional Livepeer TURN host derived from the catalyst URL.
-  }
-  return livepeerIceServers(iceHostFromWhipUrl(whipUrl));
-}
-
 /** Follow Livepeer GeoDNS to the regional catalyst so ICE/TURN can complete. */
 export async function resolveWhipIngest(streamKey: string): Promise<{
   whipUrl: string;
@@ -252,7 +241,7 @@ export async function resolveWhipIngest(streamKey: string): Promise<{
     const resolved = await readWhipRedirect(start);
     if (!resolved) continue;
     try {
-      return { whipUrl: resolved, iceServers: await iceServersFromWhip(resolved) };
+      return { whipUrl: resolved, iceServers: livepeerIceServers(iceHostFromWhipUrl(resolved)) };
     } catch {
       continue;
     }
@@ -575,25 +564,52 @@ export async function ensureWhipSession(outputs: ReadyLiveOutput[]): Promise<{
   return { ...ingest, liveInputId: stream.id };
 }
 
-/** Browser posts SDP here so WHIP does not depend on Livepeer CORS from the church desk. */
-export async function whipExchange(sdp: string): Promise<string> {
+export function isAllowedWhipUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (new URL(url).protocol !== "https:") return false;
+    return (
+      host.endsWith(".lp-playback.studio") ||
+      host === "livepeer.studio" ||
+      host === "livepeercdn.studio" ||
+      host.endsWith(".livepeer.studio")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Fallback if the browser cannot POST SDP to Livepeer. Prefer the allowlisted URL from Go live. */
+export async function whipExchange(sdp: string, whipUrl?: string): Promise<string> {
   const offer = sdp.trim();
   if (!offer.startsWith("v=")) throw new HttpError(400, "Live ingest offer was empty.");
-  const id = await getBridgeStreamId();
-  if (!id) {
-    throw new HttpError(409, "Go live from this desk first so Livepeer can open a session.");
+  let url = (whipUrl ?? "").trim();
+  if (url && !isAllowedWhipUrl(url)) {
+    throw new HttpError(400, "Live ingest URL is not a Livepeer address.");
   }
-  const stream = await livepeerFetch<LivepeerStream>(`/stream/${id}`);
-  if (!stream.streamKey) throw new HttpError(502, "Livepeer did not return a stream key");
-  const ingest = await resolveWhipIngest(stream.streamKey);
-  const res = await fetch(ingest.whipUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/sdp",
-      Accept: "application/sdp",
-    },
-    body: offer,
-  });
+  if (!url) {
+    const id = await getBridgeStreamId();
+    if (!id) {
+      throw new HttpError(409, "Go live from this desk first so Livepeer can open a session.");
+    }
+    const stream = await livepeerFetch<LivepeerStream>(`/stream/${id}`);
+    if (!stream.streamKey) throw new HttpError(502, "Livepeer did not return a stream key");
+    url = (await resolveWhipIngest(stream.streamKey)).whipUrl;
+  }
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/sdp",
+        Accept: "application/sdp",
+      },
+      body: offer,
+      signal: AbortSignal.timeout(12_000),
+    });
+  } catch {
+    throw new HttpError(504, "Livepeer ingest timed out. Stay on this page and Go live again.");
+  }
   const answer = await res.text();
   if (!res.ok) {
     throw new HttpError(502, answer.slice(0, 280) || `Live ingest failed (${res.status})`);

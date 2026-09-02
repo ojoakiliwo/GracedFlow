@@ -195,19 +195,25 @@ export async function connectWhip(
   const streamKey = streamKeyFromWhipUrl(url) || streamKeyFromWhipUrl(whipUrl);
   let answer = "";
   try {
-    if (postOffer) {
-      answer = await postOffer(sdp);
-    } else {
-      const res = await postWhipOffer(url, sdp, streamKey);
-      answer = await res.text();
-      if (!res.ok) {
-        pc.close();
-        throw new Error(answer || `Live ingest failed (${res.status})`);
-      }
+    const res = await postWhipOffer(url, sdp, streamKey);
+    answer = await res.text();
+    if (!res.ok) throw new Error(answer || `Live ingest failed (${res.status})`);
+  } catch (directErr) {
+    if (!postOffer) {
+      pc.close();
+      throw new Error((directErr as Error).message || "Could not reach Livepeer ingest.");
     }
-  } catch (e) {
-    pc.close();
-    throw new Error((e as Error).message || "Could not reach Livepeer ingest.");
+    try {
+      answer = await postOffer(sdp);
+    } catch (proxyErr) {
+      pc.close();
+      const proxyMsg = (proxyErr as Error).message || "";
+      throw new Error(
+        /church server did not respond|timed out|Failed to fetch/i.test(proxyMsg)
+          ? "Could not reach Livepeer from this computer. Stay on this page and Go live again."
+          : proxyMsg || (directErr as Error).message || "Could not reach Livepeer ingest.",
+      );
+    }
   }
   if (!answer.trim().startsWith("v=")) {
     pc.close();

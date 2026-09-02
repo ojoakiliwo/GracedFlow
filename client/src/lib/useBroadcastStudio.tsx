@@ -1178,7 +1178,10 @@ export function useBroadcastStudioEngine() {
         platforms: string[];
       }>("/studio/live/session");
       const pc = await connectWhip(mixed, session.whipUrl, session.iceServers, async (sdp) => {
-        const answer = await apiPost<{ sdp: string }>("/studio/live/whip", { sdp });
+        const answer = await apiPost<{ sdp: string }>("/studio/live/whip", {
+          sdp,
+          whipUrl: session.whipUrl,
+        });
         return answer.sdp;
       });
       nodes.current.whip?.close();

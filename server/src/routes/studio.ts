@@ -89,7 +89,10 @@ studioRouter.post(
 studioRouter.post(
   "/live/whip",
   asyncHandler(async (req, res) => {
-    const { sdp } = parseBody(z.object({ sdp: z.string().min(8) }), req.body);
-    res.json({ sdp: await whipExchange(sdp) });
+    const { sdp, whipUrl } = parseBody(
+      z.object({ sdp: z.string().min(8), whipUrl: z.string().optional() }),
+      req.body,
+    );
+    res.json({ sdp: await whipExchange(sdp, whipUrl) });
   }),
 );
