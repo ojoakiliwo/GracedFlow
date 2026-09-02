@@ -12,6 +12,7 @@ import {
   writeStoredLiveDrafts,
 } from "../src/lib/studioLive";
 import {
+  captureProgrammeStream,
   iceServersForWhipHost,
   iceIsConnected,
   livepeerIceHost,
@@ -21,6 +22,7 @@ import {
   streamKeyFromWhipUrl,
   waitForIce,
   waitForIceConnected,
+  waitForOutboundRtp,
   whipHostLooksRegional,
 } from "../src/lib/studioWhip";
 import { obsEncoderBlock, programOutputHtml } from "../src/lib/studioProgramOutput";
@@ -222,6 +224,42 @@ describe("WHIP ICE wait", () => {
         values: () => [{ type: "outbound-rtp", bytesSent: 1200 }, { type: "inbound-rtp", bytesSent: 9 }],
       }),
     ).toBe(1200);
+  });
+
+  it("counts packets or encoded frames when byte counters are still 0", () => {
+    expect(
+      outboundRtpBytes({
+        values: () => [{ type: "outbound-rtp", bytesSent: 0, packetsSent: 3, framesEncoded: 2 }],
+      }),
+    ).toBe(5);
+  });
+
+  it("does not treat a getStats throw as zero Program frames", async () => {
+    const pc = {
+      getStats: vi.fn().mockRejectedValue(new Error("stats unavailable")),
+    } as unknown as RTCPeerConnection;
+    await expect(waitForOutboundRtp(pc, 40)).resolves.toBe(true);
+  });
+
+  it("returns false when getStats stays at zero outbound RTP", async () => {
+    const pc = {
+      getStats: vi.fn().mockResolvedValue({ values: () => [{ type: "outbound-rtp", bytesSent: 0 }] }),
+    } as unknown as RTCPeerConnection;
+    await expect(waitForOutboundRtp(pc, 40)).resolves.toBe(false);
+  });
+
+  it("returns true once outbound packets leave this computer", async () => {
+    const pc = {
+      getStats: vi
+        .fn()
+        .mockResolvedValueOnce({ values: () => [{ type: "outbound-rtp", bytesSent: 0 }] })
+        .mockResolvedValueOnce({ values: () => [{ type: "outbound-rtp", bytesSent: 800 }] }),
+    } as unknown as RTCPeerConnection;
+    await expect(waitForOutboundRtp(pc, 2000)).resolves.toBe(true);
+  });
+
+  it("asks for Chrome when this computer cannot capture Program", async () => {
+    await expect(captureProgrammeStream({} as HTMLCanvasElement)).rejects.toThrow(/Chrome or Edge/);
   });
 
   it("waits until ICE is connected before treating WHIP as live", async () => {

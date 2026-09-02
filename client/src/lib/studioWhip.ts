@@ -141,26 +141,143 @@ export function preferH264InSdp(sdp: string): string {
 }
 
 export function outboundRtpBytes(
-  stats: { values: () => Iterable<{ type?: string; bytesSent?: number }> },
+  stats: {
+    values: () => Iterable<{
+      type?: string;
+      bytesSent?: number;
+      packetsSent?: number;
+      framesEncoded?: number;
+    }>;
+  },
 ): number {
   let n = 0;
   for (const row of stats.values()) {
-    if (row.type === "outbound-rtp") n += row.bytesSent ?? 0;
+    if (row.type !== "outbound-rtp") continue;
+    n += row.bytesSent ?? 0;
+    n += row.packetsSent ?? 0;
+    n += row.framesEncoded ?? 0;
   }
   return n;
 }
 
+/** True when packets left, or when getStats never worked so we cannot claim a send failure. */
 export async function waitForOutboundRtp(pc: RTCPeerConnection, timeoutMs = 8000): Promise<boolean> {
   const started = Date.now();
+  let sawStats = false;
   while (Date.now() - started < timeoutMs) {
     try {
       if (outboundRtpBytes(await pc.getStats()) > 0) return true;
+      sawStats = true;
     } catch {
-      return false;
+      // getStats can throw while ICE is still settling — do not treat that as 0 frames.
     }
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 400));
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 250));
   }
-  return false;
+  return !sawStats;
+}
+
+export const NO_PROGRAM_PACKETS =
+  "This computer connected to Livepeer but sent 0 Program packets. Keep the small Program thumbnail on screen, stay on this page, then End live and Go live again.";
+
+export async function waitTwoAnimationFrames(): Promise<void> {
+  const raf = globalThis.requestAnimationFrame;
+  if (typeof raf !== "function") return;
+  await new Promise<void>((resolve) => {
+    raf.call(globalThis, () => raf.call(globalThis, () => resolve()));
+  });
+}
+
+const captureSources = new WeakMap<MediaStream, MediaStream>();
+
+function kickVideoTracks(stream: MediaStream) {
+  for (const track of stream.getVideoTracks()) {
+    track.enabled = true;
+    if ("contentHint" in track) {
+      try {
+        track.contentHint = "motion";
+      } catch {
+        // Older Chromium omits contentHint.
+      }
+    }
+    const requestFrame = (track as MediaStreamTrack & { requestFrame?: () => void }).requestFrame;
+    if (typeof requestFrame === "function") requestFrame.call(track);
+  }
+}
+
+export function releaseCaptureSource(stream?: MediaStream) {
+  if (!stream) return;
+  const raw = captureSources.get(stream);
+  if (!raw) return;
+  for (const track of raw.getVideoTracks()) {
+    try {
+      track.stop();
+    } catch {
+      // Track may already have ended.
+    }
+  }
+  captureSources.delete(stream);
+}
+
+export function detachProgrammePump(pump?: HTMLVideoElement | null) {
+  if (!pump) return;
+  try {
+    pump.pause();
+  } catch {
+    // Element may already be gone.
+  }
+  pump.srcObject = null;
+}
+
+/**
+ * Chrome skips encoding a tiny or near-invisible canvas.captureStream.
+ * Paint twice, capture, play that stream in a video, then prefer video.captureStream.
+ */
+export async function captureProgrammeStream(
+  canvas: HTMLCanvasElement,
+  pump?: HTMLVideoElement | null,
+): Promise<MediaStream> {
+  await waitTwoAnimationFrames();
+  if (typeof canvas.captureStream !== "function") {
+    throw new Error("This browser cannot send Program video. Use Chrome or Edge on this desk.");
+  }
+  const raw = canvas.captureStream(30);
+  kickVideoTracks(raw);
+  for (const track of raw.getVideoTracks()) {
+    try {
+      await track.applyConstraints({ width: 1280, height: 720, frameRate: 30 });
+    } catch {
+      // Canvas tracks often ignore applyConstraints.
+    }
+  }
+
+  const el = pump;
+  if (el) {
+    el.muted = true;
+    el.playsInline = true;
+    el.autoplay = true;
+    el.srcObject = raw;
+    try {
+      await el.play();
+    } catch {
+      // Go live is a click, so play() usually works. Canvas stream is still used if it does not.
+    }
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 80));
+    kickVideoTracks(raw);
+    const recapture = (el as HTMLVideoElement & { captureStream?: (fps?: number) => MediaStream }).captureStream;
+    if (typeof recapture === "function") {
+      try {
+        const fromVideo = recapture.call(el, 30);
+        if (fromVideo.getVideoTracks().length > 0) {
+          captureSources.set(fromVideo, raw);
+          kickVideoTracks(fromVideo);
+          return fromVideo;
+        }
+      } catch {
+        // Fall back to the canvas stream.
+      }
+    }
+  }
+  return raw;
 }
 
 /** GeoDNS fronts. Regional catalysts look like nyc-prod-catalyst-0.lp-playback.studio:443. */
@@ -202,18 +319,9 @@ async function postWhipOffer(url: string, sdp: string, streamKey: string): Promi
 
 export function kickCanvasFrames(stream: MediaStream | undefined) {
   if (!stream) return;
-  for (const track of stream.getVideoTracks()) {
-    track.enabled = true;
-    if (track.kind === "video" && "contentHint" in track) {
-      try {
-        track.contentHint = "motion";
-      } catch {
-        // Older Chromium omits contentHint.
-      }
-    }
-    const requestFrame = (track as MediaStreamTrack & { requestFrame?: () => void }).requestFrame;
-    if (typeof requestFrame === "function") requestFrame.call(track);
-  }
+  kickVideoTracks(stream);
+  const raw = captureSources.get(stream);
+  if (raw) kickVideoTracks(raw);
 }
 
 async function negotiateWhip(
@@ -231,7 +339,16 @@ async function negotiateWhip(
     bundlePolicy: "max-bundle",
   });
   for (const track of stream.getTracks()) {
-    const transceiver = pc.addTransceiver(track, { direction: "sendonly" });
+    const init: RTCRtpTransceiverInit = { direction: "sendonly" };
+    if (track.kind === "video") {
+      init.sendEncodings = [{ maxBitrate: 2_500_000, maxFramerate: 30 }];
+    }
+    let transceiver: RTCRtpTransceiver;
+    try {
+      transceiver = pc.addTransceiver(track, init);
+    } catch {
+      transceiver = pc.addTransceiver(track, { direction: "sendonly" });
+    }
     if (track.kind === "video") preferVideoH264(transceiver);
   }
   const offer = await pc.createOffer();
@@ -305,13 +422,29 @@ export async function connectWhip(
     iceServersForWhipHost(host || new URL(url).hostname),
     iceServers ?? [],
   );
+  const tryPolicy = async (policy: RTCIceTransportPolicy) => {
+    const pc = await negotiateWhip(stream, url, whipUrl, servers, policy, postOffer);
+    const sending = await waitForOutboundRtp(pc, 4500);
+    return { pc, sending };
+  };
+
+  let firstErr: unknown;
+  let connectedWithoutPackets = false;
   try {
-    return await negotiateWhip(stream, url, whipUrl, servers, "all", postOffer);
-  } catch (first) {
-    try {
-      return await negotiateWhip(stream, url, whipUrl, servers, "relay", postOffer);
-    } catch {
-      throw first;
-    }
+    const first = await tryPolicy("all");
+    if (first.sending) return first.pc;
+    first.pc.close();
+    connectedWithoutPackets = true;
+  } catch (e) {
+    firstErr = e;
+  }
+  try {
+    const second = await tryPolicy("relay");
+    if (second.sending) return second.pc;
+    second.pc.close();
+    throw new Error(NO_PROGRAM_PACKETS);
+  } catch (e) {
+    if (connectedWithoutPackets) throw new Error(NO_PROGRAM_PACKETS);
+    throw firstErr || e;
   }
 }

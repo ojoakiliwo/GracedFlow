@@ -55,7 +55,17 @@ import {
   type StudioSpeechRecognition,
 } from "./studioSpeech";
 import { apiGet, apiPost } from "./api";
-import { connectWhip, kickCanvasFrames, waitForOutboundRtp, type WhipIceServer } from "./studioWhip";
+import {
+  captureProgrammeStream,
+  connectWhip,
+  detachProgrammePump,
+  kickCanvasFrames,
+  NO_PROGRAM_PACKETS,
+  releaseCaptureSource,
+  waitForOutboundRtp,
+  waitTwoAnimationFrames,
+  type WhipIceServer,
+} from "./studioWhip";
 import { openProgramOutputWindow, paintProgramOutputWindow } from "./studioProgramOutput";
 import type { RestreamHealth } from "./studioLive";
 import {
@@ -191,6 +201,7 @@ export function useBroadcastStudioEngine() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const capturePumpRef = useRef<HTMLVideoElement | null>(null);
   const programmeAudioRef = useRef<HTMLAudioElement | null>(null);
   const overlayRef = useRef<ProgrammeOverlay>({ ...EMPTY_OVERLAY });
   const programOverlayRef = useRef<ProgrammeOverlay>({ ...EMPTY_OVERLAY });
@@ -332,6 +343,7 @@ export function useBroadcastStudioEngine() {
   }, []);
 
   const stopOutgoing = useCallback((stream?: MediaStream) => {
+    releaseCaptureSource(stream);
     const preserve = nodes.current.dest?.stream.getTracks() ?? [];
     for (const track of tracksToStop(stream?.getTracks() ?? [], preserve)) {
       track.stop();
@@ -465,6 +477,7 @@ export function useBroadcastStudioEngine() {
     n.source = undefined;
     n.whip = undefined;
     n.whipStream = undefined;
+    detachProgrammePump(capturePumpRef.current);
     n.rawVideo = undefined;
     n.rawAudio = undefined;
     n.mixed = undefined;
@@ -1115,7 +1128,7 @@ export function useBroadcastStudioEngine() {
     if (!canvas || statusRef.current !== "live") return null;
     const dest = await ensureLiveProgrammeDest();
     if (!dest) return null;
-    const mixed = canvas.captureStream(30);
+    const mixed = await captureProgrammeStream(canvas, capturePumpRef.current);
     const audioTracks = dest.stream.getAudioTracks().filter(isLiveAudioTrack);
     for (const track of audioTracks) mixed.addTrack(track.clone());
     kickCanvasFrames(mixed);
@@ -1136,7 +1149,9 @@ export function useBroadcastStudioEngine() {
       if (!canvas || statusRef.current !== "live") return;
       const dest = await ensureLiveProgrammeDest();
       if (!dest) return;
+      await waitTwoAnimationFrames();
       const mixed = canvas.captureStream(30);
+      kickCanvasFrames(mixed);
       const audioTracks = dest.stream.getAudioTracks().filter(isLiveAudioTrack);
       if (audioTracks.length === 0) {
         setError(RECORDING_AUDIO_MISSING);
@@ -1238,6 +1253,7 @@ export function useBroadcastStudioEngine() {
     n.whip = undefined;
     stopOutgoing(n.whipStream);
     n.whipStream = undefined;
+    detachProgrammePump(capturePumpRef.current);
     setSocialLive(false);
     setSocialConnecting(false);
     setSocialPlatforms([]);
@@ -1286,25 +1302,42 @@ export function useBroadcastStudioEngine() {
     setSocialConnecting(true);
     setError(null);
     setRestreamHealth(null);
-    try {
+    const openSession = async (stream: MediaStream) => {
       const session = await apiPost<{
         mode: string;
         whipUrl: string;
         iceServers?: WhipIceServer[];
         platforms: string[];
       }>("/studio/live/session");
-      const pc = await connectWhip(mixed, session.whipUrl, session.iceServers, async (sdp) => {
+      const pc = await connectWhip(stream, session.whipUrl, session.iceServers, async (sdp) => {
         const answer = await apiPost<{ sdp: string }>("/studio/live/whip", {
           sdp,
           whipUrl: session.whipUrl,
         });
         return answer.sdp;
       });
+      return { session, pc };
+    };
+    let stream = mixed;
+    try {
+      let opened: Awaited<ReturnType<typeof openSession>>;
+      try {
+        opened = await openSession(stream);
+      } catch (first) {
+        if ((first as Error).message !== NO_PROGRAM_PACKETS) throw first;
+        stopOutgoing(stream);
+        detachProgrammePump(capturePumpRef.current);
+        const again = await programmeMix();
+        if (!again || again.getVideoTracks().length === 0) throw first;
+        stream = again;
+        opened = await openSession(stream);
+      }
+      const { session, pc } = opened;
       nodes.current.whip?.close();
       stopOutgoing(nodes.current.whipStream);
       nodes.current.whip = pc;
-      nodes.current.whipStream = mixed;
-      kickCanvasFrames(mixed);
+      nodes.current.whipStream = stream;
+      kickCanvasFrames(stream);
       setSocialPlatforms(session.platforms ?? []);
       setSocialLive(true);
       const sending = await waitForOutboundRtp(pc, 8000);
@@ -1326,11 +1359,12 @@ export function useBroadcastStudioEngine() {
         setError(
           sending
             ? "This computer is sending Program, but Livepeer has not marked the stream active yet. Stay on this page. YouTube and Facebook stay dark until Livepeer receives it. If this stays, End live and Go live again."
-            : "This computer is not sending Program frames to Livepeer, so YouTube and Facebook have nothing to play. Keep Program on screen, then End live and Go live again.",
+            : NO_PROGRAM_PACKETS,
         );
       }
     } catch (e) {
-      stopOutgoing(mixed);
+      stopOutgoing(stream);
+      detachProgrammePump(capturePumpRef.current);
       setSocialLive(false);
       setError((e as Error).message || "Could not go live to social.");
     } finally {
@@ -1811,6 +1845,7 @@ export function useBroadcastStudioEngine() {
     canvasRef,
     previewCanvasRef,
     captureCanvasRef,
+    capturePumpRef,
     programmeAudioRef,
     status,
     error,
@@ -1915,12 +1950,20 @@ export function BroadcastStudioProvider({ children }: { children: ReactNode }) {
         className="pointer-events-none fixed left-[-2000px] top-0 h-px w-px"
       />
       <img ref={studio.stillImageRef} alt="" className="hidden" />
+      <video
+        ref={studio.capturePumpRef}
+        muted
+        playsInline
+        autoPlay
+        aria-hidden
+        className="pointer-events-none fixed bottom-2 left-2 z-0 h-2 w-3 opacity-[0.05]"
+      />
       <canvas
         ref={studio.captureCanvasRef}
         width={1280}
         height={720}
         aria-hidden
-        className="pointer-events-none fixed bottom-0 left-0 z-0 h-20 w-36 opacity-[0.04]"
+        className="pointer-events-none fixed bottom-2 left-2 z-[1] h-[90px] w-[160px] rounded border border-amber-300/40 bg-black opacity-50 [transform:translateZ(0)]"
       />
       {children}
     </BroadcastStudioContext.Provider>
