@@ -343,8 +343,15 @@ export async function ensureWhipSession(outputs: ReadyLiveOutput[]): Promise<{
       id = null;
     }
   }
-  const reusable = Boolean(stream?.id && stream.streamKey && streamHasSocialTranscode(stream));
-  if (!reusable) {
+  if (stream?.id && stream.streamKey && streamHasSocialTranscode(stream)) {
+    await livepeerFetch(`/stream/${stream.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        profiles: SOCIAL_TRANSCODE_PROFILES,
+        multistream: { targets },
+      }),
+    });
+  } else {
     if (stream?.id) {
       try {
         await livepeerFetch(`/stream/${stream.id}`, { method: "DELETE" });
@@ -358,14 +365,6 @@ export async function ensureWhipSession(outputs: ReadyLiveOutput[]): Promise<{
     });
     if (!stream.id) throw new HttpError(502, "Livepeer did not create a stream");
     await setBridgeStreamId(stream.id);
-  } else {
-    await livepeerFetch(`/stream/${stream!.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        profiles: SOCIAL_TRANSCODE_PROFILES,
-        multistream: { targets },
-      }),
-    });
   }
   if (!stream.streamKey) {
     throw new HttpError(502, "Livepeer did not return a stream key");
