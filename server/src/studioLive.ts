@@ -175,9 +175,7 @@ export function livepeerIceServers(host: string): WhipIceServer[] {
     { urls: `stun:${h}:3478` },
     { urls: `turn:${h}:3478`, username: "livepeer", credential: "livepeer" },
     { urls: `turn:${h}:3478?transport=tcp`, username: "livepeer", credential: "livepeer" },
-    { urls: `stun:${h}:5349` },
-    { urls: `turn:${h}:5349`, username: "livepeer", credential: "livepeer" },
-    { urls: `turn:${h}:5349?transport=tcp`, username: "livepeer", credential: "livepeer" },
+    { urls: `turns:${h}:5349?transport=tcp`, username: "livepeer", credential: "livepeer" },
     { urls: "stun:stun.cloudflare.com:3478" },
   ];
 }
@@ -191,7 +189,7 @@ export function parseIceLinkHeader(linkHeader: string | null | undefined): WhipI
     if (!/rel\s*=\s*"?ice-server"?/i.test(part)) continue;
     const urlMatch = part.match(/<((?:stun|turn|turns):[^>]+)>/i) || part.match(/((?:stun|turn|turns):[^\s;]+)/i);
     if (!urlMatch?.[1]) continue;
-    const urls = urlMatch[1].trim();
+    const urls = normalizeTurnUrl(urlMatch[1].trim());
     const username = part.match(/username="?([^";]+)"?/i)?.[1];
     const credential = part.match(/credential="?([^";]+)"?/i)?.[1];
     out.push(username ? { urls, username, credential } : { urls });
@@ -199,11 +197,16 @@ export function parseIceLinkHeader(linkHeader: string | null | undefined): WhipI
   return out;
 }
 
+function normalizeTurnUrl(urls: string): string {
+  if (/:5349(\?|$)/.test(urls) && /^turn:/i.test(urls)) return urls.replace(/^turn:/i, "turns:");
+  return urls;
+}
+
 function withTcpTurn(servers: WhipIceServer[]): WhipIceServer[] {
   const extra: WhipIceServer[] = [];
   for (const server of servers) {
     const urls = String(server.urls);
-    if (!/^turn:/i.test(urls) || /[?&]transport=/i.test(urls) || !server.username) continue;
+    if (!/^turns?:/i.test(urls) || /[?&]transport=/i.test(urls) || !server.username) continue;
     extra.push({ ...server, urls: `${urls}${urls.includes("?") ? "&" : "?"}transport=tcp` });
   }
   return extra.length ? [...servers, ...extra] : servers;
@@ -570,4 +573,33 @@ export async function ensureWhipSession(outputs: ReadyLiveOutput[]): Promise<{
   }
   const ingest = await resolveWhipIngest(stream.streamKey);
   return { ...ingest, liveInputId: stream.id };
+}
+
+/** Browser posts SDP here so WHIP does not depend on Livepeer CORS from the church desk. */
+export async function whipExchange(sdp: string): Promise<string> {
+  const offer = sdp.trim();
+  if (!offer.startsWith("v=")) throw new HttpError(400, "Live ingest offer was empty.");
+  const id = await getBridgeStreamId();
+  if (!id) {
+    throw new HttpError(409, "Go live from this desk first so Livepeer can open a session.");
+  }
+  const stream = await livepeerFetch<LivepeerStream>(`/stream/${id}`);
+  if (!stream.streamKey) throw new HttpError(502, "Livepeer did not return a stream key");
+  const ingest = await resolveWhipIngest(stream.streamKey);
+  const res = await fetch(ingest.whipUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/sdp",
+      Accept: "application/sdp",
+    },
+    body: offer,
+  });
+  const answer = await res.text();
+  if (!res.ok) {
+    throw new HttpError(502, answer.slice(0, 280) || `Live ingest failed (${res.status})`);
+  }
+  if (!answer.trim().startsWith("v=")) {
+    throw new HttpError(502, "Livepeer did not return a live answer.");
+  }
+  return answer;
 }

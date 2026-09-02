@@ -196,7 +196,7 @@ describe("WHIP ICE wait", () => {
         { urls: "stun:nyc.livepeer.com:3478" },
         { urls: "turn:nyc.livepeer.com:3478", username: "livepeer", credential: "livepeer" },
         { urls: "turn:nyc.livepeer.com:3478?transport=tcp", username: "livepeer", credential: "livepeer" },
-        { urls: "turn:nyc.livepeer.com:5349", username: "livepeer", credential: "livepeer" },
+        { urls: "turns:nyc.livepeer.com:5349?transport=tcp", username: "livepeer", credential: "livepeer" },
       ]),
     );
     expect(ice.some((s) => String(s.urls).includes("lp-playback.studio"))).toBe(false);

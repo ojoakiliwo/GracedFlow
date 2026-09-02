@@ -75,6 +75,15 @@ function stubLivepeer(stream: { id: string; streamKey: string }) {
           text: async () => "",
         };
       }
+      if (method === "POST" && href.includes("/webrtc/") && !href.includes("/api/")) {
+        return {
+          ok: true,
+          status: 201,
+          headers: { get: () => null },
+          json: async () => ({}),
+          text: async () => "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n",
+        };
+      }
       if (method === "HEAD" || (href.includes("/webrtc/") && !href.includes("/api/"))) {
         const key = href.split("/").pop()?.split("?")[0] || stream.streamKey;
         const streamKey = key.replace(/^video\+/, "");
@@ -393,5 +402,29 @@ describe("Studio livestream destinations", () => {
     );
     expect(calls.some((c) => c.method === "HEAD" && c.url.includes("/webrtc/whip-geo"))).toBe(true);
     expect(calls.some((c) => c.method === "OPTIONS")).toBe(true);
+  });
+
+  it("exchanges the WHIP offer through the church API so the desk does not POST to Livepeer", async () => {
+    process.env.LIVEPEER_API_KEY = "lp_test";
+    const calls = stubLivepeer({ id: "st_offer", streamKey: "whip-offer" });
+    const save = await auth(request(app).put("/api/studio/live")).send({
+      destinations: [
+        { platform: "youtube", enabled: true, ingestUrl: "rtmps://a.rtmps.youtube.com/live2", streamKey: "yt-key" },
+        { platform: "facebook", enabled: false, ingestUrl: "rtmps://live-api-s.facebook.com:443/rtmp/", streamKey: "" },
+        { platform: "instagram", enabled: false, ingestUrl: "rtmps://live-upload.instagram.com:443/rtmp/", streamKey: "" },
+        { platform: "tiktok", enabled: false, ingestUrl: "", streamKey: "" },
+      ],
+    });
+    expect(save.status).toBe(200);
+    const session = await auth(request(app).post("/api/studio/live/session"));
+    expect(session.status).toBe(200);
+    const whip = await auth(request(app).post("/api/studio/live/whip")).send({
+      sdp: "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n",
+    });
+    expect(whip.status).toBe(200);
+    expect(whip.body.sdp).toMatch(/^v=0/);
+    expect(
+      calls.some((c) => c.method === "POST" && c.url.includes("/webrtc/video+whip-offer") && c.body?.startsWith("v=0")),
+    ).toBe(true);
   });
 });

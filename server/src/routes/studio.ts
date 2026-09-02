@@ -13,6 +13,7 @@ import {
   restreamHealth,
   saveDestinations,
   syncLiveRestream,
+  whipExchange,
 } from "../studioLive.js";
 
 export const studioRouter = Router();
@@ -82,5 +83,13 @@ studioRouter.post(
       iceServers: session.iceServers,
       platforms: outputs.map((o) => o.platform),
     });
+  }),
+);
+
+studioRouter.post(
+  "/live/whip",
+  asyncHandler(async (req, res) => {
+    const { sdp } = parseBody(z.object({ sdp: z.string().min(8) }), req.body);
+    res.json({ sdp: await whipExchange(sdp) });
   }),
 );

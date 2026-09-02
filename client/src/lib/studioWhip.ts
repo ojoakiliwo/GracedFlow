@@ -98,9 +98,7 @@ export function iceServersForWhipHost(host: string): WhipIceServer[] {
     { urls: `stun:${h}:3478` },
     { urls: `turn:${h}:3478`, username: "livepeer", credential: "livepeer" },
     { urls: `turn:${h}:3478?transport=tcp`, username: "livepeer", credential: "livepeer" },
-    { urls: `stun:${h}:5349` },
-    { urls: `turn:${h}:5349`, username: "livepeer", credential: "livepeer" },
-    { urls: `turn:${h}:5349?transport=tcp`, username: "livepeer", credential: "livepeer" },
+    { urls: `turns:${h}:5349?transport=tcp`, username: "livepeer", credential: "livepeer" },
     { urls: "stun:stun.cloudflare.com:3478" },
   ];
 }
@@ -129,11 +127,12 @@ async function postWhipOffer(url: string, sdp: string, streamKey: string): Promi
     "Content-Type": "application/sdp",
     Accept: "application/sdp",
   };
-  let res = await fetch(url, { method: "POST", mode: "cors", headers, body: sdp });
+  let res = await fetch(url, { method: "POST", mode: "cors", credentials: "omit", headers, body: sdp });
   if ((res.status === 401 || res.status === 403) && streamKey) {
     res = await fetch(url, {
       method: "POST",
       mode: "cors",
+      credentials: "omit",
       headers: { ...headers, Authorization: `Bearer ${streamKey}` },
       body: sdp,
     });
@@ -141,10 +140,18 @@ async function postWhipOffer(url: string, sdp: string, streamKey: string): Promi
   return res;
 }
 
+function kickCanvasFrames(stream: MediaStream) {
+  for (const track of stream.getVideoTracks()) {
+    const requestFrame = (track as MediaStreamTrack & { requestFrame?: () => void }).requestFrame;
+    if (typeof requestFrame === "function") requestFrame.call(track);
+  }
+}
+
 export async function connectWhip(
   stream: MediaStream,
   whipUrl: string,
   iceServers?: WhipIceServer[],
+  postOffer?: (sdp: string) => Promise<string>,
 ): Promise<RTCPeerConnection> {
   let url = whipUrl;
   let servers = iceServers?.length ? [...iceServers] : [];
@@ -167,8 +174,11 @@ export async function connectWhip(
   if (!servers.length) {
     servers = iceServersForWhipHost(host || new URL(url).hostname);
   }
+  kickCanvasFrames(stream);
   const pc = new RTCPeerConnection({
     iceServers: servers as RTCIceServer[],
+    iceTransportPolicy: "relay",
+    bundlePolicy: "max-bundle",
   });
   for (const track of stream.getTracks()) {
     const transceiver = pc.addTransceiver(track, { direction: "sendonly" });
@@ -183,17 +193,25 @@ export async function connectWhip(
     throw new Error("Could not create a live offer.");
   }
   const streamKey = streamKeyFromWhipUrl(url) || streamKeyFromWhipUrl(whipUrl);
-  let res: Response;
+  let answer = "";
   try {
-    res = await postWhipOffer(url, sdp, streamKey);
+    if (postOffer) {
+      answer = await postOffer(sdp);
+    } else {
+      const res = await postWhipOffer(url, sdp, streamKey);
+      answer = await res.text();
+      if (!res.ok) {
+        pc.close();
+        throw new Error(answer || `Live ingest failed (${res.status})`);
+      }
+    }
   } catch (e) {
     pc.close();
     throw new Error((e as Error).message || "Could not reach Livepeer ingest.");
   }
-  const answer = await res.text();
-  if (!res.ok) {
+  if (!answer.trim().startsWith("v=")) {
     pc.close();
-    throw new Error(answer || `Live ingest failed (${res.status})`);
+    throw new Error("Livepeer did not return a live answer.");
   }
   await pc.setRemoteDescription({ type: "answer", sdp: answer });
   try {
