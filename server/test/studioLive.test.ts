@@ -48,6 +48,47 @@ function auth(req: request.Test) {
   return req.set("Authorization", `Bearer ${token}`);
 }
 
+function stubLivepeer(stream: { id: string; streamKey: string }) {
+  const calls: { url: string; method: string; body?: string }[] = [];
+  let targetSeq = 0;
+  vi.stubGlobal(
+    "fetch",
+    async (url: string | URL, init?: RequestInit) => {
+      const href = String(url);
+      const method = (init?.method || "GET").toUpperCase();
+      calls.push({ url: href, method, body: typeof init?.body === "string" ? init.body : undefined });
+      if (href.includes("/api/multistream/target") && method === "POST") {
+        targetSeq += 1;
+        return { ok: true, json: async () => ({ id: `tgt_${targetSeq}` }) };
+      }
+      if (method === "DELETE" || href.endsWith("/terminate")) {
+        return { ok: true, json: async () => ({}) };
+      }
+      if (href.endsWith("/api/stream") && method === "POST") {
+        return {
+          ok: true,
+          json: async () => ({
+            ...stream,
+            profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
+            isActive: false,
+            multistream: { targets: [{ id: "tgt_1", profile: SOCIAL_TRANSCODE_PROFILE }] },
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          ...stream,
+          profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
+          isActive: true,
+          multistream: { targets: [{ id: "tgt_1", profile: SOCIAL_TRANSCODE_PROFILE }] },
+        }),
+      };
+    },
+  );
+  return calls;
+}
+
 describe("Studio livestream destinations", () => {
   it("masks stream keys and treats bullets as placeholders", () => {
     expect(maskStreamKey("")).toBe("");
@@ -75,6 +116,12 @@ describe("Studio livestream destinations", () => {
     );
     expect(
       rtmpTargetUrl("rtmps://live-api-s.facebook.com:443/rtmp/fb-key", "fb-key"),
+    ).toBe("rtmps://live-api-s.facebook.com:443/rtmp/fb-key");
+    expect(
+      rtmpTargetUrl(
+        "rtmps://live-api-s.facebook.com:443/rtmp/",
+        "rtmps://live-api-s.facebook.com:443/rtmp/fb-key",
+      ),
     ).toBe("rtmps://live-api-s.facebook.com:443/rtmp/fb-key");
     expect(livepeerWhipUrl("whipkey")).toBe("https://livepeercdn.studio/webrtc/whipkey");
     expect(streamHasSocialTranscode({ profiles: [{ name: "720p0" }] })).toBe(true);
@@ -148,44 +195,7 @@ describe("Studio livestream destinations", () => {
   it("opens a WHIP session and fans destinations out through Livepeer when configured", async () => {
     process.env.LIVEPEER_API_KEY = "lp_test";
     expect(restreamConfigured()).toBe(true);
-
-    const calls: { url: string; method: string; body?: string }[] = [];
-    vi.stubGlobal(
-      "fetch",
-      async (url: string | URL, init?: RequestInit) => {
-        const href = String(url);
-        const method = (init?.method || "GET").toUpperCase();
-        calls.push({ url: href, method, body: typeof init?.body === "string" ? init.body : undefined });
-        if (href.endsWith("/api/stream") && method === "POST") {
-          return {
-            ok: true,
-            json: async () => ({
-              id: "st_1",
-              streamKey: "whip-secret",
-              profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
-            }),
-          };
-        }
-        if (href.includes("/api/stream/st_1") && method === "PATCH") {
-          return {
-            ok: true,
-            json: async () => ({
-              id: "st_1",
-              streamKey: "whip-secret",
-              profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
-            }),
-          };
-        }
-        return {
-          ok: true,
-          json: async () => ({
-            id: "st_1",
-            streamKey: "whip-secret",
-            profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
-          }),
-        };
-      },
-    );
+    const calls = stubLivepeer({ id: "st_1", streamKey: "whip-secret" });
 
     const save = await auth(request(app).put("/api/studio/live")).send({
       destinations: [
@@ -204,45 +214,26 @@ describe("Studio livestream destinations", () => {
       whipUrl: "https://livepeercdn.studio/webrtc/whip-secret",
       platforms: ["youtube", "facebook"],
     });
+    const targetPosts = calls.filter((c) => c.method === "POST" && c.url.includes("/api/multistream/target"));
+    expect(targetPosts.some((c) => c.body?.includes("yt-key"))).toBe(true);
+    expect(targetPosts.some((c) => c.body?.includes("rtmps://a.rtmps.youtube.com/live2/yt-key"))).toBe(true);
+    expect(targetPosts.some((c) => c.body?.includes("rtmps://live-api-s.facebook.com:443/rtmp/fb-key"))).toBe(true);
     const create = calls.find((c) => c.method === "POST" && c.url.endsWith("/api/stream"));
-    expect(create?.body).toContain("yt-key");
-    expect(create?.body).toContain("rtmps://a.rtmps.youtube.com/live2/yt-key");
-    expect(create?.body).toContain("rtmps://live-api-s.facebook.com:443/rtmp/fb-key");
     expect(create?.body).toContain(`"profile":"${SOCIAL_TRANSCODE_PROFILE}"`);
     expect(create?.body).toContain('"videoOnly":false');
     expect(create?.body).toContain('"name":"720p0"');
+    expect(create?.body).toContain("H264Baseline");
     expect(create?.body).not.toContain('"profile":"source"');
+
+    const health = await auth(request(app).get("/api/studio/live/health"));
+    expect(health.status).toBe(200);
+    expect(health.body.ingesting).toBe(true);
+    expect(health.body.targets.map((t: { platform: string }) => t.platform)).toEqual(["youtube", "facebook"]);
   });
 
-  it("goes live with one ready destination and lets another join later", async () => {
+  it("goes live with one ready destination and lets another join on the next Go live", async () => {
     process.env.LIVEPEER_API_KEY = "lp_test";
-    const calls: { url: string; method: string; body?: string }[] = [];
-    vi.stubGlobal(
-      "fetch",
-      async (url: string | URL, init?: RequestInit) => {
-        const href = String(url);
-        const method = (init?.method || "GET").toUpperCase();
-        calls.push({ url: href, method, body: typeof init?.body === "string" ? init.body : undefined });
-        if (href.endsWith("/api/stream") && method === "POST") {
-          return {
-            ok: true,
-            json: async () => ({
-              id: "st_join",
-              streamKey: "whip-join",
-              profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
-            }),
-          };
-        }
-        return {
-          ok: true,
-          json: async () => ({
-            id: "st_join",
-            streamKey: "whip-join",
-            profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
-          }),
-        };
-      },
-    );
+    const calls = stubLivepeer({ id: "st_join", streamKey: "whip-join" });
 
     const onlyYt = await auth(request(app).put("/api/studio/live")).send({
       destinations: [
@@ -276,40 +267,18 @@ describe("Studio livestream destinations", () => {
     });
     expect(addFb.status).toBe(200);
     expect(addFb.body.platforms).toEqual(["youtube", "facebook"]);
-    const patch = calls.find((c) => c.method === "PATCH" && c.body?.includes("fb-later"));
-    expect(patch).toBeTruthy();
-    expect(patch?.body).toContain(`"profile":"${SOCIAL_TRANSCODE_PROFILE}"`);
-    expect(patch?.body).not.toContain('"profile":"source"');
+    expect(calls.some((c) => c.method === "PATCH" && c.body?.includes("fb-later"))).toBe(false);
+
+    const again = await auth(request(app).post("/api/studio/live/session"));
+    expect(again.status).toBe(200);
+    expect(again.body.platforms).toEqual(["youtube", "facebook"]);
+    expect(calls.some((c) => c.method === "POST" && c.body?.includes("fb-later"))).toBe(true);
+    expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/terminate"))).toBe(true);
   });
 
-  it("replaces a Livepeer stream that cannot transcode WHIP to H264 for Facebook", async () => {
+  it("starts a fresh Livepeer stream so Facebook gets the current key as H264", async () => {
     process.env.LIVEPEER_API_KEY = "lp_test";
-    const calls: { url: string; method: string; body?: string }[] = [];
-    vi.stubGlobal(
-      "fetch",
-      async (url: string | URL, init?: RequestInit) => {
-        const href = String(url);
-        const method = (init?.method || "GET").toUpperCase();
-        calls.push({ url: href, method, body: typeof init?.body === "string" ? init.body : undefined });
-        if (method === "DELETE") {
-          return { ok: true, json: async () => ({}) };
-        }
-        if (href.endsWith("/api/stream") && method === "POST") {
-          return {
-            ok: true,
-            json: async () => ({
-              id: "st_h264",
-              streamKey: "whip-h264",
-              profiles: [{ name: SOCIAL_TRANSCODE_PROFILE }],
-            }),
-          };
-        }
-        return {
-          ok: true,
-          json: async () => ({ id: "st_stale", streamKey: "old-whip", profiles: [] }),
-        };
-      },
-    );
+    const calls = stubLivepeer({ id: "st_h264", streamKey: "whip-h264" });
 
     const save = await auth(request(app).put("/api/studio/live")).send({
       destinations: [
@@ -326,10 +295,11 @@ describe("Studio livestream destinations", () => {
     expect(session.body.platforms).toEqual(["facebook"]);
     expect(session.body.whipUrl).toContain("whip-h264");
     expect(calls.some((c) => c.method === "DELETE")).toBe(true);
+    expect(calls.some((c) => c.method === "POST" && c.body?.includes("fb-fresh"))).toBe(true);
     const create = calls.find((c) => c.method === "POST" && c.url.endsWith("/api/stream"));
-    expect(create?.body).toContain("fb-fresh");
     expect(create?.body).toContain(`"profile":"${SOCIAL_TRANSCODE_PROFILE}"`);
     expect(create?.body).toContain('"name":"720p0"');
+    expect(create?.body).toContain("H264Baseline");
     expect(create?.body).not.toContain('"profile":"source"');
   });
 });

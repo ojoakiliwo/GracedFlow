@@ -10,6 +10,7 @@ import {
   readyOutputs,
   restreamConfigured,
   restreamDetail,
+  restreamHealth,
   saveDestinations,
   syncLiveRestream,
 } from "../studioLive.js";
@@ -56,6 +57,13 @@ studioRouter.put(
       destinations: publicDestinations(rows),
       platforms,
     });
+  }),
+);
+
+studioRouter.get(
+  "/live/health",
+  asyncHandler(async (_req, res) => {
+    res.json(await restreamHealth());
   }),
 );
 

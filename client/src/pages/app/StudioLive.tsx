@@ -74,7 +74,10 @@ export default function StudioLive() {
       dirtyRef.current = false;
       setKept(true);
       setDrafts((prev) => applySavedDestinations(saved, prev));
-      if (s.socialLive && saved.platforms) s.syncSocialPlatforms(saved.platforms);
+      if (s.socialLive && saved.platforms) {
+        s.syncSocialPlatforms(saved.platforms);
+        if (!silent) void s.startSocialLive();
+      }
       if (!silent) notify("Destinations saved");
     } catch (err) {
       notify((err as Error).message, "error");
@@ -202,7 +205,7 @@ export default function StudioLive() {
           </div>
           {s.socialPlatforms.length > 0 ? (
             <p className="mt-3 text-[11px] leading-relaxed text-gold-300">
-              {socialRestreamHint(s.socialPlatforms)}
+              {socialRestreamHint(s.socialPlatforms, s.restreamHealth)}
             </p>
           ) : null}
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">

@@ -13,6 +13,22 @@ export async function waitForIce(pc: RTCPeerConnection, timeoutMs = 2500): Promi
   });
 }
 
+export function preferH264Codecs<T extends { mimeType: string }>(codecs: T[]): T[] {
+  const h264 = codecs.filter((c) => /h264/i.test(c.mimeType));
+  if (h264.length === 0) return codecs;
+  return [...h264, ...codecs.filter((c) => !/h264/i.test(c.mimeType))];
+}
+
+function preferVideoH264(transceiver: RTCRtpTransceiver) {
+  try {
+    const caps = RTCRtpSender.getCapabilities?.("video");
+    if (!caps?.codecs?.length || !transceiver.setCodecPreferences) return;
+    transceiver.setCodecPreferences(preferH264Codecs(caps.codecs));
+  } catch {
+    // Safari and some embedded WebViews omit setCodecPreferences.
+  }
+}
+
 export async function connectWhip(
   stream: MediaStream,
   whipUrl: string,
@@ -21,7 +37,8 @@ export async function connectWhip(
     iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }],
   });
   for (const track of stream.getTracks()) {
-    pc.addTransceiver(track, { direction: "sendonly" });
+    const transceiver = pc.addTransceiver(track, { direction: "sendonly" });
+    if (track.kind === "video") preferVideoH264(transceiver);
   }
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);

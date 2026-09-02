@@ -54,8 +54,9 @@ import {
   speechChunkFromEvent,
   type StudioSpeechRecognition,
 } from "./studioSpeech";
-import { apiPost } from "./api";
+import { apiGet, apiPost } from "./api";
 import { connectWhip } from "./studioWhip";
+import type { RestreamHealth } from "./studioLive";
 import {
   applyMediaUse,
   audioOnlyPicture,
@@ -250,6 +251,7 @@ export function useBroadcastStudioEngine() {
   const [socialLive, setSocialLive] = useState(false);
   const [socialConnecting, setSocialConnecting] = useState(false);
   const [socialPlatforms, setSocialPlatforms] = useState<string[]>([]);
+  const [restreamHealth, setRestreamHealth] = useState<RestreamHealth | null>(null);
   const [outputFocus, setOutputFocus] = useState(false);
   const [selectedVerseRefs, setSelectedVerseRefs] = useState<string[]>([]);
   const [musicFilter, setMusicFilterState] = useState(false);
@@ -440,6 +442,7 @@ export function useBroadcastStudioEngine() {
     setSocialLive(false);
     setSocialConnecting(false);
     setSocialPlatforms([]);
+    setRestreamHealth(null);
     setOutputFocus(false);
     setMediaPlaying(false);
     if (closeCtx) {
@@ -1136,6 +1139,7 @@ export function useBroadcastStudioEngine() {
     setSocialLive(false);
     setSocialConnecting(false);
     setSocialPlatforms([]);
+    setRestreamHealth(null);
   }, [stopOutgoing]);
 
   const startSocialLive = useCallback(async () => {
@@ -1156,6 +1160,7 @@ export function useBroadcastStudioEngine() {
     }
     setSocialConnecting(true);
     setError(null);
+    setRestreamHealth(null);
     try {
       const session = await apiPost<{ mode: string; whipUrl: string; platforms: string[] }>(
         "/studio/live/session",
@@ -1572,6 +1577,25 @@ export function useBroadcastStudioEngine() {
   }, [status]);
 
   useEffect(() => {
+    if (!socialLive) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const health = await apiGet<RestreamHealth>("/studio/live/health");
+        if (!cancelled) setRestreamHealth(health);
+      } catch {
+        if (!cancelled) setRestreamHealth(null);
+      }
+    };
+    void tick();
+    const timer = window.setInterval(() => void tick(), 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [socialLive]);
+
+  useEffect(() => {
     overlayRef.current = overlay;
     programOverlayRef.current = programOverlay;
     paintIdlePreview();
@@ -1630,6 +1654,7 @@ export function useBroadcastStudioEngine() {
     socialLive,
     socialConnecting,
     socialPlatforms,
+    restreamHealth,
     outputFocus,
     setOutputFocus,
     updateOverlay,

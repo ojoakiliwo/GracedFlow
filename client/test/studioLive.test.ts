@@ -11,7 +11,7 @@ import {
   STUDIO_LIVE_DRAFTS_KEY,
   writeStoredLiveDrafts,
 } from "../src/lib/studioLive";
-import { waitForIce } from "../src/lib/studioWhip";
+import { waitForIce, preferH264Codecs } from "../src/lib/studioWhip";
 
 function memoryStore(): Storage {
   const data = new Map<string, string>();
@@ -138,6 +138,12 @@ describe("social restream hint", () => {
     expect(socialRestreamHint(["youtube", "facebook"])).toMatch(/Go live on Facebook/);
     expect(socialRestreamHint(["youtube", "facebook"])).not.toMatch(/^Sending to /);
     expect(socialRestreamHint(["instagram"])).toMatch(/Instagram also needs its own Go live click/);
+    expect(
+      socialRestreamHint(["facebook"], { ingesting: false, profiles: [], targets: [] }),
+    ).toMatch(/has not received Program yet/);
+    expect(
+      socialRestreamHint(["facebook"], { ingesting: true, profiles: ["720p0"], targets: [{ platform: "facebook", profile: "720p0" }] }),
+    ).toMatch(/Livepeer is receiving Program/);
   });
 });
 
@@ -150,5 +156,14 @@ describe("WHIP ICE wait", () => {
     } as unknown as RTCPeerConnection;
     await expect(waitForIce(pc)).resolves.toBeUndefined();
     expect(pc.addEventListener).not.toHaveBeenCalled();
+  });
+
+  it("puts H264 ahead of VP8 so Facebook can ingest a transcodable restream", () => {
+    const ordered = preferH264Codecs([
+      { mimeType: "video/VP8" },
+      { mimeType: "video/H264" },
+      { mimeType: "video/VP9" },
+    ]);
+    expect(ordered[0]?.mimeType).toBe("video/H264");
   });
 });

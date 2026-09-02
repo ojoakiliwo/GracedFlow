@@ -8,14 +8,27 @@ const PLATFORM_LABELS: Record<string, string> = {
   tiktok: "TikTok",
 };
 
+export interface RestreamHealth {
+  ingesting: boolean;
+  playbackId?: string;
+  profiles: string[];
+  targets: { platform: string; profile: string }[];
+}
+
 /** Desk copy after WHIP succeeds. Restreaming a key is not the same as the Page being live. */
-export function socialRestreamHint(platforms: string[]): string {
+export function socialRestreamHint(platforms: string[], health?: RestreamHealth | null): string {
   if (platforms.length === 0) return "";
   const names = platforms.map((p) => PLATFORM_LABELS[p] ?? p).join(", ");
-  let text = `This desk is live. Livepeer is restreaming Program to ${names}.`;
+  if (health && !health.ingesting) {
+    return `This desk is sending to Livepeer for ${names}, but Livepeer has not received Program yet. Wait a few seconds. If Facebook never previews, End live and Go live again.`;
+  }
+  const ingesting = Boolean(health?.ingesting);
+  let text = ingesting
+    ? `Livepeer is receiving Program and restreaming to ${names}.`
+    : `This desk is live. Livepeer is restreaming Program to ${names}.`;
   if (platforms.includes("facebook")) {
     text +=
-      " Facebook will not appear on the Page until Live Producer shows a preview and you click Go live on Facebook.";
+      " Facebook Live Producer still has to show a preview, then you click Go live on Facebook. The Page stays dark until that click.";
   }
   if (platforms.includes("instagram")) {
     text += " Instagram also needs its own Go live click after a preview.";
