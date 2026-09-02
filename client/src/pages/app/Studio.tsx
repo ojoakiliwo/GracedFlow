@@ -12,11 +12,13 @@ import {
 import { getAudioPreset } from "../../lib/studioSound";
 import { pictureKindLabel, soundKindLabel } from "../../lib/studioMedia";
 import { socialRestreamHint } from "../../lib/studioLive";
+import { formatRecordingBytes, formatRecordingWhen } from "../../lib/studioRecordings";
 import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
   Clapperboard,
+  Download,
   Film,
   Image as ImageIcon,
   Mic,
@@ -26,6 +28,7 @@ import {
   RefreshCw,
   SlidersHorizontal,
   Square,
+  Trash2,
   Type,
   Video,
 } from "lucide-react";
@@ -608,15 +611,47 @@ export default function Studio() {
             />
             Monitor in this room
           </label>
-          {s.recordingUrl ? (
-            <a
-              href={s.recordingUrl}
-              download={`igc-service-${new Date().toISOString().slice(0, 10)}.webm`}
-              className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-gold-300 hover:underline"
-            >
-              <Clapperboard className="h-4 w-4" /> Download recording
-            </a>
-          ) : null}
+          <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-ink-400">
+              <Clapperboard className="h-3.5 w-3.5" /> Takes on this computer
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-400">
+              Recordings stay here after refresh or shutdown, until you delete them. Stopping a take also puts a copy in
+              Downloads.
+            </p>
+            {s.recordings.length === 0 ? (
+              <p className="mt-2 text-[11px] text-ink-500">
+                {s.recording ? "Saving this take…" : "No takes kept yet. Press Record while on air."}
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {s.recordings.map((rec) => (
+                  <li key={rec.id} className="rounded-lg border border-white/10 bg-black/30 p-2">
+                    <p className="truncate text-xs font-medium text-ink-100">{rec.name}</p>
+                    <p className="mt-0.5 text-[11px] text-ink-400">
+                      {formatRecordingWhen(rec.createdAt)} · {formatRecordingBytes(rec.size)}
+                      {rec.partial || rec.name.includes("-partial") ? " · partial" : ""}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => void s.downloadKeptRecording(rec.id)}>
+                        <Download className="h-3.5 w-3.5" /> Download
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => {
+                          if (!window.confirm("Delete this recording from this computer? This cannot be undone.")) return;
+                          void s.deleteKeptRecording(rec.id);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Delete
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <Link
             to="/app/studio/live"
             className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-gold-400 text-sm font-semibold text-brand-950 hover:bg-gold-300"

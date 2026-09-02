@@ -78,6 +78,22 @@ import {
   type SoundKind,
   type StudioClip,
 } from "./studioMedia";
+import {
+  appendRecordingChunk,
+  beginRecording,
+  deleteRecording as deleteStoredRecording,
+  finishRecording,
+  getRecordingBlob,
+  getRecordingMeta,
+  listRecordings,
+  newRecordingId,
+  recoverIncompleteRecordings,
+  recordingFileName,
+  requestRecordingPersistence,
+  triggerDownload,
+  assembleRecordingBlob,
+  type StudioRecordingMeta,
+} from "./studioRecordings";
 
 export type StudioStatus = "idle" | "live" | "error";
 export type { MediaSlot, MediaUse, PictureKind, SoundKind, StudioClip };
@@ -219,6 +235,8 @@ export function useBroadcastStudioEngine() {
     rawAudio?: MediaStream;
     recorder?: MediaRecorder;
     chunks?: Blob[];
+    recordingId?: string;
+    chunkSeq?: number;
     raf?: number;
     mixed?: MediaStream;
     whip?: RTCPeerConnection;
@@ -247,6 +265,8 @@ export function useBroadcastStudioEngine() {
   });
   const [recording, setRecording] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [recordings, setRecordings] = useState<StudioRecordingMeta[]>([]);
+  const recordingUrlRef = useRef<string | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [monitor, setMonitorState] = useState(false);
   const [busySource, setBusySource] = useState<"camera" | "mic" | "media" | null>(null);
@@ -985,10 +1005,6 @@ export function useBroadcastStudioEngine() {
     await runStudioOp(async () => {
       setError(null);
       stopGraph(false);
-      if (recordingUrl) {
-        URL.revokeObjectURL(recordingUrl);
-        setRecordingUrl(null);
-      }
       try {
         await applyProgramSources();
         await ensureLiveProgrammeDest();
@@ -1003,7 +1019,7 @@ export function useBroadcastStudioEngine() {
         setError(studioStartMessage(e));
       }
     });
-  }, [applyProgramSources, ensureLiveProgrammeDest, recordingUrl, runStudioOp, startMonitors, stopGraph]);
+  }, [applyProgramSources, ensureLiveProgrammeDest, runStudioOp, startMonitors, stopGraph]);
 
   const stop = useCallback(() => {
     stopListening();
@@ -1092,6 +1108,14 @@ export function useBroadcastStudioEngine() {
     return mixed;
   }, [ensureLiveProgrammeDest]);
 
+  const refreshRecordings = useCallback(async () => {
+    try {
+      setRecordings(await listRecordings());
+    } catch {
+      // Private windows may refuse IndexedDB.
+    }
+  }, []);
+
   const startRecording = useCallback(() => {
     void (async () => {
       const canvas = captureCanvasRef.current || canvasRef.current;
@@ -1109,35 +1133,90 @@ export function useBroadcastStudioEngine() {
       attachProgrammeAudio(dest.stream);
       const chunks: Blob[] = [];
       const mime = pickMime();
+      const createdAt = Date.now();
+      const id = newRecordingId(createdAt);
+      const name = recordingFileName(new Date(createdAt));
+      try {
+        await requestRecordingPersistence();
+        await beginRecording({ id, createdAt, name, mime: mime || "video/webm" });
+      } catch {
+        // Keep recording in memory and still download when it stops.
+      }
+      nodes.current.recordingId = id;
+      nodes.current.chunkSeq = 0;
       const recorder = new MediaRecorder(mixed, {
         mimeType: mime || undefined,
         audioBitsPerSecond: 192_000,
         videoBitsPerSecond: 3_500_000,
       });
       recorder.ondataavailable = (ev) => {
-        if (ev.data.size) chunks.push(ev.data);
+        if (!ev.data.size) return;
+        chunks.push(ev.data);
+        const seq = nodes.current.chunkSeq ?? 0;
+        nodes.current.chunkSeq = seq + 1;
+        const recId = nodes.current.recordingId;
+        if (recId) void appendRecordingChunk(recId, seq, ev.data).catch(() => undefined);
       };
       recorder.onerror = () => {
         setError("Recording failed. Try Chrome or Edge, and confirm an audio input is selected.");
         setRecording(false);
+        const recId = nodes.current.recordingId;
+        if (recId) void finishRecording(recId, true).then(() => refreshRecordings());
       };
       recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: mime || "video/webm" });
-        if (recordingUrl) URL.revokeObjectURL(recordingUrl);
-        setRecordingUrl(URL.createObjectURL(blob));
-        setRecording(false);
+        const recId = nodes.current.recordingId;
+        void (async () => {
+          const blob = assembleRecordingBlob(chunks, mime || "video/webm");
+          if (recId) {
+            try {
+              await finishRecording(recId, false);
+            } catch {
+              // IndexedDB can be full; the Downloads copy still matters.
+            }
+          }
+          if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current);
+          const url = URL.createObjectURL(blob);
+          recordingUrlRef.current = url;
+          setRecordingUrl(url);
+          triggerDownload(blob, name);
+          await refreshRecordings();
+          setRecording(false);
+        })();
       };
       nodes.current.recorder = recorder;
       nodes.current.chunks = chunks;
-      recorder.start(250);
+      recorder.start(1000);
       setRecording(true);
     })();
-  }, [attachProgrammeAudio, ensureLiveProgrammeDest, recordingUrl]);
+  }, [attachProgrammeAudio, ensureLiveProgrammeDest, refreshRecordings]);
 
   const stopRecording = useCallback(() => {
     const rec = nodes.current.recorder;
     if (rec && rec.state === "recording") rec.stop();
   }, []);
+
+  const downloadKeptRecording = useCallback(async (id: string) => {
+    try {
+      const blob = await getRecordingBlob(id);
+      const rec = (await getRecordingMeta(id)) ?? recordings.find((row) => row.id === id);
+      if (!blob || !rec) {
+        setError("That recording is no longer on this computer.");
+        return;
+      }
+      triggerDownload(blob, rec.name);
+    } catch (e) {
+      setError((e as Error).message || "Could not download that recording.");
+    }
+  }, [recordings]);
+
+  const deleteKeptRecording = useCallback(async (id: string) => {
+    try {
+      await deleteStoredRecording(id);
+      await refreshRecordings();
+    } catch (e) {
+      setError((e as Error).message || "Could not delete that recording.");
+    }
+  }, [refreshRecordings]);
 
   const stopSocialLive = useCallback(() => {
     const n = nodes.current;
@@ -1643,6 +1722,31 @@ export function useBroadcastStudioEngine() {
     paintIdlePreview();
   }, [overlay, programOverlay, status, pictureKind, stillClip, videoClip, paintIdlePreview]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await requestRecordingPersistence();
+      try {
+        const recovered = await recoverIncompleteRecordings();
+        for (const rec of recovered) {
+          if (cancelled) return;
+          try {
+            const blob = await getRecordingBlob(rec.id);
+            if (blob) triggerDownload(blob, rec.name);
+          } catch {
+            // The take still appears in the list if Downloads is blocked.
+          }
+        }
+      } catch {
+        // Private windows may refuse IndexedDB.
+      }
+      if (!cancelled) await refreshRecordings();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshRecordings]);
+
   return {
     videoRef,
     fileVideoRef,
@@ -1665,6 +1769,7 @@ export function useBroadcastStudioEngine() {
     meters,
     recording,
     recordingUrl,
+    recordings,
     elapsedSec,
     monitor,
     setMonitor,
@@ -1689,6 +1794,8 @@ export function useBroadcastStudioEngine() {
     stop,
     startRecording,
     stopRecording,
+    downloadKeptRecording,
+    deleteKeptRecording,
     startSocialLive,
     goLiveToAir,
     stopSocialLive,
