@@ -66,6 +66,8 @@ import {
   pictureFit,
   shouldAdaptExposure,
   shouldMirrorPicture,
+  isLiveAudioTrack,
+  tracksToStop,
   type MediaSlot,
   type MediaUse,
   type PictureFrame,
@@ -202,6 +204,7 @@ export function useBroadcastStudioEngine() {
     analyserIn?: AnalyserNode;
     analyserOut?: AnalyserNode;
     dest?: MediaStreamAudioDestinationNode;
+    hold?: GainNode;
     elementAudio?: Map<HTMLMediaElement, MediaElementAudioSourceNode>;
     rawVideo?: MediaStream;
     rawAudio?: MediaStream;
@@ -284,10 +287,21 @@ export function useBroadcastStudioEngine() {
   const attachProgrammeAudio = useCallback((stream: MediaStream | undefined) => {
     const el = programmeAudioRef.current;
     if (!el) return;
-    el.srcObject = stream ?? null;
+    const prev = el.srcObject;
+    if (prev instanceof MediaStream) {
+      prev.getTracks().forEach((t) => t.stop());
+    }
+    el.srcObject = stream ? stream.clone() : null;
     el.muted = !monitorRef.current;
     el.volume = 1;
     if (stream) void el.play().catch(() => undefined);
+  }, []);
+
+  const stopOutgoing = useCallback((stream?: MediaStream) => {
+    const preserve = nodes.current.dest?.stream.getTracks() ?? [];
+    for (const track of tracksToStop(stream?.getTracks() ?? [], preserve)) {
+      track.stop();
+    }
   }, []);
 
   const publishBibleHits = useCallback(() => {
@@ -409,10 +423,10 @@ export function useBroadcastStudioEngine() {
     lumaTimer.current = null;
     if (n.recorder?.state === "recording") n.recorder.stop();
     n.whip?.close();
-    n.whipStream?.getTracks().forEach((t) => t.stop());
+    stopOutgoing(n.whipStream);
     n.rawVideo?.getTracks().forEach((t) => t.stop());
     n.rawAudio?.getTracks().forEach((t) => t.stop());
-    n.mixed?.getTracks().forEach((t) => t.stop());
+    stopOutgoing(n.mixed);
     n.source?.disconnect();
     n.source = undefined;
     n.whip = undefined;
@@ -434,7 +448,7 @@ export function useBroadcastStudioEngine() {
       audioState.current = { ...INITIAL_AUDIO_STATE };
       videoAuto.current = { ...INITIAL_VIDEO_AUTO };
     }
-  }, [attachProgrammeAudio]);
+  }, [attachProgrammeAudio, stopOutgoing]);
 
   const listDevices = useCallback(async (prefer?: { camera?: string; mic?: string }) => {
     const all = await navigator.mediaDevices.enumerateDevices();
@@ -663,12 +677,56 @@ export function useBroadcastStudioEngine() {
     if (!n.elementAudio) n.elementAudio = new Map();
     let source = n.elementAudio.get(el);
     if (!source) {
-      source = ctx.createMediaElementSource(el);
-      n.elementAudio.set(el, source);
+      try {
+        source = ctx.createMediaElementSource(el);
+        n.elementAudio.set(el, source);
+      } catch {
+        const capture = (el as unknown as { captureStream?: () => MediaStream }).captureStream;
+        const captured = typeof capture === "function" ? capture.call(el) : undefined;
+        const audio = captured?.getAudioTracks().filter(isLiveAudioTrack) ?? [];
+        if (audio.length === 0) throw new Error("Could not take audio from that file.");
+        const stream = new MediaStream(audio);
+        const fromFile = ctx.createMediaStreamSource(stream);
+        if (n.highpass) fromFile.connect(n.highpass);
+        n.source = fromFile;
+        n.rawAudio = stream;
+        return;
+      }
     }
     if (n.highpass) source.connect(n.highpass);
     n.source = source;
   }, []);
+
+  const playFileElement = useCallback(async (el: HTMLMediaElement | null, wantSound: boolean) => {
+    if (!el) return;
+    el.volume = 1;
+    try {
+      el.muted = !wantSound;
+      await el.play();
+    } catch {
+      try {
+        el.muted = true;
+        await el.play();
+      } catch {
+        return;
+      }
+    }
+    if (wantSound) el.muted = false;
+  }, []);
+
+  const ensureLiveProgrammeDest = useCallback(async () => {
+    const n = nodes.current;
+    const ctx = n.ctx;
+    if (!ctx || ctx.state === "closed") return null;
+    if (ctx.state === "suspended") await ctx.resume();
+    const live = n.dest?.stream.getAudioTracks().filter(isLiveAudioTrack) ?? [];
+    if (n.dest && live.length > 0) return n.dest;
+    const dest = ctx.createMediaStreamDestination();
+    n.analyserOut?.connect(dest);
+    n.dest = dest;
+    attachProgrammeAudio(dest.stream);
+    return dest;
+  }, [attachProgrammeAudio]);
 
   const disconnectProgramAudio = useCallback(() => {
     const n = nodes.current;
@@ -784,6 +842,10 @@ export function useBroadcastStudioEngine() {
     wetGain.connect(reverbSum);
     reverbSum.connect(analyserOut);
     analyserOut.connect(dest);
+    const hold = ctx.createGain();
+    hold.gain.value = 0;
+    analyserOut.connect(hold);
+    hold.connect(ctx.destination);
 
     nodes.current = {
       ctx,
@@ -804,6 +866,7 @@ export function useBroadcastStudioEngine() {
       analyserIn,
       analyserOut,
       dest,
+      hold,
       elementAudio: new Map(),
     };
     applyActiveSound();
@@ -852,12 +915,12 @@ export function useBroadcastStudioEngine() {
     if (audioEl) audioEl.loop = loop;
 
     if (picture === "file-video" || sound === "file-video") {
-      if (videoEl) await videoEl.play().catch(() => undefined);
+      await playFileElement(videoEl, sound === "file-video");
     } else if (videoEl) {
       videoEl.pause();
     }
     if (sound === "file-audio") {
-      if (audioEl) await audioEl.play().catch(() => undefined);
+      await playFileElement(audioEl, true);
     } else if (audioEl) {
       audioEl.pause();
     }
@@ -894,26 +957,42 @@ export function useBroadcastStudioEngine() {
     listDevices,
     loadedMedia,
     micId,
+    playFileElement,
   ]);
 
+  const opChain = useRef(Promise.resolve());
+  const runStudioOp = useCallback((fn: () => Promise<void>) => {
+    const run = opChain.current.then(fn, fn);
+    opChain.current = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }, []);
+
   const start = useCallback(async () => {
-    setError(null);
-    stopGraph(false);
-    if (recordingUrl) {
-      URL.revokeObjectURL(recordingUrl);
-      setRecordingUrl(null);
-    }
-    try {
-      await applyProgramSources();
-      startMonitors();
-      setStatus("live");
-      setElapsedSec(0);
-    } catch (e) {
+    await runStudioOp(async () => {
+      setError(null);
       stopGraph(false);
-      setStatus("error");
-      setError(studioStartMessage(e));
-    }
-  }, [applyProgramSources, recordingUrl, startMonitors, stopGraph]);
+      if (recordingUrl) {
+        URL.revokeObjectURL(recordingUrl);
+        setRecordingUrl(null);
+      }
+      try {
+        await applyProgramSources();
+        await ensureLiveProgrammeDest();
+        startMonitors();
+        statusRef.current = "live";
+        setStatus("live");
+        setElapsedSec(0);
+      } catch (e) {
+        stopGraph(false);
+        statusRef.current = "error";
+        setStatus("error");
+        setError(studioStartMessage(e));
+      }
+    });
+  }, [applyProgramSources, ensureLiveProgrammeDest, recordingUrl, runStudioOp, startMonitors, stopGraph]);
 
   const stop = useCallback(() => {
     stopListening();
@@ -922,6 +1001,7 @@ export function useBroadcastStudioEngine() {
     fileVideoRef.current?.pause();
     fileAudioRef.current?.pause();
     setMediaPlaying(false);
+    statusRef.current = "idle";
     setStatus("idle");
     setRecording(false);
     setElapsedSec(0);
@@ -987,61 +1067,60 @@ export function useBroadcastStudioEngine() {
     if (el) el.muted = !on;
   }, []);
 
-  const programmeMix = useCallback((): MediaStream | null => {
+  const programmeMix = useCallback(async (): Promise<MediaStream | null> => {
     const canvas = captureCanvasRef.current || canvasRef.current;
-    const dest = nodes.current.dest;
-    if (!canvas || !dest || statusRef.current !== "live") return null;
-    if (nodes.current.ctx?.state === "suspended") {
-      void nodes.current.ctx.resume();
-    }
+    if (!canvas || statusRef.current !== "live") return null;
+    const dest = await ensureLiveProgrammeDest();
+    if (!dest) return null;
     const mixed = canvas.captureStream(30);
-    const audioTracks = dest.stream.getAudioTracks().filter((t) => t.readyState === "live");
-    for (const track of audioTracks) mixed.addTrack(track);
+    const audioTracks = dest.stream.getAudioTracks().filter(isLiveAudioTrack);
+    for (const track of audioTracks) mixed.addTrack(track.clone());
     return mixed;
-  }, []);
+  }, [ensureLiveProgrammeDest]);
 
   const startRecording = useCallback(() => {
-    const canvas = captureCanvasRef.current || canvasRef.current;
-    const dest = nodes.current.dest;
-    if (!canvas || !dest || statusRef.current !== "live") return;
-    if (nodes.current.ctx?.state === "suspended") {
-      void nodes.current.ctx.resume();
-    }
-    const mixed = canvas.captureStream(30);
-    const audioTracks = dest.stream.getAudioTracks().filter((t) => t.readyState === "live");
-    if (audioTracks.length === 0) {
-      setError("Recording did not get an audio track. Choose the Yamaha USB input, then record again.");
-      return;
-    }
-    for (const track of audioTracks) mixed.addTrack(track);
-    nodes.current.mixed = mixed;
-    attachProgrammeAudio(dest.stream);
-
-    const chunks: Blob[] = [];
-    const mime = pickMime();
-    const recorder = new MediaRecorder(mixed, {
-      mimeType: mime || undefined,
-      audioBitsPerSecond: 192_000,
-      videoBitsPerSecond: 3_500_000,
-    });
-    recorder.ondataavailable = (ev) => {
-      if (ev.data.size) chunks.push(ev.data);
-    };
-    recorder.onerror = () => {
-      setError("Recording failed. Try Chrome or Edge, and confirm the mixer is selected.");
-      setRecording(false);
-    };
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: mime || "video/webm" });
-      if (recordingUrl) URL.revokeObjectURL(recordingUrl);
-      setRecordingUrl(URL.createObjectURL(blob));
-      setRecording(false);
-    };
-    nodes.current.recorder = recorder;
-    nodes.current.chunks = chunks;
-    recorder.start(250);
-    setRecording(true);
-  }, [attachProgrammeAudio, recordingUrl]);
+    void (async () => {
+      const canvas = captureCanvasRef.current || canvasRef.current;
+      if (!canvas || statusRef.current !== "live") return;
+      const dest = await ensureLiveProgrammeDest();
+      if (!dest) return;
+      const mixed = canvas.captureStream(30);
+      const audioTracks = dest.stream.getAudioTracks().filter(isLiveAudioTrack);
+      if (audioTracks.length === 0) {
+        setError(
+          "Recording did not get an audio track. Send recorded audio, pick the Yamaha USB input, or go silent, then record again.",
+        );
+        return;
+      }
+      for (const track of audioTracks) mixed.addTrack(track.clone());
+      nodes.current.mixed = mixed;
+      attachProgrammeAudio(dest.stream);
+      const chunks: Blob[] = [];
+      const mime = pickMime();
+      const recorder = new MediaRecorder(mixed, {
+        mimeType: mime || undefined,
+        audioBitsPerSecond: 192_000,
+        videoBitsPerSecond: 3_500_000,
+      });
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size) chunks.push(ev.data);
+      };
+      recorder.onerror = () => {
+        setError("Recording failed. Try Chrome or Edge, and confirm the mixer is selected.");
+        setRecording(false);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mime || "video/webm" });
+        if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+        setRecordingUrl(URL.createObjectURL(blob));
+        setRecording(false);
+      };
+      nodes.current.recorder = recorder;
+      nodes.current.chunks = chunks;
+      recorder.start(250);
+      setRecording(true);
+    })();
+  }, [attachProgrammeAudio, ensureLiveProgrammeDest, recordingUrl]);
 
   const stopRecording = useCallback(() => {
     const rec = nodes.current.recorder;
@@ -1052,27 +1131,27 @@ export function useBroadcastStudioEngine() {
     const n = nodes.current;
     n.whip?.close();
     n.whip = undefined;
-    n.whipStream?.getTracks().forEach((t) => t.stop());
+    stopOutgoing(n.whipStream);
     n.whipStream = undefined;
     setSocialLive(false);
     setSocialConnecting(false);
     setSocialPlatforms([]);
-  }, []);
+  }, [stopOutgoing]);
 
   const startSocialLive = useCallback(async () => {
     if (statusRef.current !== "live") {
-      setError("Start the desk or the recorded media room first, then go live.");
+      setError("Send a video, picture or audio to Program first, then go live.");
       return;
     }
-    const mixed = programmeMix();
+    const mixed = await programmeMix();
     if (!mixed || mixed.getVideoTracks().length === 0) {
-      mixed?.getTracks().forEach((t) => t.stop());
-      setError("Program has no picture yet. Start the desk or send a video / picture to Program.");
+      stopOutgoing(mixed ?? undefined);
+      setError("Program has no picture yet. Send a video or picture to Program, then go live.");
       return;
     }
-    if (mixed.getAudioTracks().length === 0) {
-      mixed.getTracks().forEach((t) => t.stop());
-      setError("Program has no audio track. Send recorded audio, pick the Yamaha USB input, or go silent.");
+    if (mixed.getAudioTracks().filter(isLiveAudioTrack).length === 0) {
+      stopOutgoing(mixed);
+      setError("Program has no audio track. Send picture + sound again, or choose Silent, then go live.");
       return;
     }
     setSocialConnecting(true);
@@ -1083,31 +1162,54 @@ export function useBroadcastStudioEngine() {
       );
       const pc = await connectWhip(mixed, session.whipUrl);
       nodes.current.whip?.close();
-      nodes.current.whipStream?.getTracks().forEach((t) => t.stop());
+      stopOutgoing(nodes.current.whipStream);
       nodes.current.whip = pc;
       nodes.current.whipStream = mixed;
       setSocialPlatforms(session.platforms ?? []);
       setSocialLive(true);
     } catch (e) {
-      mixed.getTracks().forEach((t) => t.stop());
+      stopOutgoing(mixed);
       setSocialLive(false);
       setError((e as Error).message || "Could not go live to social.");
     } finally {
       setSocialConnecting(false);
     }
-  }, [programmeMix]);
+  }, [programmeMix, stopOutgoing]);
 
   const syncSocialPlatforms = useCallback((platforms: string[]) => {
     setSocialPlatforms(platforms);
   }, []);
 
   const goLiveToAir = useCallback(async () => {
-    if (statusRef.current !== "live") {
-      await start();
-    }
+    await runStudioOp(async () => {
+      if (statusRef.current !== "live") {
+        setError(null);
+        stopGraph(false);
+        try {
+          await applyProgramSources();
+          await ensureLiveProgrammeDest();
+          startMonitors();
+          statusRef.current = "live";
+          setStatus("live");
+          setElapsedSec(0);
+        } catch (e) {
+          stopGraph(false);
+          statusRef.current = "error";
+          setStatus("error");
+          setError(studioStartMessage(e));
+        }
+      }
+    });
     if (statusRef.current !== "live") return;
     await startSocialLive();
-  }, [start, startSocialLive]);
+  }, [
+    applyProgramSources,
+    ensureLiveProgrammeDest,
+    runStudioOp,
+    startMonitors,
+    startSocialLive,
+    stopGraph,
+  ]);
 
   const paintIdlePreview = useCallback(() => {
     if (statusRef.current === "live") return;
@@ -1570,8 +1672,15 @@ export function BroadcastStudioProvider({ children }: { children: ReactNode }) {
     <BroadcastStudioContext.Provider value={studio}>
       <audio ref={studio.programmeAudioRef} className="hidden" />
       <video ref={studio.videoRef} className="hidden" playsInline muted />
-      <video ref={studio.fileVideoRef} className="hidden" playsInline />
-      <audio ref={studio.fileAudioRef} className="hidden" />
+      <video
+        ref={studio.fileVideoRef}
+        playsInline
+        className="pointer-events-none fixed left-[-2000px] top-0 h-px w-px"
+      />
+      <audio
+        ref={studio.fileAudioRef}
+        className="pointer-events-none fixed left-[-2000px] top-0 h-px w-px"
+      />
       <img ref={studio.stillImageRef} alt="" className="hidden" />
       <canvas
         ref={studio.captureCanvasRef}

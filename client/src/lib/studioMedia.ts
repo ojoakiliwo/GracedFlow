@@ -148,6 +148,16 @@ export function audioOnlyPicture(current: PictureKind): PictureKind {
   return current === "camera" ? "black" : current;
 }
 
+export function isLiveAudioTrack(track: { kind: string; readyState: string }): boolean {
+  return track.kind === "audio" && track.readyState === "live";
+}
+
+/** Outgoing WHIP/record streams must not stop Program destination tracks. */
+export function tracksToStop<T>(tracks: T[], preserve: Iterable<T>): T[] {
+  const keep = new Set(preserve);
+  return tracks.filter((track) => !keep.has(track));
+}
+
 export function ensureStudioCanvas(canvas: HTMLCanvasElement) {
   if (canvas.width < 960 || canvas.height < 540) {
     canvas.width = 1280;

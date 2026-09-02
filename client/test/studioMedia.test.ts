@@ -13,6 +13,8 @@ import {
   shouldAdaptExposure,
   shouldMirrorPicture,
   soundKindLabel,
+  isLiveAudioTrack,
+  tracksToStop,
 } from "../src/lib/studioMedia";
 
 describe("Recorded media room", () => {
@@ -89,6 +91,14 @@ describe("Recorded media room", () => {
     expect(shouldMirrorPicture("file-video", true)).toBe(false);
     expect(shouldAdaptExposure("camera")).toBe(true);
     expect(shouldAdaptExposure("still")).toBe(false);
+  });
+
+  it("keeps Program destination audio when an outgoing mix is torn down", () => {
+    const dest = { kind: "audio", readyState: "live", id: "dest" };
+    const clone = { kind: "audio", readyState: "live", id: "clone" };
+    const picture = { kind: "video", readyState: "live", id: "pic" };
+    expect(isLiveAudioTrack(dest)).toBe(true);
+    expect(tracksToStop([picture, dest, clone], [dest])).toEqual([picture, clone]);
   });
 
   it("labels sources for the operator", () => {

@@ -140,8 +140,8 @@ export default function StudioMedia() {
           <p className="mt-1 text-sm text-ink-100">Sound: {soundKindLabel(s.soundKind)}</p>
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">
             {hasMediaOnProgram
-              ? "This room is driving Program. Destinations still send whatever is here."
-              : "Choose a file below, then send picture, sound, or both. Each one can go independently."}
+              ? "This file is already on Program. Click Go live to send it to Facebook and the other destinations — there is no Start capture step here."
+              : "Choose a file below, then send picture, sound, or both. That puts it on Program. Then click Go live."}
           </p>
           <label className="mt-3 flex items-center gap-2 text-sm text-ink-200">
             <input
