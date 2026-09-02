@@ -2,49 +2,45 @@ export const PROGRAM_OUTPUT_NAME = "igc-program";
 export const PROGRAM_OUTPUT_TITLE = "IGC Program";
 
 export function prepareProgramOutputDocument(doc: Document): HTMLCanvasElement {
-  doc.title = PROGRAM_OUTPUT_TITLE;
-  const body = doc.body;
-  body.style.margin = "0";
-  body.style.background = "#000";
-  body.style.overflow = "hidden";
-  let canvas = doc.getElementById("igc-program") as HTMLCanvasElement | null;
-  if (!canvas) {
-    body.replaceChildren();
-    canvas = doc.createElement("canvas");
-    canvas.id = "igc-program";
-    canvas.width = 1280;
-    canvas.height = 720;
-    canvas.style.display = "block";
-    canvas.style.width = "100vw";
-    canvas.style.height = "100vh";
-    canvas.style.objectFit = "contain";
-    canvas.style.background = "#000";
-    body.appendChild(canvas);
-  }
-  return canvas;
+  doc.open();
+  doc.write(`<!doctype html>
+<title>${PROGRAM_OUTPUT_TITLE}</title>
+<style>
+  html, body { margin: 0; background: #000; height: 100%; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; object-fit: contain; background: #000; }
+</style>
+<canvas id="igc-program" width="1280" height="720"></canvas>`);
+  doc.close();
+  return doc.getElementById("igc-program") as HTMLCanvasElement;
 }
 
 export function openProgramOutputWindow(existing?: Window | null): Window | null {
   if (typeof window === "undefined") return null;
   if (existing && !existing.closed) {
     existing.focus();
-    prepareProgramOutputDocument(existing.document);
+    if (!existing.document.getElementById("igc-program")) {
+      prepareProgramOutputDocument(existing.document);
+    }
     return existing;
   }
   const next = window.open(
-    "about:blank",
+    "",
     PROGRAM_OUTPUT_NAME,
     "popup=yes,width=1280,height=720,menubar=no,toolbar=no,location=no,status=no",
   );
   if (!next) return null;
   prepareProgramOutputDocument(next.document);
+  next.addEventListener("load", () => {
+    if (!next.document.getElementById("igc-program")) prepareProgramOutputDocument(next.document);
+  });
   return next;
 }
 
 export function paintProgramOutputWindow(win: Window | null | undefined, source: HTMLCanvasElement | null): boolean {
-  if (!win || win.closed || !source) return false;
-  const dest = win.document.getElementById("igc-program") as HTMLCanvasElement | null;
-  if (!dest) return false;
+  if (!win || win.closed) return false;
+  let dest = win.document.getElementById("igc-program") as HTMLCanvasElement | null;
+  if (!dest) dest = prepareProgramOutputDocument(win.document);
+  if (!dest || !source) return Boolean(dest);
   const ctx = dest.getContext("2d");
   if (!ctx) return false;
   ctx.drawImage(source, 0, 0, dest.width, dest.height);

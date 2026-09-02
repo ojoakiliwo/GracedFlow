@@ -530,9 +530,14 @@ export function useBroadcastStudioEngine() {
     paintStudioMonitor(previewCanvasRef.current, frame, overlayRef.current, lookNow, auto, true);
     paintStudioMonitor(canvasRef.current, frame, programOverlayRef.current, lookNow, auto, false);
     kickCanvasFrames(nodes.current.whipStream);
-    if (programOutputRef.current && !paintProgramOutputWindow(programOutputRef.current, captureCanvasRef.current || canvasRef.current)) {
-      programOutputRef.current = null;
-      setProgramOutputOpen(false);
+    const out = programOutputRef.current;
+    if (out) {
+      if (out.closed) {
+        programOutputRef.current = null;
+        setProgramOutputOpen(false);
+      } else {
+        paintProgramOutputWindow(out, captureCanvasRef.current || canvasRef.current);
+      }
     }
     n.raf = requestAnimationFrame(paint);
   }, [currentFrame]);
@@ -1379,9 +1384,14 @@ export function useBroadcastStudioEngine() {
     paintStudioMonitor(captureCanvasRef.current, frame, programOverlayRef.current, lookNow, auto, false);
     paintStudioMonitor(previewCanvasRef.current, frame, overlayRef.current, lookNow, auto, true);
     paintStudioMonitor(canvasRef.current, frame, programOverlayRef.current, lookNow, auto, false);
-    if (programOutputRef.current && !paintProgramOutputWindow(programOutputRef.current, captureCanvasRef.current || canvasRef.current)) {
-      programOutputRef.current = null;
-      setProgramOutputOpen(false);
+    const out = programOutputRef.current;
+    if (out) {
+      if (out.closed) {
+        programOutputRef.current = null;
+        setProgramOutputOpen(false);
+      } else {
+        paintProgramOutputWindow(out, captureCanvasRef.current || canvasRef.current);
+      }
     }
   }, [currentFrame]);
 
