@@ -87,7 +87,7 @@ export function soundKindLabel(kind: SoundKind): string {
   if (kind === "file-audio") return "Recorded audio";
   if (kind === "file-video") return "Video soundtrack";
   if (kind === "silent") return "Silent";
-  return "Desk microphone";
+  return "Selected audio input";
 }
 
 export function formatClipClock(sec: number): string {

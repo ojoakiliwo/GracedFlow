@@ -107,6 +107,7 @@ describe("Recorded media room", () => {
     expect(pictureKindLabel("file-video")).toBe("Recorded video");
     expect(soundKindLabel("file-audio")).toBe("Recorded audio");
     expect(soundKindLabel("silent")).toBe("Silent");
+    expect(soundKindLabel("mic")).toBe("Selected audio input");
     expect(formatClipClock(125)).toBe("02:05");
     expect(formatClipClock(-1)).toBe("00:00");
     expect(PROGRAM_AUDIO_MISSING).toMatch(/any audio input/i);
