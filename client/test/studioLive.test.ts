@@ -262,6 +262,31 @@ describe("WHIP ICE wait", () => {
     await expect(captureProgrammeStream({} as HTMLCanvasElement)).rejects.toThrow(/Chrome or Edge/);
   });
 
+  it("plays the canvas stream in the Program pump before sending", async () => {
+    const rawTrack = {
+      kind: "video",
+      enabled: false,
+      applyConstraints: vi.fn().mockResolvedValue(undefined),
+    };
+    const raw = { getVideoTracks: () => [rawTrack] } as unknown as MediaStream;
+    const pumped = { getVideoTracks: () => [{ kind: "video", enabled: true }] } as unknown as MediaStream;
+    const canvas = { captureStream: vi.fn().mockReturnValue(raw) } as unknown as HTMLCanvasElement;
+    const recapture = vi.fn().mockReturnValue(pumped);
+    const pump = {
+      play: vi.fn().mockResolvedValue(undefined),
+      captureStream: recapture,
+    } as unknown as HTMLVideoElement;
+
+    const out = await captureProgrammeStream(canvas, pump);
+    expect(canvas.captureStream).toHaveBeenCalledWith(30);
+    expect(pump.play).toHaveBeenCalled();
+    expect(recapture).toHaveBeenCalledWith(30);
+    expect(out).toBe(pumped);
+    expect(rawTrack.enabled).toBe(true);
+    expect(pump.srcObject).toBe(raw);
+    expect(pump.muted).toBe(true);
+  });
+
   it("waits until ICE is connected before treating WHIP as live", async () => {
     expect(
       iceIsConnected({ iceConnectionState: "checking", connectionState: "connecting" } as RTCPeerConnection),
