@@ -1956,15 +1956,22 @@ export function BroadcastStudioProvider({ children }: { children: ReactNode }) {
         playsInline
         autoPlay
         aria-hidden
-        className="pointer-events-none fixed bottom-4 left-4 z-20 h-2 w-3 opacity-[0.05] lg:left-[19rem]"
+        className="pointer-events-none fixed bottom-4 right-4 z-20 h-2 w-3 opacity-[0.05]"
       />
-      <canvas
-        ref={studio.captureCanvasRef}
-        width={1280}
-        height={720}
+      <div
         aria-hidden
-        className="pointer-events-none fixed bottom-4 left-4 z-20 h-[90px] w-[160px] rounded border-2 border-amber-300 bg-black opacity-80 [transform:translateZ(0)] lg:left-[19rem]"
-      />
+        className="pointer-events-none fixed bottom-4 right-4 z-20 overflow-hidden rounded border-2 border-amber-300 bg-black shadow-lg"
+      >
+        <p className="bg-amber-300 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-black">
+          Program
+        </p>
+        <canvas
+          ref={studio.captureCanvasRef}
+          width={1280}
+          height={720}
+          className="block h-[90px] w-[160px] [transform:translateZ(0)]"
+        />
+      </div>
       {children}
     </BroadcastStudioContext.Provider>
   );
