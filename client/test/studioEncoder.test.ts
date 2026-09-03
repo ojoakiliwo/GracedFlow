@@ -31,6 +31,8 @@ describe("IGC Encoder", () => {
     const bat = windowsGoLiveBat(targets);
     expect(bat).toContain("winget install Gyan.FFmpeg");
     expect(bat).toContain("OpenFileDialog");
+    expect(bat).toContain("powershell -STA");
+    expect(bat).toContain("drag the video onto");
     expect(bat).toContain('ffmpeg -hide_banner -re -i "%VIDEO%"');
     expect(bat).toContain("YouTube, Facebook");
     expect(bat).toContain("-map 0:v:0");

@@ -82,22 +82,27 @@ export default function StudioEncoder() {
 
       <div className="grid gap-3 lg:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-[#14161d] p-4">
-          <h2 className="text-sm font-semibold text-white">This is the OBS-kind app we can ship</h2>
+          <h2 className="text-sm font-semibold text-white">What should happen</h2>
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-ink-300">
             <li>
-              Install FFmpeg once on this church computer. Windows:{" "}
-              <code className="rounded bg-black/40 px-1 text-gold-300">winget install Gyan.FFmpeg</code>
-              . Mac: <code className="rounded bg-black/40 px-1 text-gold-300">brew install ffmpeg</code>.
-            </li>
-            <li>Turn On Destinations with keys, Save, then come back here.</li>
-            <li>
-              Download IGC Encoder again after a site refresh so the Windows file includes the stream
-              map. Double-click it and pick the recording, or drag the video onto the file. For a live
-              camera, download the camera encoder and type the device names it lists.
+              Click <strong className="text-ink-100">Stop</strong> on Broadcast studio if it says On
+              air. That desk is not YouTube.
             </li>
             <li>
-              YouTube must already be waiting for an encoder. Facebook Live Producer must be open; click{" "}
-              <strong className="text-ink-100">Go live on Facebook</strong> after the preview appears.
+              Download <strong className="text-ink-100">Windows — recorded file</strong> once. Do not
+              click Run inside Chrome.
+            </li>
+            <li>
+              Open File Explorer → Downloads. Drag your video onto{" "}
+              <code className="rounded bg-black/40 px-1 text-gold-300">igc-go-live.bat</code>. Or
+              double-click the .bat; if a file window opens, pick the video. If you only see Press any
+              key, the picker is behind Chrome — minimize Chrome or use drag-and-drop.
+            </li>
+            <li>
+              A black window titled IGC Encoder must stay open for the whole video and show{" "}
+              <code className="rounded bg-black/40 px-1 text-gold-300">frame=</code> numbers counting.
+              YouTube must already be waiting for an encoder. Facebook Live Producer: click Go live on
+              Facebook after the preview appears.
             </li>
           </ol>
           <div className="mt-4 flex flex-wrap gap-2">
