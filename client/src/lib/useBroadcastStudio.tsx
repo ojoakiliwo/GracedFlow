@@ -68,6 +68,15 @@ import {
   waitTwoAnimationFrames,
   type WhipIceServer,
 } from "./studioWhip";
+import {
+  loadStudioOutputId,
+  nextLowerStudioOutput,
+  saveStudioOutputId,
+  studioOutput,
+  whipEncodeFromOutput,
+  type StudioOutput,
+  type StudioOutputId,
+} from "./studioOutput";
 import { openProgramOutputWindow, paintProgramOutputWindow } from "./studioProgramOutput";
 import type { RestreamHealth } from "./studioLive";
 import {
@@ -221,6 +230,7 @@ export function useBroadcastStudioEngine() {
   const listenRef = useRef(false);
   const musicFilterRef = useRef(false);
   const soundSettingsRef = useRef<StudioSoundSettings>(loadSoundSettings());
+  const outputRef = useRef<StudioOutput>(studioOutput(loadStudioOutputId()));
   const liveVerseRef = useRef<BibleHit | null>(null);
   const recognitionRef = useRef<StudioSpeechRecognition | null>(null);
   const nodes = useRef<{
@@ -300,6 +310,7 @@ export function useBroadcastStudioEngine() {
   const [selectedVerseRefs, setSelectedVerseRefs] = useState<string[]>([]);
   const [musicFilter, setMusicFilterState] = useState(false);
   const [soundSettings, setSoundSettingsState] = useState<StudioSoundSettings>(() => loadSoundSettings());
+  const [outputId, setOutputIdState] = useState<StudioOutputId>(() => loadStudioOutputId());
   const [liveVerse, setLiveVerse] = useState<BibleHit | null>(null);
   const [steppingVerse, setSteppingVerse] = useState(false);
   const [pictureKind, setPictureKindState] = useState<PictureKind>("camera");
@@ -324,6 +335,7 @@ export function useBroadcastStudioEngine() {
   monitorRef.current = monitor;
   musicFilterRef.current = musicFilter;
   soundSettingsRef.current = soundSettings;
+  outputRef.current = studioOutput(outputId);
   pictureKindRef.current = pictureKind;
   soundKindRef.current = soundKind;
   videoClipRef.current = videoClip;
@@ -807,14 +819,19 @@ export function useBroadcastStudioEngine() {
   );
 
   const sizeProgramCanvases = useCallback(() => {
+    const out = outputRef.current;
     for (const canvas of [captureCanvasRef.current, canvasRef.current, previewCanvasRef.current]) {
-      if (canvas) {
-        canvas.width = 1280;
-        canvas.height = 720;
-        ensureStudioCanvas(canvas);
-      }
+      if (canvas) ensureStudioCanvas(canvas, { width: out.width, height: out.height });
     }
   }, []);
+
+  const setOutputId = useCallback((id: StudioOutputId) => {
+    const next = studioOutput(id);
+    outputRef.current = next;
+    setOutputIdState(next.id);
+    saveStudioOutputId(next.id);
+    sizeProgramCanvases();
+  }, [sizeProgramCanvases]);
 
   const startMonitors = useCallback(() => {
     const n = nodes.current;
@@ -1141,7 +1158,7 @@ export function useBroadcastStudioEngine() {
           // Gesture already happened on Go live; play can still be blocked.
         }
       }
-      mixed = capturePlayingVideo(el);
+      mixed = capturePlayingVideo(el, outputRef.current.fps);
     } else if (picture === "camera") {
       mixed = cloneLiveVideoStream(nodes.current.rawVideo);
     }
@@ -1149,7 +1166,21 @@ export function useBroadcastStudioEngine() {
     if (!mixed || mixed.getVideoTracks().length === 0) {
       const canvas = captureCanvasRef.current || canvasRef.current;
       if (!canvas) return null;
-      mixed = await captureProgrammeStream(canvas, capturePumpRef.current);
+      const out = outputRef.current;
+      mixed = await captureProgrammeStream(canvas, capturePumpRef.current, {
+        width: out.width,
+        height: out.height,
+        fps: out.fps,
+      });
+    }
+
+    const out = outputRef.current;
+    for (const track of mixed.getVideoTracks()) {
+      try {
+        await track.applyConstraints({ width: out.width, height: out.height, frameRate: out.fps });
+      } catch {
+        // File and camera tracks may ignore size constraints.
+      }
     }
 
     const audioTracks = dest.stream.getAudioTracks().filter(isLiveAudioTrack);
@@ -1325,7 +1356,7 @@ export function useBroadcastStudioEngine() {
     setSocialConnecting(true);
     setError(null);
     setRestreamHealth(null);
-    const openSession = async (stream: MediaStream) => {
+    const openSession = async (stream: MediaStream, encode = whipEncodeFromOutput(outputRef.current)) => {
       const session = await apiPost<{
         mode: string;
         whipUrl: string;
@@ -1338,7 +1369,7 @@ export function useBroadcastStudioEngine() {
           whipUrl: session.whipUrl,
         });
         return answer.sdp;
-      });
+      }, encode);
       return { session, pc };
     };
     let stream = mixed;
@@ -1348,12 +1379,15 @@ export function useBroadcastStudioEngine() {
         opened = await openSession(stream);
       } catch (first) {
         if ((first as Error).message !== NO_PROGRAM_PACKETS) throw first;
+        const lower = nextLowerStudioOutput(outputRef.current.id);
+        if (!lower) throw first;
+        setOutputId(lower.id);
         stopOutgoing(stream);
         detachProgrammePump(capturePumpRef.current);
         const again = await programmeMix();
         if (!again || again.getVideoTracks().length === 0) throw first;
         stream = again;
-        opened = await openSession(stream);
+        opened = await openSession(stream, whipEncodeFromOutput(lower));
       }
       const { session, pc } = opened;
       nodes.current.whip?.close();
@@ -1393,7 +1427,7 @@ export function useBroadcastStudioEngine() {
     } finally {
       setSocialConnecting(false);
     }
-  }, [programmeMix, stopOutgoing]);
+  }, [programmeMix, setOutputId, stopOutgoing]);
 
   const syncSocialPlatforms = useCallback((platforms: string[]) => {
     setSocialPlatforms(platforms);
@@ -1900,6 +1934,8 @@ export function useBroadcastStudioEngine() {
     setSoundAuto,
     setAudioPreset,
     setReverb,
+    outputId,
+    setOutputId,
     listening,
     postingVerse,
     searchingQuotes,

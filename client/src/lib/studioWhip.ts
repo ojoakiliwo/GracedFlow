@@ -140,6 +140,19 @@ export function preferH264InSdp(sdp: string): string {
   return lines.join("\r\n");
 }
 
+export type WhipEncode = {
+  maxBitrate: number;
+  maxFramerate: number;
+  scaleResolutionDownBy?: number;
+  preferH264?: boolean;
+};
+
+export const DEFAULT_WHIP_ENCODE: WhipEncode = {
+  maxBitrate: 2_500_000,
+  maxFramerate: 30,
+  preferH264: true,
+};
+
 export function outboundRtpBytes(
   stats: {
     values: () => Iterable<{
@@ -147,6 +160,7 @@ export function outboundRtpBytes(
       bytesSent?: number;
       packetsSent?: number;
       framesEncoded?: number;
+      framesSent?: number;
     }>;
   },
 ): number {
@@ -156,6 +170,7 @@ export function outboundRtpBytes(
     n += row.bytesSent ?? 0;
     n += row.packetsSent ?? 0;
     n += row.framesEncoded ?? 0;
+    n += row.framesSent ?? 0;
   }
   return n;
 }
@@ -177,7 +192,7 @@ export async function waitForOutboundRtp(pc: RTCPeerConnection, timeoutMs = 8000
 }
 
 export const NO_PROGRAM_PACKETS =
-  "This computer connected to Livepeer but sent 0 video packets. Keep the recorded file or camera playing on this page in Chrome or Edge, then End live and Go live again. YouTube and Facebook stay dark until packets leave this computer.";
+  "This computer connected to Livepeer but sent 0 video packets. Set Output to Low · 360p, keep the recorded file or camera playing on this page in Chrome or Edge, then End live and Go live again. YouTube and Facebook stay dark until packets leave this computer.";
 
 export async function waitTwoAnimationFrames(): Promise<void> {
   const raf = globalThis.requestAnimationFrame;
@@ -241,14 +256,17 @@ function mediaStreamFromTracks(tracks: MediaStreamTrack[]): MediaStream {
 }
 
 /** Capture the playing file itself. OBS-style media source; canvas.captureStream is the fallback. */
-export function capturePlayingVideo(el: HTMLVideoElement | null | undefined): MediaStream | null {
+export function capturePlayingVideo(
+  el: HTMLVideoElement | null | undefined,
+  fps = 30,
+): MediaStream | null {
   if (!el || el.readyState < 2) return null;
   const capture =
     (el as HTMLVideoElement & { captureStream?: (fps?: number) => MediaStream }).captureStream ??
     (el as HTMLVideoElement & { mozCaptureStream?: (fps?: number) => MediaStream }).mozCaptureStream;
   if (typeof capture !== "function") return null;
   try {
-    const stream = capture.call(el, 30);
+    const stream = capture.call(el, fps);
     const video = stream.getVideoTracks().filter((track) => track.readyState === "live");
     if (video.length === 0) return null;
     for (const track of stream.getAudioTracks()) {
@@ -282,16 +300,22 @@ export function cloneLiveVideoStream(stream?: MediaStream | null): MediaStream |
 export async function captureProgrammeStream(
   canvas: HTMLCanvasElement,
   pump?: HTMLVideoElement | null,
+  size?: { width: number; height: number; fps: number },
 ): Promise<MediaStream> {
   await waitTwoAnimationFrames();
   if (typeof canvas.captureStream !== "function") {
     throw new Error("This browser cannot send Program video. Use Chrome or Edge on this desk.");
   }
-  const raw = canvas.captureStream(30);
+  const fps = size?.fps ?? 30;
+  const raw = canvas.captureStream(fps);
   kickVideoTracks(raw);
   for (const track of raw.getVideoTracks()) {
     try {
-      await track.applyConstraints({ width: 1280, height: 720, frameRate: 30 });
+      await track.applyConstraints({
+        width: size?.width ?? 1280,
+        height: size?.height ?? 720,
+        frameRate: fps,
+      });
     } catch {
       // Canvas tracks often ignore applyConstraints.
     }
@@ -313,7 +337,7 @@ export async function captureProgrammeStream(
     const recapture = (el as HTMLVideoElement & { captureStream?: (fps?: number) => MediaStream }).captureStream;
     if (typeof recapture === "function") {
       try {
-        const fromVideo = recapture.call(el, 30);
+        const fromVideo = recapture.call(el, fps);
         if (fromVideo.getVideoTracks().length > 0) {
           captureSources.set(fromVideo, raw);
           kickVideoTracks(fromVideo);
@@ -371,6 +395,25 @@ export function kickCanvasFrames(stream: MediaStream | undefined) {
   if (raw) kickVideoTracks(raw);
 }
 
+async function applyVideoEncode(pc: RTCPeerConnection, encode: WhipEncode) {
+  for (const sender of pc.getSenders()) {
+    if (sender.track?.kind !== "video") continue;
+    try {
+      const params = sender.getParameters();
+      if (!params.encodings?.length) params.encodings = [{}];
+      params.encodings[0] = {
+        ...params.encodings[0],
+        maxBitrate: encode.maxBitrate,
+        maxFramerate: encode.maxFramerate,
+        ...(encode.scaleResolutionDownBy ? { scaleResolutionDownBy: encode.scaleResolutionDownBy } : {}),
+      };
+      await sender.setParameters(params);
+    } catch {
+      // Some browsers reject encodings until ICE has a selected pair.
+    }
+  }
+}
+
 async function negotiateWhip(
   stream: MediaStream,
   url: string,
@@ -378,6 +421,7 @@ async function negotiateWhip(
   servers: WhipIceServer[],
   iceTransportPolicy: RTCIceTransportPolicy,
   postOffer?: (sdp: string) => Promise<string>,
+  encode: WhipEncode = DEFAULT_WHIP_ENCODE,
 ): Promise<RTCPeerConnection> {
   kickCanvasFrames(stream);
   const pc = new RTCPeerConnection({
@@ -388,7 +432,13 @@ async function negotiateWhip(
   for (const track of stream.getTracks()) {
     const init: RTCRtpTransceiverInit = { direction: "sendonly" };
     if (track.kind === "video") {
-      init.sendEncodings = [{ maxBitrate: 2_500_000, maxFramerate: 30 }];
+      init.sendEncodings = [
+        {
+          maxBitrate: encode.maxBitrate,
+          maxFramerate: encode.maxFramerate,
+          ...(encode.scaleResolutionDownBy ? { scaleResolutionDownBy: encode.scaleResolutionDownBy } : {}),
+        },
+      ];
     }
     let transceiver: RTCRtpTransceiver;
     try {
@@ -396,12 +446,15 @@ async function negotiateWhip(
     } catch {
       transceiver = pc.addTransceiver(track, { direction: "sendonly" });
     }
-    if (track.kind === "video") preferVideoH264(transceiver);
+    if (track.kind === "video" && encode.preferH264 !== false) preferVideoH264(transceiver);
   }
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   await waitForIce(pc, 5000);
-  const sdp = preferH264InSdp(pc.localDescription?.sdp || "");
+  const sdp =
+    encode.preferH264 === false
+      ? pc.localDescription?.sdp || ""
+      : preferH264InSdp(pc.localDescription?.sdp || "");
   if (!sdp.startsWith("v=")) {
     pc.close();
     throw new Error("Could not create a live offer.");
@@ -440,6 +493,7 @@ async function negotiateWhip(
     pc.close();
     throw e;
   }
+  await applyVideoEncode(pc, encode);
   return pc;
 }
 
@@ -448,6 +502,7 @@ export async function connectWhip(
   whipUrl: string,
   iceServers?: WhipIceServer[],
   postOffer?: (sdp: string) => Promise<string>,
+  encode: WhipEncode = DEFAULT_WHIP_ENCODE,
 ): Promise<RTCPeerConnection> {
   let url = whipUrl;
   let host = "";
@@ -469,29 +524,50 @@ export async function connectWhip(
     iceServersForWhipHost(host || new URL(url).hostname),
     iceServers ?? [],
   );
-  const tryPolicy = async (policy: RTCIceTransportPolicy) => {
-    const pc = await negotiateWhip(stream, url, whipUrl, servers, policy, postOffer);
-    const sending = await waitForOutboundRtp(pc, 4500);
-    return { pc, sending };
-  };
+  const attempts: { policy: RTCIceTransportPolicy; encode: WhipEncode; waitMs: number }[] = [
+    { policy: "all", encode, waitMs: 5000 },
+    { policy: "relay", encode, waitMs: 4000 },
+    {
+      policy: "relay",
+      encode: {
+        ...encode,
+        maxBitrate: Math.min(encode.maxBitrate, 1_200_000),
+        scaleResolutionDownBy: Math.max(encode.scaleResolutionDownBy ?? 1, 2),
+      },
+      waitMs: 3500,
+    },
+    {
+      policy: "relay",
+      encode: {
+        maxBitrate: 600_000,
+        maxFramerate: 24,
+        scaleResolutionDownBy: 4,
+        preferH264: false,
+      },
+      waitMs: 3500,
+    },
+  ];
 
   let firstErr: unknown;
   let connectedWithoutPackets = false;
-  try {
-    const first = await tryPolicy("all");
-    if (first.sending) return first.pc;
-    first.pc.close();
-    connectedWithoutPackets = true;
-  } catch (e) {
-    firstErr = e;
+  for (const attempt of attempts) {
+    try {
+      const pc = await negotiateWhip(
+        stream,
+        url,
+        whipUrl,
+        servers,
+        attempt.policy,
+        postOffer,
+        attempt.encode,
+      );
+      if (await waitForOutboundRtp(pc, attempt.waitMs)) return pc;
+      pc.close();
+      connectedWithoutPackets = true;
+    } catch (e) {
+      firstErr ??= e;
+    }
   }
-  try {
-    const second = await tryPolicy("relay");
-    if (second.sending) return second.pc;
-    second.pc.close();
-    throw new Error(NO_PROGRAM_PACKETS);
-  } catch (e) {
-    if (connectedWithoutPackets) throw new Error(NO_PROGRAM_PACKETS);
-    throw firstErr || e;
-  }
+  if (connectedWithoutPackets) throw new Error(NO_PROGRAM_PACKETS);
+  throw firstErr || new Error(NO_PROGRAM_PACKETS);
 }

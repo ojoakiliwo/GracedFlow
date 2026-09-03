@@ -11,6 +11,7 @@ import {
   Square,
 } from "lucide-react";
 import { Badge, Button } from "../../components/ui";
+import { StudioOutputSelect } from "../../components/StudioOutputSelect";
 import { useBroadcastStudio } from "../../lib/useBroadcastStudio";
 import {
   formatClipClock,
@@ -101,6 +102,11 @@ export default function StudioMedia() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <StudioOutputSelect
+            value={s.outputId}
+            onChange={s.setOutputId}
+            disabled={s.socialConnecting || busy}
+          />
           {s.socialLive ? (
             <Button variant="danger" size="sm" onClick={s.stopSocialLive}>
               <Square className="h-4 w-4" /> End live

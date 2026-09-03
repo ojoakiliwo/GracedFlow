@@ -15,6 +15,7 @@ import {
   soundKindLabel,
   isLiveAudioTrack,
   tracksToStop,
+  ensureStudioCanvas,
   PROGRAM_AUDIO_MISSING,
   RECORDING_AUDIO_MISSING,
 } from "../src/lib/studioMedia";
@@ -113,5 +114,14 @@ describe("Recorded media room", () => {
     expect(PROGRAM_AUDIO_MISSING).toMatch(/any audio input/i);
     expect(PROGRAM_AUDIO_MISSING).not.toMatch(/Yamaha/i);
     expect(RECORDING_AUDIO_MISSING).not.toMatch(/Yamaha/i);
+  });
+
+  it("keeps a Low 360p Program canvas instead of forcing 720p", () => {
+    const canvas = { width: 640, height: 360 } as HTMLCanvasElement;
+    ensureStudioCanvas(canvas);
+    expect(canvas.width).toBe(640);
+    expect(canvas.height).toBe(360);
+    ensureStudioCanvas(canvas, { width: 640, height: 360 });
+    expect(canvas.width).toBe(640);
   });
 });

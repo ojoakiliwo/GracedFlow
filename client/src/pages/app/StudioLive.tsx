@@ -9,6 +9,7 @@ import {
   Youtube,
 } from "lucide-react";
 import { Badge, Button, Input } from "../../components/ui";
+import { StudioOutputSelect } from "../../components/StudioOutputSelect";
 import { useToast } from "../../components/toast";
 import { useApi } from "../../lib/useApi";
 import { apiPut } from "../../lib/api";
@@ -192,7 +193,12 @@ export default function StudioLive() {
             {data?.restreamDetail ||
               "Turn On only platforms that have a key, then Go live from this desk."}
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <StudioOutputSelect
+              value={s.outputId}
+              onChange={s.setOutputId}
+              disabled={s.socialConnecting}
+            />
             {s.socialLive ? (
               <Button variant="danger" onClick={s.stopSocialLive}>
                 <Square className="h-4 w-4" /> End live
@@ -213,6 +219,10 @@ export default function StudioLive() {
             {data?.restream
               ? "Stay on this page while the file or camera plays. YouTube must already be waiting for encoder. Facebook Live Producer must be open; click Go live on Facebook after the preview appears. If this computer sends 0 packets, YouTube and Facebook stay dark — that is not a missing Facebook click."
               : "Ask an admin to set LIVEPEER_API_KEY on Vercel once, then redeploy. After that, Go live from this desk sends WebRTC to Livepeer, not RTMP like OBS."}
+          </p>
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+            Output is the size this computer encodes for Livepeer. If Go live says 0 packets, pick Low · 360p.
+            A quality setting cannot start a stream if Chrome never encodes a frame.
           </p>
         </div>
       </div>

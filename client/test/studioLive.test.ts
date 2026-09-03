@@ -27,6 +27,14 @@ import {
   waitForOutboundRtp,
   whipHostLooksRegional,
 } from "../src/lib/studioWhip";
+import {
+  loadStudioOutputId,
+  nextLowerStudioOutput,
+  saveStudioOutputId,
+  STUDIO_OUTPUT_KEY,
+  studioOutput,
+  whipEncodeFromOutput,
+} from "../src/lib/studioOutput";
 import { obsEncoderBlock, programOutputHtml } from "../src/lib/studioProgramOutput";
 
 function memoryStore(): Storage {
@@ -234,6 +242,11 @@ describe("WHIP ICE wait", () => {
         values: () => [{ type: "outbound-rtp", bytesSent: 0, packetsSent: 3, framesEncoded: 2 }],
       }),
     ).toBe(5);
+    expect(
+      outboundRtpBytes({
+        values: () => [{ type: "outbound-rtp", bytesSent: 0, framesSent: 8 }],
+      }),
+    ).toBe(8);
   });
 
   it("does not treat a getStats throw as zero Program frames", async () => {
@@ -335,6 +348,43 @@ describe("WHIP ICE wait", () => {
     } as unknown as RTCPeerConnection;
     const pending = waitForIceConnected(pc, 20);
     await expect(pending).rejects.toThrow(/Could not reach Livepeer/);
+  });
+});
+
+describe("Studio output to Livepeer", () => {
+  it("maps High Medium Low to encoder settings", () => {
+    expect(studioOutput("720p")).toMatchObject({ width: 1280, height: 720, maxBitrate: 2_500_000, fps: 30 });
+    expect(studioOutput("360p")).toMatchObject({ width: 640, height: 360, fps: 24 });
+    expect(nextLowerStudioOutput("720p")?.id).toBe("540p");
+    expect(nextLowerStudioOutput("540p")?.id).toBe("360p");
+    expect(nextLowerStudioOutput("360p")).toBeNull();
+    expect(whipEncodeFromOutput(studioOutput("360p"))).toMatchObject({
+      maxBitrate: 800_000,
+      maxFramerate: 24,
+      preferH264: true,
+    });
+  });
+
+  it("remembers the Output choice on this computer", () => {
+    const mem = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => mem.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        mem.set(key, value);
+      },
+      removeItem: (key: string) => {
+        mem.delete(key);
+      },
+      clear: () => mem.clear(),
+      key: () => null,
+      get length() {
+        return mem.size;
+      },
+    });
+    saveStudioOutputId("360p");
+    expect(JSON.parse(mem.get(STUDIO_OUTPUT_KEY)!)).toEqual({ id: "360p" });
+    expect(loadStudioOutputId()).toBe("360p");
+    vi.unstubAllGlobals();
   });
 });
 

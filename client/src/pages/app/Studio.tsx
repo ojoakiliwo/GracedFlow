@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useBroadcastStudio, type VideoLook } from "../../lib/useBroadcastStudio";
 import { Badge, Button, Input, Select, Textarea } from "../../components/ui";
+import { StudioOutputSelect } from "../../components/StudioOutputSelect";
 import {
   OVERLAY_DESIGNS,
   OVERLAY_PALETTES,
@@ -200,6 +201,11 @@ export default function Studio() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <StudioOutputSelect
+            value={s.outputId}
+            onChange={s.setOutputId}
+            disabled={s.socialConnecting}
+          />
           <Link
             to="/app/studio/live"
             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10"

@@ -164,8 +164,18 @@ export function tracksToStop<T>(tracks: T[], preserve: Iterable<T>): T[] {
   return tracks.filter((track) => !keep.has(track));
 }
 
-export function ensureStudioCanvas(canvas: HTMLCanvasElement) {
-  if (canvas.width < 960 || canvas.height < 540) {
+export function ensureStudioCanvas(
+  canvas: HTMLCanvasElement,
+  size?: { width: number; height: number },
+) {
+  if (size) {
+    if (canvas.width !== size.width || canvas.height !== size.height) {
+      canvas.width = size.width;
+      canvas.height = size.height;
+    }
+    return;
+  }
+  if (canvas.width < 2 || canvas.height < 2) {
     canvas.width = 1280;
     canvas.height = 720;
   }
