@@ -44,6 +44,8 @@ describe("IGC Encoder", () => {
     expect(bat).toContain("-map 0:v:0");
     expect(bat).toContain("-map \"0:a:0?\"");
     expect(bat).toContain("libx264");
+    expect(bat).toContain("IGC Encoder 3");
+    expect(bat).toContain("already running");
   });
 
   it("writes a Windows camera encoder that lists DirectShow devices", () => {
