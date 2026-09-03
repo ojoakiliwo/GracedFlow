@@ -91,8 +91,9 @@ export default function StudioEncoder() {
             </li>
             <li>Turn On Destinations with keys, Save, then come back here.</li>
             <li>
-              Download IGC Encoder. Double-click it and pick the recording, or drag the video onto the
-              file. For a live camera, download the camera encoder and type the device names it lists.
+              Download IGC Encoder again after a site refresh so the Windows file includes the stream
+              map. Double-click it and pick the recording, or drag the video onto the file. For a live
+              camera, download the camera encoder and type the device names it lists.
             </li>
             <li>
               YouTube must already be waiting for an encoder. Facebook Live Producer must be open; click{" "}

@@ -7,6 +7,8 @@ export type EncoderTarget = {
 const FFMPEG_VIDEO =
   "-c:v libx264 -preset veryfast -pix_fmt yuv420p -s 1280x720 -r 30 -g 60 -b:v 2500k -maxrate 2800k -bufsize 5000k";
 const FFMPEG_AUDIO = "-c:a aac -ar 44100 -ac 2 -b:a 160k";
+/** tee does not auto-select streams; without this FFmpeg says "Output file does not contain any stream". */
+const FFMPEG_MAP = '-map 0:v:0 -map "0:a:0?"';
 
 /** tee muxer treats `\ ' :` as control characters. */
 export function escapeFfmpegTeeUrl(url: string): string {
@@ -14,7 +16,7 @@ export function escapeFfmpegTeeUrl(url: string): string {
 }
 
 export function ffmpegTeeSpec(targets: EncoderTarget[]): string {
-  return targets.map((row) => `[f=flv]${escapeFfmpegTeeUrl(row.rtmp)}`).join("|");
+  return targets.map((row) => `[f=flv:onfail=ignore]${escapeFfmpegTeeUrl(row.rtmp)}`).join("|");
 }
 
 export function ffmpegGoLiveArgs(inputPath: string, targets: EncoderTarget[]): string[] {
@@ -28,6 +30,10 @@ export function ffmpegGoLiveArgs(inputPath: string, targets: EncoderTarget[]): s
     inputPath,
     ...FFMPEG_VIDEO.split(" "),
     ...FFMPEG_AUDIO.split(" "),
+    "-map",
+    "0:v:0",
+    "-map",
+    "0:a:0?",
     "-f",
     "tee",
     ffmpegTeeSpec(targets),
@@ -87,7 +93,7 @@ export function windowsGoLiveBat(targets: EncoderTarget[]): string {
     ")",
     "echo Starting IGC Encoder. Leave YouTube waiting for encoder. Open Facebook Live Producer.",
     "echo Stay in this window until the service ends.",
-    `ffmpeg -hide_banner -re -i "%VIDEO%" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} -f tee "${spec}"`,
+    `ffmpeg -hide_banner -re -i "%VIDEO%" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee "${spec}"`,
     "echo.",
     "echo Encoder stopped.",
     "pause",
@@ -123,9 +129,9 @@ export function windowsCameraBat(targets: EncoderTarget[]): string {
     ")",
     "echo Starting IGC Encoder. Leave YouTube waiting for encoder. Open Facebook Live Producer.",
     'if "%MIC%"=="" (',
-    `  ffmpeg -hide_banner -f dshow -rtbufsize 100M -i video="%CAM%" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} -f tee "${spec}"`,
+    `  ffmpeg -hide_banner -f dshow -rtbufsize 100M -i video="%CAM%" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee "${spec}"`,
     ") else (",
-    `  ffmpeg -hide_banner -f dshow -rtbufsize 100M -i video="%CAM%":audio="%MIC%" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} -f tee "${spec}"`,
+    `  ffmpeg -hide_banner -f dshow -rtbufsize 100M -i video="%CAM%":audio="%MIC%" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee "${spec}"`,
     ")",
     "echo.",
     "echo Encoder stopped.",
@@ -155,7 +161,7 @@ export function unixGoLiveScript(targets: EncoderTarget[]): string {
     "  exit 1",
     "fi",
     'echo "Starting IGC Encoder. Leave YouTube waiting for encoder. Open Facebook Live Producer."',
-    `ffmpeg -hide_banner -re -i "$FILE" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} -f tee '${spec}'`,
+    `ffmpeg -hide_banner -re -i "$FILE" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee '${spec}'`,
     "",
   ].join("\n");
 }
@@ -184,9 +190,9 @@ export function unixCameraScript(targets: EncoderTarget[]): string {
     "fi",
     'echo "Starting IGC Encoder. Leave YouTube waiting for encoder. Open Facebook Live Producer."',
     'if [ -z "$AUDIO_DEV" ]; then',
-    `  ffmpeg -hide_banner -f avfoundation -framerate 30 -i "$VIDEO_DEV" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} -f tee '${spec}'`,
+    `  ffmpeg -hide_banner -f avfoundation -framerate 30 -i "$VIDEO_DEV" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee '${spec}'`,
     "else",
-    `  ffmpeg -hide_banner -f avfoundation -framerate 30 -i "$VIDEO_DEV:$AUDIO_DEV" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} -f tee '${spec}'`,
+    `  ffmpeg -hide_banner -f avfoundation -framerate 30 -i "$VIDEO_DEV:$AUDIO_DEV" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee '${spec}'`,
     "fi",
     "",
   ].join("\n");

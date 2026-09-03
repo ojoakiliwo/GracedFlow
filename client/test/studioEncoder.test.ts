@@ -19,7 +19,10 @@ describe("IGC Encoder", () => {
     const cmd = ffmpegGoLiveCommand("sermon.mp4", targets);
     expect(cmd).toContain("ffmpeg -hide_banner -re -i sermon.mp4");
     expect(cmd).toContain("libx264");
+    expect(cmd).toContain("-map 0:v:0");
+    expect(cmd).toContain("-map 0:a:0?");
     expect(cmd).toContain("-f tee");
+    expect(ffmpegTeeSpec(targets)).toContain("[f=flv:onfail=ignore]");
     expect(ffmpegTeeSpec(targets)).toContain(escapeFfmpegTeeUrl(targets[0]!.rtmp));
     expect(ffmpegTeeSpec(targets)).toContain("|");
   });
@@ -30,6 +33,8 @@ describe("IGC Encoder", () => {
     expect(bat).toContain("OpenFileDialog");
     expect(bat).toContain('ffmpeg -hide_banner -re -i "%VIDEO%"');
     expect(bat).toContain("YouTube, Facebook");
+    expect(bat).toContain("-map 0:v:0");
+    expect(bat).toContain("-map \"0:a:0?\"");
     expect(bat).toContain("libx264");
   });
 
@@ -46,6 +51,7 @@ describe("IGC Encoder", () => {
     expect(sh.startsWith("#!/bin/sh")).toBe(true);
     expect(sh).toContain("brew install ffmpeg");
     expect(sh).toContain("choose file");
+    expect(sh).toContain("-map 0:v:0");
     expect(sh).toContain('ffmpeg -hide_banner -re -i "$FILE"');
   });
 
