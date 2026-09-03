@@ -232,6 +232,44 @@ describe("Studio livestream destinations", () => {
     expect(byId.tiktok).toContain("tiktok.com");
   });
 
+  it("gives IGC Encoder the RTMP URLs that OBS would use", async () => {
+    const save = await auth(request(app).put("/api/studio/live")).send({
+      destinations: [
+        {
+          platform: "youtube",
+          enabled: true,
+          ingestUrl: "rtmps://a.rtmps.youtube.com/live2",
+          streamKey: "yt-encoder-key",
+        },
+        {
+          platform: "facebook",
+          enabled: true,
+          ingestUrl: "rtmps://live-api-s.facebook.com:443/rtmp/",
+          streamKey: "fb-encoder-key",
+        },
+        { platform: "instagram", enabled: false, ingestUrl: "rtmps://live-upload.instagram.com:443/rtmp/", streamKey: "" },
+        { platform: "tiktok", enabled: false, ingestUrl: "", streamKey: "" },
+      ],
+    });
+    expect(save.status).toBe(200);
+    expect(JSON.stringify(save.body)).not.toContain("yt-encoder-key");
+
+    const encoder = await auth(request(app).get("/api/studio/live/encoder"));
+    expect(encoder.status).toBe(200);
+    expect(encoder.body.targets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ platform: "youtube", label: "YouTube", rtmp: expect.stringContaining("yt-encoder-key") }),
+        expect.objectContaining({ platform: "facebook", rtmp: expect.stringContaining("fb-encoder-key") }),
+      ]),
+    );
+
+    const listed = await auth(request(app).get("/api/studio/live"));
+    expect(JSON.stringify(listed.body)).not.toContain("yt-encoder-key");
+
+    const anon = await request(app).get("/api/studio/live/encoder");
+    expect(anon.status).toBe(401);
+  });
+
   it("saves a YouTube key, keeps it on a later save that sends a placeholder, and rejects a live session without a restreamer", async () => {
     const save = await auth(request(app).put("/api/studio/live")).send({
       destinations: [

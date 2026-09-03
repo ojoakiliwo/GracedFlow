@@ -4,6 +4,7 @@ import { authenticate, requireRole } from "../auth.js";
 import { audit } from "../util.js";
 import { asyncHandler, parseBody } from "./helpers.js";
 import {
+  encoderTargets,
   ensureWhipSession,
   listDestinationRows,
   publicDestinations,
@@ -57,6 +58,22 @@ studioRouter.put(
       restreamDetail: restreamDetail(),
       destinations: publicDestinations(rows),
       platforms,
+    });
+  }),
+);
+
+studioRouter.get(
+  "/live/encoder",
+  asyncHandler(async (req, res) => {
+    const rows = await listDestinationRows();
+    const targets = encoderTargets(rows);
+    audit("read", "studio_live", "encoder", req.user, {
+      platforms: targets.map((row) => row.platform),
+    });
+    res.json({
+      targets,
+      ffmpeg: "https://www.gyan.dev/ffmpeg/builds/",
+      winget: "winget install Gyan.FFmpeg",
     });
   }),
 );

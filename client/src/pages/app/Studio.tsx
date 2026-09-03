@@ -213,6 +213,12 @@ export default function Studio() {
             Destinations
           </Link>
           <Link
+            to="/app/studio/encoder"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10"
+          >
+            IGC Encoder
+          </Link>
+          <Link
             to="/app/studio/media"
             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10"
           >

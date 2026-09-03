@@ -1,0 +1,104 @@
+export type EncoderTarget = {
+  platform: string;
+  label: string;
+  rtmp: string;
+};
+
+const FFMPEG_VIDEO =
+  "-c:v libx264 -preset veryfast -pix_fmt yuv420p -s 1280x720 -r 30 -g 60 -b:v 2500k -maxrate 2800k -bufsize 5000k";
+const FFMPEG_AUDIO = "-c:a aac -ar 44100 -ac 2 -b:a 160k";
+
+/** tee muxer treats `\ ' :` as control characters. */
+export function escapeFfmpegTeeUrl(url: string): string {
+  return url.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/:/g, "\\:");
+}
+
+export function ffmpegTeeSpec(targets: EncoderTarget[]): string {
+  return targets.map((row) => `[f=flv]${escapeFfmpegTeeUrl(row.rtmp)}`).join("|");
+}
+
+export function ffmpegGoLiveArgs(inputPath: string, targets: EncoderTarget[]): string[] {
+  if (targets.length === 0) {
+    throw new Error("Turn On a destination with a key, Save, then download IGC Encoder again.");
+  }
+  return [
+    "-hide_banner",
+    "-re",
+    "-i",
+    inputPath,
+    ...FFMPEG_VIDEO.split(" "),
+    ...FFMPEG_AUDIO.split(" "),
+    "-f",
+    "tee",
+    ffmpegTeeSpec(targets),
+  ];
+}
+
+export function ffmpegGoLiveCommand(inputPath: string, targets: EncoderTarget[]): string {
+  return ["ffmpeg", ...ffmpegGoLiveArgs(inputPath, targets)].join(" ");
+}
+
+export function windowsGoLiveBat(targets: EncoderTarget[]): string {
+  const spec = ffmpegTeeSpec(targets);
+  const names = targets.map((row) => row.label).join(", ");
+  return [
+    "@echo off",
+    "title IGC Encoder",
+    "setlocal",
+    "where ffmpeg >nul 2>&1",
+    "if errorlevel 1 (",
+    "  echo Install FFmpeg first: winget install Gyan.FFmpeg",
+    "  echo Or download https://www.gyan.dev/ffmpeg/builds/ and add ffmpeg.exe to PATH.",
+    "  pause",
+    "  exit /b 1",
+    ")",
+    'if "%~1"=="" (',
+    "  echo IGC Encoder sends a recorded file to Live like OBS: it encodes on this computer and pushes RTMP.",
+    `  echo Destinations: ${names}`,
+    "  echo.",
+    "  echo Drag a video file onto this script, or:",
+    "  echo   igc-go-live.bat C:\\path\\sermon.mp4",
+    "  pause",
+    "  exit /b 1",
+    ")",
+    "echo Starting IGC Encoder. Leave YouTube waiting for encoder. Open Facebook Live Producer.",
+    "echo Stay in this window until the service ends.",
+    `ffmpeg -hide_banner -re -i "%~1" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} -f tee "${spec.replace(/%/g, "%%")}"`,
+    "echo.",
+    "echo Encoder stopped.",
+    "pause",
+    "",
+  ].join("\r\n");
+}
+
+export function unixGoLiveScript(targets: EncoderTarget[]): string {
+  const spec = ffmpegTeeSpec(targets);
+  const names = targets.map((row) => row.label).join(", ");
+  return [
+    "#!/bin/sh",
+    "set -e",
+    "if ! command -v ffmpeg >/dev/null 2>&1; then",
+    '  echo "Install FFmpeg first (brew install ffmpeg, or your package manager)."',
+    "  exit 1",
+    "fi",
+    'if [ -z "$1" ]; then',
+    '  echo "IGC Encoder sends a recorded file to Live like OBS: it encodes on this computer and pushes RTMP."',
+    `  echo "Destinations: ${names}"`,
+    '  echo "Usage: ./igc-go-live.sh /path/sermon.mp4"',
+    "  exit 1",
+    "fi",
+    'echo "Starting IGC Encoder. Leave YouTube waiting for encoder. Open Facebook Live Producer."',
+    `ffmpeg -hide_banner -re -i "$1" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} -f tee '${spec.replace(/'/g, "'\\''")}'`,
+    "",
+  ].join("\n");
+}
+
+export function downloadTextFile(name: string, body: string) {
+  const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
+}

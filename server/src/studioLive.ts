@@ -272,6 +272,21 @@ export function readyOutputs(rows: LiveDestinationRow[]): ReadyLiveOutput[] {
   return out;
 }
 
+export interface EncoderTarget {
+  platform: string;
+  label: string;
+  rtmp: string;
+}
+
+/** Full RTMP URLs for IGC Encoder (FFmpeg). Not included in the public Destinations list. */
+export function encoderTargets(rows: LiveDestinationRow[]): EncoderTarget[] {
+  return readyOutputs(rows).map((row) => ({
+    platform: row.platform,
+    label: platformById(row.platform)?.label ?? row.platform,
+    rtmp: rtmpTargetUrl(row.url, row.streamKey),
+  })).filter((row) => Boolean(row.rtmp));
+}
+
 export async function listDestinationRows(): Promise<LiveDestinationRow[]> {
   const existing = (await db
     .prepare(

@@ -157,6 +157,12 @@ export default function StudioLive() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/app/studio/encoder"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10"
+          >
+            IGC Encoder
+          </Link>
           <Badge color={live ? "red" : "gray"}>{live ? "Capture on" : "Standby"}</Badge>
           {s.socialLive ? <Badge color="red">Social live</Badge> : null}
         </div>
@@ -221,8 +227,8 @@ export default function StudioLive() {
               : "Ask an admin to set LIVEPEER_API_KEY on Vercel once, then redeploy. After that, Go live from this desk sends WebRTC to Livepeer, not RTMP like OBS."}
           </p>
           <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-            Output is the size this computer encodes for Livepeer. If Go live says 0 packets, pick Low · 360p.
-            A quality setting cannot start a stream if Chrome never encodes a frame.
+            Output is the size this computer encodes for Livepeer. If Go live says 0 packets, pick Low · 360p
+            or use IGC Encoder, which encodes the file on this computer like OBS.
           </p>
         </div>
       </div>
