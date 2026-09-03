@@ -7,7 +7,6 @@ import {
   Music,
   Pause,
   Play,
-  Radio,
   Square,
 } from "lucide-react";
 import { Badge, Button } from "../../components/ui";
@@ -117,18 +116,7 @@ export default function StudioMedia() {
             <Button variant="danger" size="sm" onClick={s.stopSocialLive}>
               <Square className="h-4 w-4" /> End live
             </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="border border-white/15 bg-transparent text-ink-100 hover:bg-white/10"
-              disabled={s.socialConnecting || busy}
-              onClick={() => void s.goLiveToAir()}
-            >
-              <Radio className="h-4 w-4" />
-              {s.socialConnecting ? "Trying in Chrome…" : "Try in Chrome"}
-            </Button>
-          )}
+          ) : null}
           {live ? (
             <Button variant="danger" size="sm" onClick={s.stop}>
               <Square className="h-4 w-4" /> Stop

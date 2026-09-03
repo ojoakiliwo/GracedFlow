@@ -197,7 +197,8 @@ export default function Studio() {
         <div>
           <h1 className="font-display text-2xl text-white sm:text-3xl">Broadcast studio</h1>
           <p className="mt-1 text-sm text-ink-400">
-            On this computer use IGC Encoder, not Try in Chrome. Chrome Go live has been sending 0 packets.
+            The two pictures at the bottom-right are this computer only — not YouTube or Facebook. Chrome
+            cannot go live from this PC. Open IGC Encoder and run igc-go-live.bat.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -228,18 +229,7 @@ export default function Studio() {
             <Button variant="danger" size="sm" onClick={s.stopSocialLive}>
               <Square className="h-4 w-4" /> End live
             </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="border border-white/15 bg-transparent text-ink-100 hover:bg-white/10"
-              disabled={s.socialConnecting}
-              onClick={() => void s.goLiveToAir()}
-            >
-              <Radio className="h-4 w-4" />
-              {s.socialConnecting ? "Trying in Chrome…" : "Try in Chrome"}
-            </Button>
-          )}
+          ) : null}
           <Badge color={live ? "red" : "gray"}>{live ? "On air" : "Standby"}</Badge>
           {s.recording ? <Badge color="red">Recording</Badge> : null}
           {s.socialLive ? <Badge color="red">Social live</Badge> : null}
@@ -255,7 +245,12 @@ export default function Studio() {
 
       {s.error ? (
         <p className="mb-3 rounded-lg border border-rose-800 bg-rose-950/60 px-3 py-2 text-sm text-rose-200">{s.error}</p>
-      ) : null}
+      ) : (
+        <p className="mb-3 rounded-lg border border-amber-700/60 bg-amber-950/40 px-3 py-2 text-sm text-amber-100">
+          Do not click Try in Chrome on this computer. It already sent 0 packets. Gold button: IGC Encoder.
+          Then double-click igc-go-live.bat and pick the video.
+        </p>
+      )}
       {s.socialLive && s.socialPlatforms.length > 0 ? (
         <p className="mb-3 text-[11px] leading-relaxed text-gold-300">
           {socialRestreamHint(s.socialPlatforms, s.restreamHealth)}

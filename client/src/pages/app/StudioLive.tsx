@@ -209,15 +209,12 @@ export default function StudioLive() {
                 <Square className="h-4 w-4" /> End live
               </Button>
             ) : (
-              <Button
-                variant="secondary"
-                className="border border-white/15 bg-transparent text-ink-100 hover:bg-white/10"
-                disabled={s.socialConnecting}
-                onClick={() => void s.goLiveToAir()}
+              <Link
+                to="/app/studio/encoder"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gold-500 px-4 text-sm font-medium text-white hover:bg-gold-600"
               >
-                <Radio className="h-4 w-4" />
-                {s.socialConnecting ? "Trying in Chrome…" : "Try in Chrome"}
-              </Button>
+                <Radio className="h-4 w-4" /> Open IGC Encoder
+              </Link>
             )}
           </div>
           {s.socialPlatforms.length > 0 ? (
@@ -231,8 +228,8 @@ export default function StudioLive() {
               : "Ask an admin to set LIVEPEER_API_KEY on Vercel once, then redeploy. Chrome Go live still cannot speak RTMP; IGC Encoder can."}
           </p>
           <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-            Try in Chrome is the old Livepeer path. On this PC it has sent 0 packets. IGC Encoder encodes
-            the file with FFmpeg and pushes RTMP like OBS.
+            The small and large pictures under Preview / Program are this tab only. They are not YouTube
+            or Facebook. Chrome already sent 0 packets from this PC — run igc-go-live.bat from IGC Encoder.
           </p>
         </div>
       </div>

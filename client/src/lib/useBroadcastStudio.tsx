@@ -80,6 +80,11 @@ import {
 import { openProgramOutputWindow, paintProgramOutputWindow } from "./studioProgramOutput";
 import type { RestreamHealth } from "./studioLive";
 import {
+  chromeLiveBlocked,
+  markChromeLiveBlocked,
+  USE_IGC_ENCODER,
+} from "./studioChromeLive";
+import {
   applyMediaUse,
   audioOnlyPicture,
   classifyMediaFile,
@@ -303,6 +308,7 @@ export function useBroadcastStudioEngine() {
   const [searchingQuotes, setSearchingQuotes] = useState(false);
   const [socialLive, setSocialLive] = useState(false);
   const [socialConnecting, setSocialConnecting] = useState(false);
+  const [chromeBlocked, setChromeBlocked] = useState(() => chromeLiveBlocked());
   const [socialPlatforms, setSocialPlatforms] = useState<string[]>([]);
   const [restreamHealth, setRestreamHealth] = useState<RestreamHealth | null>(null);
   const [outputFocus, setOutputFocus] = useState(false);
@@ -1337,7 +1343,17 @@ export function useBroadcastStudioEngine() {
     return true;
   }, []);
 
+  const blockChromeLive = useCallback((message: string) => {
+    markChromeLiveBlocked();
+    setChromeBlocked(true);
+    setError(message);
+  }, []);
+
   const startSocialLive = useCallback(async () => {
+    if (chromeLiveBlocked()) {
+      blockChromeLive(USE_IGC_ENCODER);
+      return;
+    }
     if (statusRef.current !== "live") {
       setError("Send a video, picture or audio to Program first, then go live.");
       return;
@@ -1413,21 +1429,28 @@ export function useBroadcastStudioEngine() {
         await new Promise((resolve) => window.setTimeout(resolve, 2000));
       }
       if (!ingesting) {
-        setError(
-          sending
-            ? "This computer is sending Program, but Livepeer has not marked the stream active yet. Stay on this page. YouTube and Facebook stay dark until Livepeer receives it. If this stays, End live and Go live again."
-            : NO_PROGRAM_PACKETS,
-        );
+        if (sending) {
+          setError(
+            "This computer is sending Program, but Livepeer has not marked the stream active yet. Stay on this page. YouTube and Facebook stay dark until Livepeer receives it. If this stays, End live and use IGC Encoder.",
+          );
+        } else {
+          blockChromeLive(NO_PROGRAM_PACKETS);
+        }
       }
     } catch (e) {
       stopOutgoing(stream);
       detachProgrammePump(capturePumpRef.current);
       setSocialLive(false);
-      setError((e as Error).message || "Could not go live to social.");
+      const message = (e as Error).message || "Could not go live to social.";
+      if (message === NO_PROGRAM_PACKETS || message.includes("0 video packets")) {
+        blockChromeLive(NO_PROGRAM_PACKETS);
+      } else {
+        setError(message);
+      }
     } finally {
       setSocialConnecting(false);
     }
-  }, [programmeMix, setOutputId, stopOutgoing]);
+  }, [blockChromeLive, programmeMix, setOutputId, stopOutgoing]);
 
   const syncSocialPlatforms = useCallback((platforms: string[]) => {
     setSocialPlatforms(platforms);
@@ -1952,6 +1975,7 @@ export function useBroadcastStudioEngine() {
     syncSocialPlatforms,
     socialLive,
     socialConnecting,
+    chromeBlocked,
     socialPlatforms,
     restreamHealth,
     outputFocus,
@@ -2008,6 +2032,11 @@ export function BroadcastStudioProvider({ children }: { children: ReactNode }) {
             : "pointer-events-none fixed left-[-2000px] top-0 h-px w-px"
         }
       />
+      {(studio.pictureKind === "file-video" || studio.soundKind === "file-video") ? (
+        <p className="pointer-events-none fixed bottom-[13.25rem] right-4 z-20 rounded bg-amber-300 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-black">
+          File on this PC — not YouTube
+        </p>
+      ) : null}
       <audio
         ref={studio.fileAudioRef}
         className="pointer-events-none fixed left-[-2000px] top-0 h-px w-px"
@@ -2030,7 +2059,7 @@ export function BroadcastStudioProvider({ children }: { children: ReactNode }) {
         }
       >
         <p className="bg-amber-300 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-black">
-          Program
+          This tab only — not YouTube
         </p>
         <canvas
           ref={studio.captureCanvasRef}
