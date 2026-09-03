@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Copy, Download, Radio, Video } from "lucide-react";
-import { Badge, Button } from "../../components/ui";
+import { Badge, Button, Select } from "../../components/ui";
 import { apiGet } from "../../lib/api";
 import {
   downloadTextFile,
@@ -10,6 +10,8 @@ import {
   unixGoLiveScript,
   windowsCameraBat,
   windowsGoLiveBat,
+  youtubeOnly,
+  type EncoderQuality,
   type EncoderTarget,
 } from "../../lib/studioEncoder";
 
@@ -18,6 +20,7 @@ export default function StudioEncoder() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [quality, setQuality] = useState<EncoderQuality>("smooth");
 
   useEffect(() => {
     let cancelled = false;
@@ -39,9 +42,10 @@ export default function StudioEncoder() {
   const names = targets.map((row) => row.label).join(", ");
   const ready = targets.length > 0;
   const command = useMemo(
-    () => (ready ? ffmpegGoLiveCommand("sermon.mp4", targets) : ""),
-    [ready, targets],
+    () => (ready ? ffmpegGoLiveCommand("sermon.mp4", targets, quality) : ""),
+    [quality, ready, targets],
   );
+  const youtube = targets.filter((row) => row.platform === "youtube");
 
   async function copyCommand() {
     if (!command) return;
@@ -101,25 +105,49 @@ export default function StudioEncoder() {
             <li>
               A black window titled IGC Encoder must stay open for the whole video and show{" "}
               <code className="rounded bg-black/40 px-1 text-gold-300">frame=</code> numbers counting.
-              YouTube must already be waiting for an encoder. Facebook Live Producer: click Go live on
-              Facebook after the preview appears.
+              YouTube must already be waiting for an encoder. If YouTube says it is not receiving enough
+              video, click Stop on the studio, pick Smooth or Low, and download{" "}
+              <strong className="text-ink-100">Windows — YouTube only</strong>.
             </li>
           </ol>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 max-w-xs">
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+              Encoder size
+            </label>
+            <Select
+              value={quality}
+              onChange={(e) => setQuality(e.target.value as EncoderQuality)}
+            >
+              <option value="smooth">Smooth · 720p (use if YouTube buffers)</option>
+              <option value="high">High · 720p</option>
+              <option value="low">Low · 480p</option>
+            </Select>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
             <Button
               variant="gold"
               size="sm"
               disabled={!ready || loading}
-              onClick={() => downloadTextFile("igc-go-live.bat", windowsGoLiveBat(targets))}
+              onClick={() => downloadTextFile("igc-go-live.bat", windowsGoLiveBat(targets, quality))}
             >
               <Download className="h-4 w-4" /> Windows — recorded file
+            </Button>
+            <Button
+              variant="gold"
+              size="sm"
+              disabled={!ready || loading || youtube.length === 0}
+              onClick={() =>
+                downloadTextFile("igc-youtube-only.bat", windowsGoLiveBat(youtubeOnly(targets), quality))
+              }
+            >
+              <Download className="h-4 w-4" /> Windows — YouTube only
             </Button>
             <Button
               variant="secondary"
               size="sm"
               className="border border-white/15 bg-transparent text-ink-100 hover:bg-white/10"
               disabled={!ready || loading}
-              onClick={() => downloadTextFile("igc-go-live.sh", unixGoLiveScript(targets))}
+              onClick={() => downloadTextFile("igc-go-live.sh", unixGoLiveScript(targets, quality))}
             >
               <Download className="h-4 w-4" /> Mac — recorded file
             </Button>
@@ -128,7 +156,7 @@ export default function StudioEncoder() {
               size="sm"
               className="border border-white/15 bg-transparent text-ink-100 hover:bg-white/10"
               disabled={!ready || loading}
-              onClick={() => downloadTextFile("igc-camera.bat", windowsCameraBat(targets))}
+              onClick={() => downloadTextFile("igc-camera.bat", windowsCameraBat(targets, quality))}
             >
               <Video className="h-4 w-4" /> Windows — camera
             </Button>
@@ -137,7 +165,7 @@ export default function StudioEncoder() {
               size="sm"
               className="border border-white/15 bg-transparent text-ink-100 hover:bg-white/10"
               disabled={!ready || loading}
-              onClick={() => downloadTextFile("igc-camera.sh", unixCameraScript(targets))}
+              onClick={() => downloadTextFile("igc-camera.sh", unixCameraScript(targets, quality))}
             >
               <Video className="h-4 w-4" /> Mac — camera
             </Button>
@@ -179,9 +207,10 @@ export default function StudioEncoder() {
           </p>
           <p className="mt-3 text-sm leading-relaxed text-ink-300">
             A full OBS clone (scenes, filters, NVENC, window capture) is a native Windows/Mac product,
-            not a page on infinitelygracedchurch.com. IGC Encoder is the core we can ship today: local
-            H.264, then RTMP to the same destinations. Live camera mixing with graphics still belongs in
-            OBS if you need that on Sunday — Destinations already hold the keys.
+            not a page on infinitelygracedchurch.com.             IGC Encoder is the core we can ship today: local
+            H.264, then RTMP to the same destinations. If YouTube says it is not receiving enough video,
+            this PC is encoding too slowly or the church upload is sharing YouTube and Facebook. Click
+            Stop on the studio, download Windows — YouTube only, and drag the file again.
           </p>
           <Link
             to="/app/studio/live"

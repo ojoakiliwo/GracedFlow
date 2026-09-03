@@ -3,10 +3,12 @@ import {
   escapeFfmpegTeeUrl,
   ffmpegGoLiveCommand,
   ffmpegTeeSpec,
+  ffmpegVideoFlags,
   unixCameraScript,
   unixGoLiveScript,
   windowsCameraBat,
   windowsGoLiveBat,
+  youtubeOnly,
 } from "../src/lib/studioEncoder";
 
 const targets = [
@@ -19,6 +21,10 @@ describe("IGC Encoder", () => {
     const cmd = ffmpegGoLiveCommand("sermon.mp4", targets);
     expect(cmd).toContain("ffmpeg -hide_banner -re -i sermon.mp4");
     expect(cmd).toContain("libx264");
+    expect(cmd).toContain("ultrafast");
+    expect(cmd).toContain("zerolatency");
+    expect(cmd).toContain("-bf 0");
+    expect(cmd).toContain("-b:v 1500k");
     expect(cmd).toContain("-map 0:v:0");
     expect(cmd).toContain("-map 0:a:0?");
     expect(cmd).toContain("-f tee");
@@ -62,6 +68,17 @@ describe("IGC Encoder", () => {
     expect(sh).toContain("-f avfoundation");
     expect(sh).toContain("-list_devices true");
     expect(sh).toContain('"$VIDEO_DEV:$AUDIO_DEV"');
+  });
+
+  it("can send YouTube only at Low when the church upload buffers", () => {
+    expect(ffmpegVideoFlags("low")).toContain("854x480");
+    const yt = youtubeOnly(targets);
+    expect(yt).toHaveLength(1);
+    expect(windowsGoLiveBat(yt, "low")).toContain("854x480");
+    expect(windowsGoLiveBat(yt, "low")).not.toContain("facebook.com");
+    expect(() => youtubeOnly([{ platform: "facebook", label: "Facebook", rtmp: "rtmps://x/fb" }])).toThrow(
+      /YouTube/i,
+    );
   });
 
   it("refuses to build an encoder with no destinations", () => {

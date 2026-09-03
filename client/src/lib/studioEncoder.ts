@@ -4,11 +4,30 @@ export type EncoderTarget = {
   rtmp: string;
 };
 
-const FFMPEG_VIDEO =
-  "-c:v libx264 -preset veryfast -pix_fmt yuv420p -s 1280x720 -r 30 -g 60 -b:v 2500k -maxrate 2800k -bufsize 5000k";
-const FFMPEG_AUDIO = "-c:a aac -ar 44100 -ac 2 -b:a 160k";
+export type EncoderQuality = "smooth" | "high" | "low";
+
+const FFMPEG_AUDIO = "-c:a aac -ar 44100 -ac 2 -b:a 128k";
 /** tee does not auto-select streams; without this FFmpeg says "Output file does not contain any stream". */
 const FFMPEG_MAP = '-map 0:v:0 -map "0:a:0?"';
+
+/** YouTube-live friendly H.264. ultrafast + no B-frames keeps the send rate steady on a church PC. */
+export function ffmpegVideoFlags(quality: EncoderQuality = "smooth"): string {
+  if (quality === "low") {
+    return "-c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -s 854x480 -r 30 -g 60 -keyint_min 60 -bf 0 -b:v 800k -maxrate 800k -bufsize 1600k";
+  }
+  if (quality === "high") {
+    return "-c:v libx264 -preset veryfast -tune zerolatency -pix_fmt yuv420p -s 1280x720 -r 30 -g 60 -keyint_min 60 -bf 0 -b:v 2000k -maxrate 2200k -bufsize 4000k";
+  }
+  return "-c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p -s 1280x720 -r 30 -g 60 -keyint_min 60 -bf 0 -b:v 1500k -maxrate 1500k -bufsize 3000k";
+}
+
+export function youtubeOnly(targets: EncoderTarget[]): EncoderTarget[] {
+  const rows = targets.filter((row) => row.platform === "youtube");
+  if (rows.length === 0) {
+    throw new Error("Turn On YouTube with a key, Save, then download IGC Encoder again.");
+  }
+  return rows;
+}
 
 /** tee muxer treats `\ ' :` as control characters. */
 export function escapeFfmpegTeeUrl(url: string): string {
@@ -19,7 +38,11 @@ export function ffmpegTeeSpec(targets: EncoderTarget[]): string {
   return targets.map((row) => `[f=flv:onfail=ignore]${escapeFfmpegTeeUrl(row.rtmp)}`).join("|");
 }
 
-export function ffmpegGoLiveArgs(inputPath: string, targets: EncoderTarget[]): string[] {
+export function ffmpegGoLiveArgs(
+  inputPath: string,
+  targets: EncoderTarget[],
+  quality: EncoderQuality = "smooth",
+): string[] {
   if (targets.length === 0) {
     throw new Error("Turn On a destination with a key, Save, then download IGC Encoder again.");
   }
@@ -28,7 +51,7 @@ export function ffmpegGoLiveArgs(inputPath: string, targets: EncoderTarget[]): s
     "-re",
     "-i",
     inputPath,
-    ...FFMPEG_VIDEO.split(" "),
+    ...ffmpegVideoFlags(quality).split(" "),
     ...FFMPEG_AUDIO.split(" "),
     "-map",
     "0:v:0",
@@ -40,8 +63,12 @@ export function ffmpegGoLiveArgs(inputPath: string, targets: EncoderTarget[]): s
   ];
 }
 
-export function ffmpegGoLiveCommand(inputPath: string, targets: EncoderTarget[]): string {
-  return ["ffmpeg", ...ffmpegGoLiveArgs(inputPath, targets)].join(" ");
+export function ffmpegGoLiveCommand(
+  inputPath: string,
+  targets: EncoderTarget[],
+  quality: EncoderQuality = "smooth",
+): string {
+  return ["ffmpeg", ...ffmpegGoLiveArgs(inputPath, targets, quality)].join(" ");
 }
 
 function requireTargets(targets: EncoderTarget[]): EncoderTarget[] {
@@ -65,7 +92,14 @@ function destinationLine(targets: EncoderTarget[]): string {
     .join(", ");
 }
 
-export function windowsGoLiveBat(targets: EncoderTarget[]): string {
+function ffmpegLine(input: string, quality: EncoderQuality): string {
+  return `ffmpeg -hide_banner -re -i ${input} ${ffmpegVideoFlags(quality)} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee`;
+}
+
+export function windowsGoLiveBat(
+  targets: EncoderTarget[],
+  quality: EncoderQuality = "smooth",
+): string {
   const spec = batTeeSpec(targets);
   const names = destinationLine(targets);
   return [
@@ -81,11 +115,12 @@ export function windowsGoLiveBat(targets: EncoderTarget[]): string {
     ")",
     'set "VIDEO=%~1"',
     'if "%VIDEO%"=="" (',
-    "  echo IGC Encoder sends a recorded file to YouTube and Facebook.",
+    "  echo IGC Encoder sends a recorded file to live.",
     `  echo Destinations: ${names}`,
     "  echo.",
     "  echo A file window should appear. If you do not see it, it is behind Chrome — look on the taskbar.",
     "  echo Easier: close this window, open Downloads, and drag the video onto this .bat file.",
+    "  echo Close Broadcast studio (click Stop) so this PC can encode steadily.",
     "  echo.",
     "  for /f \"delims=\" %%I in ('powershell -STA -NoProfile -Command \"Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.OpenFileDialog; $f.Filter = 'Video|*.mp4;*.mov;*.mkv;*.webm;*.avi|All|*.*'; $f.Title = 'IGC Encoder — choose the recording'; $f.ShowHelp = $true; if ($f.ShowDialog() -eq 'OK') { $f.FileName }\"') do set \"VIDEO=%%I\"",
     ")",
@@ -102,9 +137,9 @@ export function windowsGoLiveBat(targets: EncoderTarget[]): string {
     "echo %VIDEO%",
     "echo.",
     "echo Starting IGC Encoder. This window must stay open for the whole video.",
-    "echo YouTube must already be waiting for an encoder. Open Facebook Live Producer.",
+    "echo YouTube must already be waiting for an encoder. Open Facebook Live Producer if Facebook is On.",
     "echo You should see frame=  numbers counting. That means it is working.",
-    `ffmpeg -hide_banner -re -i "%VIDEO%" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee "${spec}"`,
+    `${ffmpegLine('"%VIDEO%"', quality)} "${spec}"`,
     "echo.",
     "if errorlevel 1 (",
     "  echo FFmpeg stopped with an error. Read the red lines above. Do not press a key until you have read them.",
@@ -116,9 +151,13 @@ export function windowsGoLiveBat(targets: EncoderTarget[]): string {
   ].join("\r\n");
 }
 
-export function windowsCameraBat(targets: EncoderTarget[]): string {
+export function windowsCameraBat(
+  targets: EncoderTarget[],
+  quality: EncoderQuality = "smooth",
+): string {
   const spec = batTeeSpec(targets);
   const names = destinationLine(targets);
+  const flags = `${ffmpegVideoFlags(quality)} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee "${spec}"`;
   return [
     "@echo off",
     "title IGC Encoder — camera",
@@ -144,9 +183,9 @@ export function windowsCameraBat(targets: EncoderTarget[]): string {
     ")",
     "echo Starting IGC Encoder. Leave YouTube waiting for encoder. Open Facebook Live Producer.",
     'if "%MIC%"=="" (',
-    `  ffmpeg -hide_banner -f dshow -rtbufsize 100M -i video="%CAM%" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee "${spec}"`,
+    `  ffmpeg -hide_banner -f dshow -rtbufsize 100M -i video="%CAM%" ${flags}`,
     ") else (",
-    `  ffmpeg -hide_banner -f dshow -rtbufsize 100M -i video="%CAM%":audio="%MIC%" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee "${spec}"`,
+    `  ffmpeg -hide_banner -f dshow -rtbufsize 100M -i video="%CAM%":audio="%MIC%" ${flags}`,
     ")",
     "echo.",
     "echo Encoder stopped.",
@@ -155,7 +194,10 @@ export function windowsCameraBat(targets: EncoderTarget[]): string {
   ].join("\r\n");
 }
 
-export function unixGoLiveScript(targets: EncoderTarget[]): string {
+export function unixGoLiveScript(
+  targets: EncoderTarget[],
+  quality: EncoderQuality = "smooth",
+): string {
   const spec = shTeeSpec(targets);
   const names = destinationLine(targets);
   return [
@@ -176,14 +218,18 @@ export function unixGoLiveScript(targets: EncoderTarget[]): string {
     "  exit 1",
     "fi",
     'echo "Starting IGC Encoder. Leave YouTube waiting for encoder. Open Facebook Live Producer."',
-    `ffmpeg -hide_banner -re -i "$FILE" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee '${spec}'`,
+    `${ffmpegLine('"$FILE"', quality)} '${spec}'`,
     "",
   ].join("\n");
 }
 
-export function unixCameraScript(targets: EncoderTarget[]): string {
+export function unixCameraScript(
+  targets: EncoderTarget[],
+  quality: EncoderQuality = "smooth",
+): string {
   const spec = shTeeSpec(targets);
   const names = destinationLine(targets);
+  const flags = `${ffmpegVideoFlags(quality)} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee '${spec}'`;
   return [
     "#!/bin/sh",
     "set -e",
@@ -205,9 +251,9 @@ export function unixCameraScript(targets: EncoderTarget[]): string {
     "fi",
     'echo "Starting IGC Encoder. Leave YouTube waiting for encoder. Open Facebook Live Producer."',
     'if [ -z "$AUDIO_DEV" ]; then',
-    `  ffmpeg -hide_banner -f avfoundation -framerate 30 -i "$VIDEO_DEV" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee '${spec}'`,
+    `  ffmpeg -hide_banner -f avfoundation -framerate 30 -i "$VIDEO_DEV" ${flags}`,
     "else",
-    `  ffmpeg -hide_banner -f avfoundation -framerate 30 -i "$VIDEO_DEV:$AUDIO_DEV" ${FFMPEG_VIDEO} ${FFMPEG_AUDIO} ${FFMPEG_MAP} -f tee '${spec}'`,
+    `  ffmpeg -hide_banner -f avfoundation -framerate 30 -i "$VIDEO_DEV:$AUDIO_DEV" ${flags}`,
     "fi",
     "",
   ].join("\n");
