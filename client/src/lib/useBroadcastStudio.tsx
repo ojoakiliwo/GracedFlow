@@ -56,7 +56,9 @@ import {
 } from "./studioSpeech";
 import { apiGet, apiPost } from "./api";
 import {
+  capturePlayingVideo,
   captureProgrammeStream,
+  cloneLiveVideoStream,
   connectWhip,
   detachProgrammePump,
   kickCanvasFrames,
@@ -1124,11 +1126,32 @@ export function useBroadcastStudioEngine() {
   }, []);
 
   const programmeMix = useCallback(async (): Promise<MediaStream | null> => {
-    const canvas = captureCanvasRef.current || canvasRef.current;
-    if (!canvas || statusRef.current !== "live") return null;
+    if (statusRef.current !== "live") return null;
     const dest = await ensureLiveProgrammeDest();
     if (!dest) return null;
-    const mixed = await captureProgrammeStream(canvas, capturePumpRef.current);
+
+    const picture = pictureKindRef.current;
+    let mixed: MediaStream | null = null;
+    if (picture === "file-video") {
+      const el = fileVideoRef.current;
+      if (el?.paused) {
+        try {
+          await el.play();
+        } catch {
+          // Gesture already happened on Go live; play can still be blocked.
+        }
+      }
+      mixed = capturePlayingVideo(el);
+    } else if (picture === "camera") {
+      mixed = cloneLiveVideoStream(nodes.current.rawVideo);
+    }
+
+    if (!mixed || mixed.getVideoTracks().length === 0) {
+      const canvas = captureCanvasRef.current || canvasRef.current;
+      if (!canvas) return null;
+      mixed = await captureProgrammeStream(canvas, capturePumpRef.current);
+    }
+
     const audioTracks = dest.stream.getAudioTracks().filter(isLiveAudioTrack);
     for (const track of audioTracks) mixed.addTrack(track.clone());
     kickCanvasFrames(mixed);
@@ -1943,7 +1966,11 @@ export function BroadcastStudioProvider({ children }: { children: ReactNode }) {
       <video
         ref={studio.fileVideoRef}
         playsInline
-        className="pointer-events-none fixed left-[-2000px] top-0 h-px w-px"
+        className={
+          studio.pictureKind === "file-video" || studio.soundKind === "file-video"
+            ? "pointer-events-none fixed bottom-4 right-4 z-20 h-[180px] w-[320px] rounded border-2 border-amber-300 bg-black object-cover"
+            : "pointer-events-none fixed left-[-2000px] top-0 h-px w-px"
+        }
       />
       <audio
         ref={studio.fileAudioRef}
@@ -1960,7 +1987,11 @@ export function BroadcastStudioProvider({ children }: { children: ReactNode }) {
       />
       <div
         aria-hidden
-        className="pointer-events-none fixed bottom-4 right-4 z-20 overflow-hidden rounded border-2 border-amber-300 bg-black shadow-lg"
+        className={
+          studio.pictureKind === "file-video" || studio.soundKind === "file-video"
+            ? "pointer-events-none fixed bottom-4 right-[21.5rem] z-20 overflow-hidden rounded border-2 border-amber-300 bg-black shadow-lg"
+            : "pointer-events-none fixed bottom-4 right-4 z-20 overflow-hidden rounded border-2 border-amber-300 bg-black shadow-lg"
+        }
       >
         <p className="bg-amber-300 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-black">
           Program

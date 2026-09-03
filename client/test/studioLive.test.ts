@@ -12,7 +12,9 @@ import {
   writeStoredLiveDrafts,
 } from "../src/lib/studioLive";
 import {
+  capturePlayingVideo,
   captureProgrammeStream,
+  cloneLiveVideoStream,
   iceServersForWhipHost,
   iceIsConnected,
   livepeerIceHost,
@@ -285,6 +287,37 @@ describe("WHIP ICE wait", () => {
     expect(rawTrack.enabled).toBe(true);
     expect(pump.srcObject).toBe(raw);
     expect(pump.muted).toBe(true);
+  });
+
+  it("captures the playing file video instead of a hidden canvas", () => {
+    const videoTrack = { kind: "video", readyState: "live", enabled: true };
+    const audioTrack = { kind: "audio", readyState: "live", stop: vi.fn() };
+    const captured = {
+      getVideoTracks: () => [videoTrack],
+      getAudioTracks: () => [audioTrack],
+    };
+    const el = {
+      readyState: 2,
+      captureStream: vi.fn().mockReturnValue(captured),
+    } as unknown as HTMLVideoElement;
+    const out = capturePlayingVideo(el);
+    expect(el.captureStream).toHaveBeenCalledWith(30);
+    expect(out?.getVideoTracks()).toEqual([videoTrack]);
+    expect(audioTrack.stop).toHaveBeenCalled();
+  });
+
+  it("does not capture a file that has not decoded a frame yet", () => {
+    const el = { readyState: 0, captureStream: vi.fn() } as unknown as HTMLVideoElement;
+    expect(capturePlayingVideo(el)).toBeNull();
+    expect(el.captureStream).not.toHaveBeenCalled();
+  });
+
+  it("clones a live camera track for WHIP", () => {
+    const clone = { kind: "video", readyState: "live", enabled: true };
+    const track = { kind: "video", readyState: "live", clone: () => clone };
+    const stream = { getVideoTracks: () => [track] } as unknown as MediaStream;
+    expect(cloneLiveVideoStream(stream)?.getVideoTracks()).toEqual([clone]);
+    expect(cloneLiveVideoStream({ getVideoTracks: () => [{ kind: "video", readyState: "ended" }] } as unknown as MediaStream)).toBeNull();
   });
 
   it("waits until ICE is connected before treating WHIP as live", async () => {

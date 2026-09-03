@@ -150,7 +150,9 @@ export default function StudioLive() {
           </Link>
           <h1 className="font-display text-2xl text-white sm:text-3xl">Go live</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-400">
-            Paste a key, turn that platform On, Save, then Go live from this desk. You do not open OBS.
+            This desk is not OBS. Chrome cannot speak RTMP. Go live sends the playing Program from this
+            tab to Livepeer, which restreams to YouTube and Facebook. A recorded file must stay playing
+            on this page. Paste a key, turn that platform On, Save, then Go live.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -209,8 +211,8 @@ export default function StudioLive() {
           ) : null}
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">
             {data?.restream
-              ? "Go live on this desk sends Program to YouTube and Facebook. Stay on this page. YouTube must already be waiting for encoder. Facebook Live Producer must be open; click Go live on Facebook after the preview appears."
-              : "Ask an admin to set LIVEPEER_API_KEY on Vercel once, then redeploy. After that, Go live from this desk — no OBS."}
+              ? "Stay on this page while the file or camera plays. YouTube must already be waiting for encoder. Facebook Live Producer must be open; click Go live on Facebook after the preview appears. If this computer sends 0 packets, YouTube and Facebook stay dark — that is not a missing Facebook click."
+              : "Ask an admin to set LIVEPEER_API_KEY on Vercel once, then redeploy. After that, Go live from this desk sends WebRTC to Livepeer, not RTMP like OBS."}
           </p>
         </div>
       </div>

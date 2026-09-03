@@ -177,7 +177,7 @@ export async function waitForOutboundRtp(pc: RTCPeerConnection, timeoutMs = 8000
 }
 
 export const NO_PROGRAM_PACKETS =
-  "This computer connected to Livepeer but sent 0 Program packets. Keep the small Program thumbnail on screen, stay on this page, then End live and Go live again.";
+  "This computer connected to Livepeer but sent 0 video packets. Keep the recorded file or camera playing on this page in Chrome or Edge, then End live and Go live again. YouTube and Facebook stay dark until packets leave this computer.";
 
 export async function waitTwoAnimationFrames(): Promise<void> {
   const raf = globalThis.requestAnimationFrame;
@@ -226,6 +226,53 @@ export function detachProgrammePump(pump?: HTMLVideoElement | null) {
     // Element may already be gone.
   }
   pump.srcObject = null;
+}
+
+function mediaStreamFromTracks(tracks: MediaStreamTrack[]): MediaStream {
+  if (typeof MediaStream === "function") return new MediaStream(tracks);
+  return {
+    getVideoTracks: () => tracks.filter((track) => track.kind === "video"),
+    getAudioTracks: () => tracks.filter((track) => track.kind === "audio"),
+    getTracks: () => tracks,
+    addTrack: (track: MediaStreamTrack) => {
+      tracks.push(track);
+    },
+  } as unknown as MediaStream;
+}
+
+/** Capture the playing file itself. OBS-style media source; canvas.captureStream is the fallback. */
+export function capturePlayingVideo(el: HTMLVideoElement | null | undefined): MediaStream | null {
+  if (!el || el.readyState < 2) return null;
+  const capture =
+    (el as HTMLVideoElement & { captureStream?: (fps?: number) => MediaStream }).captureStream ??
+    (el as HTMLVideoElement & { mozCaptureStream?: (fps?: number) => MediaStream }).mozCaptureStream;
+  if (typeof capture !== "function") return null;
+  try {
+    const stream = capture.call(el, 30);
+    const video = stream.getVideoTracks().filter((track) => track.readyState === "live");
+    if (video.length === 0) return null;
+    for (const track of stream.getAudioTracks()) {
+      try {
+        track.stop();
+      } catch {
+        // Program sound comes from the studio mix, not the raw file track.
+      }
+    }
+    const out = mediaStreamFromTracks(video);
+    kickVideoTracks(out);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+export function cloneLiveVideoStream(stream?: MediaStream | null): MediaStream | null {
+  if (!stream) return null;
+  const video = stream.getVideoTracks().filter((track) => track.readyState === "live");
+  if (video.length === 0) return null;
+  const out = mediaStreamFromTracks(video.map((track) => track.clone()));
+  kickVideoTracks(out);
+  return out;
 }
 
 /**
