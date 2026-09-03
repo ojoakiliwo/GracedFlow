@@ -197,7 +197,7 @@ export default function Studio() {
         <div>
           <h1 className="font-display text-2xl text-white sm:text-3xl">Broadcast studio</h1>
           <p className="mt-1 text-sm text-ink-400">
-            Preview → Take to live → Program. Scripture heard stays beside the monitors.
+            On this computer use IGC Encoder, not Try in Chrome. Chrome Go live has been sending 0 packets.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -207,16 +207,16 @@ export default function Studio() {
             disabled={s.socialConnecting}
           />
           <Link
+            to="/app/studio/encoder"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-gold-500 px-3 text-sm font-medium text-white hover:bg-gold-600"
+          >
+            IGC Encoder
+          </Link>
+          <Link
             to="/app/studio/live"
             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10"
           >
             Destinations
-          </Link>
-          <Link
-            to="/app/studio/encoder"
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10"
-          >
-            IGC Encoder
           </Link>
           <Link
             to="/app/studio/media"
@@ -230,13 +230,14 @@ export default function Studio() {
             </Button>
           ) : (
             <Button
-              variant="gold"
+              variant="secondary"
               size="sm"
+              className="border border-white/15 bg-transparent text-ink-100 hover:bg-white/10"
               disabled={s.socialConnecting}
               onClick={() => void s.goLiveToAir()}
             >
               <Radio className="h-4 w-4" />
-              {s.socialConnecting ? "Going live…" : "Go live"}
+              {s.socialConnecting ? "Trying in Chrome…" : "Try in Chrome"}
             </Button>
           )}
           <Badge color={live ? "red" : "gray"}>{live ? "On air" : "Standby"}</Badge>

@@ -26,6 +26,7 @@ import {
   waitForIceConnected,
   waitForOutboundRtp,
   whipHostLooksRegional,
+  NO_PROGRAM_PACKETS,
 } from "../src/lib/studioWhip";
 import {
   loadStudioOutputId,
@@ -352,6 +353,12 @@ describe("WHIP ICE wait", () => {
 });
 
 describe("Studio output to Livepeer", () => {
+  it("sends a 0-packet computer to IGC Encoder, not another Chrome retry", () => {
+    expect(NO_PROGRAM_PACKETS).toMatch(/IGC Encoder/);
+    expect(NO_PROGRAM_PACKETS).toMatch(/Do not click Go live in Chrome/);
+    expect(NO_PROGRAM_PACKETS).not.toMatch(/360p/);
+  });
+
   it("maps High Medium Low to encoder settings", () => {
     expect(studioOutput("720p")).toMatchObject({ width: 1280, height: 720, maxBitrate: 2_500_000, fps: 30 });
     expect(studioOutput("360p")).toMatchObject({ width: 640, height: 360, fps: 24 });

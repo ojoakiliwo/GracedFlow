@@ -151,15 +151,14 @@ export default function StudioLive() {
           </Link>
           <h1 className="font-display text-2xl text-white sm:text-3xl">Go live</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-400">
-            This desk is not OBS. Chrome cannot speak RTMP. Go live sends the playing Program from this
-            tab to Livepeer, which restreams to YouTube and Facebook. A recorded file must stay playing
-            on this page. Paste a key, turn that platform On, Save, then Go live.
+            Save YouTube and Facebook keys here, then go to IGC Encoder. Do not use Try in Chrome on a
+            computer that already sent 0 packets — that path cannot speak RTMP.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/app/studio/encoder"
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-gold-500 px-3 text-sm font-medium text-white hover:bg-gold-600"
           >
             IGC Encoder
           </Link>
@@ -197,7 +196,7 @@ export default function StudioLive() {
         <div className="rounded-2xl border border-white/10 bg-[#14161d] p-4">
           <p className="text-sm leading-relaxed text-ink-300">
             {data?.restreamDetail ||
-              "Turn On only platforms that have a key, then Go live from this desk."}
+              "Turn On only platforms that have a key, Save, then open IGC Encoder."}
           </p>
           <div className="mt-4 flex flex-wrap items-end gap-3">
             <StudioOutputSelect
@@ -210,9 +209,14 @@ export default function StudioLive() {
                 <Square className="h-4 w-4" /> End live
               </Button>
             ) : (
-              <Button variant="gold" disabled={s.socialConnecting} onClick={() => void s.goLiveToAir()}>
+              <Button
+                variant="secondary"
+                className="border border-white/15 bg-transparent text-ink-100 hover:bg-white/10"
+                disabled={s.socialConnecting}
+                onClick={() => void s.goLiveToAir()}
+              >
                 <Radio className="h-4 w-4" />
-                {s.socialConnecting ? "Going live…" : "Go live"}
+                {s.socialConnecting ? "Trying in Chrome…" : "Try in Chrome"}
               </Button>
             )}
           </div>
@@ -223,12 +227,12 @@ export default function StudioLive() {
           ) : null}
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">
             {data?.restream
-              ? "Stay on this page while the file or camera plays. YouTube must already be waiting for encoder. Facebook Live Producer must be open; click Go live on Facebook after the preview appears. If this computer sends 0 packets, YouTube and Facebook stay dark — that is not a missing Facebook click."
-              : "Ask an admin to set LIVEPEER_API_KEY on Vercel once, then redeploy. After that, Go live from this desk sends WebRTC to Livepeer, not RTMP like OBS."}
+              ? "If this computer already sent 0 packets, End live and use IGC Encoder. YouTube must already be waiting for an encoder. Facebook Live Producer must be open; click Go live on Facebook after the FFmpeg preview appears."
+              : "Ask an admin to set LIVEPEER_API_KEY on Vercel once, then redeploy. Chrome Go live still cannot speak RTMP; IGC Encoder can."}
           </p>
           <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-            Output is the size this computer encodes for Livepeer. If Go live says 0 packets, pick Low · 360p
-            or use IGC Encoder, which encodes the file on this computer like OBS.
+            Try in Chrome is the old Livepeer path. On this PC it has sent 0 packets. IGC Encoder encodes
+            the file with FFmpeg and pushes RTMP like OBS.
           </p>
         </div>
       </div>

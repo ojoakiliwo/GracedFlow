@@ -97,8 +97,8 @@ export default function StudioMedia() {
           </Link>
           <h1 className="font-display text-2xl text-white sm:text-3xl">Recorded media</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-400">
-            Send a recorded video, a still picture, or recorded audio to Program on its own. The live
-            camera is not required.
+            Choose a file here only to preview on Program. To put YouTube and Facebook on air from this
+            PC, use IGC Encoder, not Try in Chrome.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -109,7 +109,7 @@ export default function StudioMedia() {
           />
           <Link
             to="/app/studio/encoder"
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-white/15 px-3 text-sm font-medium text-ink-100 hover:bg-white/10"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-gold-500 px-3 text-sm font-medium text-white hover:bg-gold-600"
           >
             IGC Encoder
           </Link>
@@ -119,13 +119,14 @@ export default function StudioMedia() {
             </Button>
           ) : (
             <Button
-              variant="gold"
+              variant="secondary"
               size="sm"
+              className="border border-white/15 bg-transparent text-ink-100 hover:bg-white/10"
               disabled={s.socialConnecting || busy}
               onClick={() => void s.goLiveToAir()}
             >
               <Radio className="h-4 w-4" />
-              {s.socialConnecting ? "Going live…" : "Go live"}
+              {s.socialConnecting ? "Trying in Chrome…" : "Try in Chrome"}
             </Button>
           )}
           {live ? (
@@ -152,8 +153,8 @@ export default function StudioMedia() {
           <p className="mt-1 text-sm text-ink-100">Sound: {soundKindLabel(s.soundKind)}</p>
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">
             {hasMediaOnProgram
-              ? "This file must stay playing on this page. Chrome sends the file from this tab to Livepeer (not RTMP like OBS). Then click Go live."
-              : "Choose a file below, then send picture, sound, or both. Keep it playing on this page. Then click Go live."}
+              ? "Playing a file in this tab does not go to YouTube. Download IGC Encoder and run the .bat on the file."
+              : "Choose a file below to preview. For YouTube and Facebook on this PC, open IGC Encoder."}
           </p>
           <label className="mt-3 flex items-center gap-2 text-sm text-ink-200">
             <input

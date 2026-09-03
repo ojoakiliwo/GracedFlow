@@ -95,8 +95,8 @@ export function restreamConfigured(): boolean {
 
 export function restreamDetail(): string {
   return restreamConfigured()
-    ? "Go live from this desk. YouTube and Facebook receive Program from IGC — you do not open OBS. Start capture, put picture and sound on Program, then Go live. Leave YouTube waiting for encoder and Facebook Live Producer open."
-    : "Turn On only the platforms that have a key, Save, then Go live from this desk. Ask an admin to set LIVEPEER_API_KEY on Vercel once if Go live is not wired yet.";
+    ? "On a computer that sends 0 packets, do not use Go live in Chrome. Open IGC Encoder and run the Windows download (FFmpeg) so this PC pushes RTMP like OBS. Leave YouTube waiting for encoder and Facebook Live Producer open."
+    : "Turn On only the platforms that have a key, Save, then open IGC Encoder. Ask an admin to set LIVEPEER_API_KEY on Vercel once if Chrome Go live is still wired.";
 }
 
 export function rtmpTargetUrl(ingestUrl: string, streamKey: string): string {

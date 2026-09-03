@@ -192,7 +192,7 @@ export async function waitForOutboundRtp(pc: RTCPeerConnection, timeoutMs = 8000
 }
 
 export const NO_PROGRAM_PACKETS =
-  "This computer connected to Livepeer but sent 0 video packets. Set Output to Low · 360p, keep the recorded file or camera playing on this page in Chrome or Edge, then End live and Go live again. YouTube and Facebook stay dark until packets leave this computer.";
+  "This computer connected to Livepeer but sent 0 video packets. Do not click Go live in Chrome again on this PC. End live, open IGC Encoder, download Windows — recorded file, and run that .bat (FFmpeg). Playing a video in this tab will not put YouTube or Facebook on air.";
 
 export async function waitTwoAnimationFrames(): Promise<void> {
   const raf = globalThis.requestAnimationFrame;
