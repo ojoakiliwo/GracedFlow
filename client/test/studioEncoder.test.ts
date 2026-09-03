@@ -3,7 +3,9 @@ import {
   escapeFfmpegTeeUrl,
   ffmpegGoLiveCommand,
   ffmpegTeeSpec,
+  unixCameraScript,
   unixGoLiveScript,
+  windowsCameraBat,
   windowsGoLiveBat,
 } from "../src/lib/studioEncoder";
 
@@ -22,22 +24,41 @@ describe("IGC Encoder", () => {
     expect(ffmpegTeeSpec(targets)).toContain("|");
   });
 
-  it("writes a Windows Go live file that encodes on this computer", () => {
+  it("writes a Windows Go live file that opens a picker and encodes on this computer", () => {
     const bat = windowsGoLiveBat(targets);
     expect(bat).toContain("winget install Gyan.FFmpeg");
-    expect(bat).toContain("ffmpeg -hide_banner -re -i \"%~1\"");
+    expect(bat).toContain("OpenFileDialog");
+    expect(bat).toContain('ffmpeg -hide_banner -re -i "%VIDEO%"');
     expect(bat).toContain("YouTube, Facebook");
     expect(bat).toContain("libx264");
   });
 
-  it("writes a Mac Go live script", () => {
+  it("writes a Windows camera encoder that lists DirectShow devices", () => {
+    const bat = windowsCameraBat(targets);
+    expect(bat).toContain("-f dshow");
+    expect(bat).toContain("-list_devices true");
+    expect(bat).toContain('video="%CAM%":audio="%MIC%"');
+    expect(bat).toContain("-f tee");
+  });
+
+  it("writes a Mac Go live script that can pick a file", () => {
     const sh = unixGoLiveScript(targets);
     expect(sh.startsWith("#!/bin/sh")).toBe(true);
     expect(sh).toContain("brew install ffmpeg");
-    expect(sh).toContain('ffmpeg -hide_banner -re -i "$1"');
+    expect(sh).toContain("choose file");
+    expect(sh).toContain('ffmpeg -hide_banner -re -i "$FILE"');
+  });
+
+  it("writes a Mac camera encoder that lists AVFoundation devices", () => {
+    const sh = unixCameraScript(targets);
+    expect(sh).toContain("-f avfoundation");
+    expect(sh).toContain("-list_devices true");
+    expect(sh).toContain('"$VIDEO_DEV:$AUDIO_DEV"');
   });
 
   it("refuses to build an encoder with no destinations", () => {
     expect(() => ffmpegGoLiveCommand("a.mp4", [])).toThrow(/destination/i);
+    expect(() => windowsGoLiveBat([])).toThrow(/destination/i);
+    expect(() => windowsCameraBat([])).toThrow(/destination/i);
   });
 });
