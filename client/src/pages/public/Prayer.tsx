@@ -2,6 +2,7 @@ import { useState } from "react";
 import { HeartHandshake, CheckCircle2 } from "lucide-react";
 import { apiPost } from "../../lib/api";
 import { Button, Card, Field, Input, Textarea } from "../../components/ui";
+import { ChurchContactLinks } from "../../components/ChurchContact";
 
 export default function Prayer() {
   const [form, setForm] = useState({ name: "", email: "", phone: "", request: "" });
@@ -101,6 +102,10 @@ export default function Prayer() {
                 Send prayer request
               </Button>
             </form>
+            <div className="mt-8 border-t border-ink-100 pt-6">
+              <p className="text-sm font-medium text-ink-700">Prefer to call or write?</p>
+              <ChurchContactLinks className="mt-3" />
+            </div>
           </Card>
         )}
       </section>
