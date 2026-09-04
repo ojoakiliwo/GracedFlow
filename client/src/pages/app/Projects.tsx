@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Plus, Target, Eye, EyeOff } from "lucide-react";
-import { apiPost } from "../../lib/api";
+import { Pencil, Plus, Target, Eye, EyeOff } from "lucide-react";
+import { apiPost, apiPut } from "../../lib/api";
 import { useApi } from "../../lib/useApi";
 import {
   Badge,
@@ -16,6 +16,7 @@ import {
 } from "../../components/ui";
 import { naira } from "../../lib/format";
 import { useToast } from "../../components/toast";
+import { useAuth } from "../../lib/auth";
 
 interface Project {
   id: string;
@@ -35,41 +36,72 @@ const COLUMNS = [
   { key: "done", label: "Completed", color: "green" as const },
 ];
 
+const emptyForm = {
+  title: "",
+  description: "",
+  category: "",
+  status: "vision",
+  visibility: "private",
+  progress: "0",
+  budget: "",
+  amountRaised: "",
+};
+
 export default function Projects() {
   const { data, loading, reload } = useApi<Project[]>("/projects");
+  const { isSuperAdmin, hasRole } = useAuth();
+  const canEdit = isSuperAdmin || hasRole("pastor");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    category: "",
-    status: "vision",
-    visibility: "private",
-    progress: "0",
-    budget: "",
-  });
+  const [editing, setEditing] = useState<Project | null>(null);
+  const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const { notify } = useToast();
 
-  async function create(e: React.FormEvent) {
+  function openCreate() {
+    setEditing(null);
+    setForm(emptyForm);
+    setOpen(true);
+  }
+
+  function openEdit(project: Project) {
+    setEditing(project);
+    setForm({
+      title: project.title,
+      description: project.description ?? "",
+      category: project.category ?? "",
+      status: project.status,
+      visibility: project.visibility,
+      progress: String(project.progress ?? 0),
+      budget: project.budget != null ? String(project.budget) : "",
+      amountRaised: project.amount_raised != null ? String(project.amount_raised) : "",
+    });
+    setOpen(true);
+  }
+
+  function closeModal() {
+    setOpen(false);
+    setEditing(null);
+    setForm(emptyForm);
+  }
+
+  async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    const payload = {
+      ...form,
+      progress: Number(form.progress),
+      budget: form.budget ? Number(form.budget) : null,
+      amountRaised: form.amountRaised ? Number(form.amountRaised) : null,
+    };
     try {
-      await apiPost("/projects", {
-        ...form,
-        progress: Number(form.progress),
-        budget: form.budget ? Number(form.budget) : undefined,
-      });
-      notify("Project created");
-      setOpen(false);
-      setForm({
-        title: "",
-        description: "",
-        category: "",
-        status: "vision",
-        visibility: "private",
-        progress: "0",
-        budget: "",
-      });
+      if (editing) {
+        await apiPut(`/projects/${editing.id}`, payload);
+        notify("Project updated");
+      } else {
+        await apiPost("/projects", payload);
+        notify("Project created");
+      }
+      closeModal();
       reload();
     } catch (e) {
       notify((e as Error).message, "error");
@@ -84,7 +116,7 @@ export default function Projects() {
         title="Projects & Visions"
         subtitle="Completed works, ongoing projects and future visions of the ministry."
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={openCreate}>
             <Plus className="h-4 w-4" /> New project
           </Button>
         }
@@ -111,11 +143,23 @@ export default function Projects() {
                     <Card key={p.id} className="p-5">
                       <div className="flex items-start justify-between gap-2">
                         <h3 className="text-base font-semibold text-ink-900">{p.title}</h3>
-                        {p.visibility === "public" ? (
-                          <Eye className="h-4 w-4 shrink-0 text-emerald-500" />
-                        ) : (
-                          <EyeOff className="h-4 w-4 shrink-0 text-ink-300" />
-                        )}
+                        <div className="flex shrink-0 items-center gap-1">
+                          {p.visibility === "public" ? (
+                            <Eye className="h-4 w-4 text-emerald-500" />
+                          ) : (
+                            <EyeOff className="h-4 w-4 text-ink-300" />
+                          )}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => openEdit(p)}
+                              className="rounded-lg p-1 text-ink-400 transition hover:bg-ink-100 hover:text-brand-700"
+                              aria-label={`Edit ${p.title}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                       {p.category && (
                         <p className="mt-0.5 text-xs uppercase tracking-wide text-brand-500">
@@ -155,8 +199,13 @@ export default function Projects() {
         </div>
       )}
 
-      <Modal open={open} onClose={() => setOpen(false)} title="New project / vision" wide>
-        <form onSubmit={create} className="space-y-4">
+      <Modal
+        open={open}
+        onClose={closeModal}
+        title={editing ? "Edit project / vision" : "New project / vision"}
+        wide
+      >
+        <form onSubmit={save} className="space-y-4">
           <Field label="Title">
             <Input
               value={form.title}
@@ -204,6 +253,15 @@ export default function Projects() {
                 onChange={(e) => setForm({ ...form, budget: e.target.value })}
               />
             </Field>
+            {editing && (
+              <Field label="Amount raised (₦)">
+                <Input
+                  type="number"
+                  value={form.amountRaised}
+                  onChange={(e) => setForm({ ...form, amountRaised: e.target.value })}
+                />
+              </Field>
+            )}
           </div>
           <Field label="Visibility" hint="Public projects appear on the church website">
             <Select
@@ -215,11 +273,11 @@ export default function Projects() {
             </Select>
           </Field>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="outline" onClick={closeModal}>
               Cancel
             </Button>
             <Button type="submit" loading={saving}>
-              Create project
+              {editing ? "Save changes" : "Create project"}
             </Button>
           </div>
         </form>
