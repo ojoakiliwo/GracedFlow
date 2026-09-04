@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Card } from "../../components/ui";
+import { ChurchContactLinks } from "../../components/ChurchContact";
 
 export default function About() {
   return (
@@ -129,6 +130,14 @@ export default function About() {
             </div>
           </Card>
         </div>
+      </section>
+
+      <section className="mx-auto max-w-4xl px-6 py-16">
+        <h2 className="font-display text-3xl text-ink-900">Reach us</h2>
+        <p className="mt-3 text-ink-600">
+          Call or write — we would be glad to welcome you and answer your questions.
+        </p>
+        <ChurchContactLinks className="mt-5" />
       </section>
     </div>
   );

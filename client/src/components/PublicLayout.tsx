@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { Menu, X } from "lucide-react";
 import { Button } from "./ui";
 import { BrandLogo } from "./BrandLogo";
+import { ChurchContactLinks } from "./ChurchContact";
 import { SERVICE_TIMES } from "../lib/services";
 import { useAuth } from "../lib/auth";
 
@@ -106,7 +107,7 @@ export default function PublicLayout() {
 
       <footer className="mt-16 border-t border-ink-100 bg-brand-950 text-brand-200">
         <div className="mx-auto grid max-w-6xl gap-8 px-6 py-12 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="sm:col-span-2">
+          <div>
             <BrandLogo size="md">
               <p className="font-display text-xl font-semibold text-white">
                 Infinitely Graced Church
@@ -124,6 +125,10 @@ export default function PublicLayout() {
                 <li key={s.shortName}>{s.footer}</li>
               ))}
             </ul>
+          </div>
+          <div>
+            <p className="mb-3 text-sm font-semibold text-white">Contact</p>
+            <ChurchContactLinks tone="dark" />
           </div>
           <div>
             <p className="mb-3 text-sm font-semibold text-white">Quick Links</p>

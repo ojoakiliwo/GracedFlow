@@ -11,6 +11,7 @@ import { useApi } from "../../lib/useApi";
 import { Card } from "../../components/ui";
 import { formatDateRange, formatDateTime } from "../../lib/format";
 import { SERVICE_TIMES } from "../../lib/services";
+import { ChurchContactLinks } from "../../components/ChurchContact";
 import {
   mergePrograms,
   programIsUpcoming,
@@ -249,6 +250,7 @@ export default function Home() {
           >
             Connect with us <ArrowRight className="h-5 w-5" />
           </Link>
+          <ChurchContactLinks tone="onColor" align="center" className="mt-2" />
         </div>
       </section>
     </div>

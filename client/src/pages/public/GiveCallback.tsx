@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { CheckCircle2, XCircle, Clock } from "lucide-react";
 import { api } from "../../lib/api";
 import { Button, Card, Spinner } from "../../components/ui";
+import { ChurchContactLinks } from "../../components/ChurchContact";
 import { money } from "../../lib/currencies";
 
 interface VerifyResult {
@@ -116,6 +117,11 @@ export default function GiveCallback() {
                 ? "Flutterwave is still finalizing this payment. If you completed checkout, tap Check again in a moment."
                 : "If you were charged, tap Check again or contact the church office with your reference."}
             </p>
+            {state === "failed" && (
+              <div className="mt-4 flex justify-center">
+                <ChurchContactLinks align="center" />
+              </div>
+            )}
             {reference && (
               <p className="mt-2 text-xs text-ink-400">Reference: {reference}</p>
             )}
