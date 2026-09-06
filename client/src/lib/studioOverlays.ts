@@ -119,6 +119,40 @@ export const OVERLAY_DESIGNS: {
   { id: "title", label: "Title", hint: "A bold heading over the picture", swatch: "#e0bd6f" },
 ];
 
+export const OVERLAY_DESIGN_WIDTH = 1280;
+export const OVERLAY_DESIGN_HEIGHT = 720;
+
+/** Keep overlay geometry proportional on 720p / 540p / 360p Program frames. */
+export function overlayScale(width: number, height: number): number {
+  if (width <= 0 || height <= 0) return 1;
+  return Math.min(width / OVERLAY_DESIGN_WIDTH, height / OVERLAY_DESIGN_HEIGHT);
+}
+
+function scaled(n: number, scale: number, min = 1): number {
+  return Math.max(min, Math.round(n * scale));
+}
+
+function breakLongToken(
+  ctx: CanvasRenderingContext2D,
+  token: string,
+  maxWidth: number,
+): string[] {
+  if (maxWidth <= 0 || ctx.measureText(token).width <= maxWidth) return [token];
+  const parts: string[] = [];
+  let chunk = "";
+  for (const ch of token) {
+    const trial = chunk + ch;
+    if (chunk && ctx.measureText(trial).width > maxWidth) {
+      parts.push(chunk);
+      chunk = ch;
+    } else {
+      chunk = trial;
+    }
+  }
+  if (chunk) parts.push(chunk);
+  return parts.length ? parts : [token];
+}
+
 export function wrapText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -130,16 +164,19 @@ export function wrapText(
   for (const paragraph of paragraphs) {
     const words = paragraph.split(/\s+/).filter(Boolean);
     if (words.length === 0) continue;
-    let line = words[0]!;
-    for (let i = 1; i < words.length; i++) {
-      const next = `${line} ${words[i]}`;
-      if (ctx.measureText(next).width <= maxWidth) line = next;
-      else {
-        lines.push(line);
-        line = words[i]!;
+    let line = "";
+    for (const word of words) {
+      for (const piece of breakLongToken(ctx, word, maxWidth)) {
+        const next = line ? `${line} ${piece}` : piece;
+        if (line && ctx.measureText(next).width > maxWidth) {
+          lines.push(line);
+          line = piece;
+        } else {
+          line = next;
+        }
       }
     }
-    lines.push(line);
+    if (line) lines.push(line);
   }
   return lines;
 }
@@ -151,18 +188,60 @@ export function fitWrappedText(
   maxWidth: number,
   maxHeight: number,
   fontFamily: string,
+  opts?: { maxFont?: number; minFont?: number },
 ): { lines: string[]; fontSize: number; lineHeight: number } {
-  const sizes = [28, 24, 20, 18, 16, 14];
-  let chosen = { lines: [] as string[], fontSize: 14, lineHeight: 20 };
-  for (const fontSize of sizes) {
-    const lineHeight = Math.round(fontSize * 1.3);
+  const maxFont = Math.max(8, Math.round(opts?.maxFont ?? 28));
+  const minFont = Math.max(8, Math.round(opts?.minFont ?? Math.min(12, maxFont)));
+  const widthOk = (lines: string[]) =>
+    lines.every((line) => ctx.measureText(line).width <= maxWidth + 0.5);
+  let chosen = {
+    lines: [] as string[],
+    fontSize: minFont,
+    lineHeight: Math.max(minFont + 2, Math.round(minFont * 1.32)),
+  };
+  for (let fontSize = maxFont; fontSize >= minFont; fontSize--) {
+    const lineHeight = Math.max(fontSize + 2, Math.round(fontSize * 1.32));
     ctx.font = `400 ${fontSize}px ${fontFamily}`;
     const lines = wrapText(ctx, text, maxWidth);
     chosen = { lines, fontSize, lineHeight };
-    if (lines.length * lineHeight <= maxHeight) return chosen;
+    if (widthOk(lines) && lines.length * lineHeight <= maxHeight) return chosen;
   }
   const maxLines = Math.max(1, Math.floor(maxHeight / chosen.lineHeight));
-  return { ...chosen, lines: chosen.lines.slice(0, maxLines) };
+  const lines = chosen.lines.slice(0, maxLines);
+  if (chosen.lines.length > maxLines && lines.length) {
+    const last = lines[maxLines - 1]!.replace(/\s+\S*$/, "").trimEnd();
+    lines[maxLines - 1] = `${last || lines[maxLines - 1]}…`;
+  }
+  return { ...chosen, lines };
+}
+
+export function verseCardLayout(width: number, height: number) {
+  const scale = overlayScale(width, height);
+  const margin = scaled(28, scale, 12);
+  const padX = scaled(36, scale, 14);
+  const padY = scaled(22, scale, 10);
+  const titleSize = scaled(20, scale, 11);
+  const titleGap = scaled(14, scale, 8);
+  const boxW = Math.min(scaled(1040, scale, 160), Math.round(width * 0.88));
+  const x = (width - boxW) / 2;
+  const maxBoxH = Math.max(scaled(120, scale, 64), height - margin * 2);
+  const innerW = Math.max(40, boxW - padX * 2);
+  const headerH = titleSize + titleGap;
+  const innerH = Math.max(titleSize, maxBoxH - padY * 2 - headerH);
+  return {
+    scale,
+    margin,
+    padX,
+    padY,
+    titleSize,
+    titleGap,
+    boxW,
+    x,
+    maxBoxH,
+    innerW,
+    headerH,
+    innerH,
+  };
 }
 
 function roundRect(
@@ -197,104 +276,137 @@ export function drawProgrammeOverlay(
   if (!show || (!headline && !body)) return;
   const pal = getOverlayPalette(overlay.palette);
 
+  const s = overlayScale(width, height);
+  const px = (n: number, min = 1) => scaled(n, s, min);
+
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.filter = "none";
   ctx.textBaseline = "top";
 
   if (overlay.design === "lower-third") {
-    const boxW = Math.min(720, width * 0.62);
-    const x = 48;
-    const y = height - 168;
-    roundRect(ctx, x, y, boxW, 112, 16);
+    const boxW = Math.min(px(720, 200), width * 0.62);
+    const boxH = px(112, 56);
+    const x = px(48, 16);
+    const y = Math.max(px(8, 4), height - boxH - px(56, 16));
+    const accentW = px(8, 4);
+    const inset = x + px(28, 12);
+    const maxCopy = Math.max(40, boxW - px(48, 20));
+    roundRect(ctx, x, y, boxW, boxH, px(16, 8));
     ctx.fillStyle = pal.bg;
     ctx.fill();
     ctx.fillStyle = pal.accent;
-    ctx.fillRect(x, y, 8, 112);
-    ctx.font = "600 32px Fraunces, Georgia, serif";
+    ctx.fillRect(x, y, accentW, boxH);
+    ctx.font = `600 ${px(32, 14)}px Fraunces, Georgia, serif`;
     ctx.fillStyle = pal.text;
-    ctx.fillText(headline.slice(0, 48), x + 28, y + 22);
-    ctx.font = "400 20px Inter, system-ui, sans-serif";
+    const head = wrapText(ctx, headline, maxCopy)[0] ?? headline;
+    ctx.fillText(head, inset, y + px(22, 10));
+    ctx.font = `400 ${px(20, 11)}px Inter, system-ui, sans-serif`;
     ctx.fillStyle = pal.muted;
-    const lines = wrapText(ctx, body || "Infinitely Graced Church", boxW - 48);
-    ctx.fillText(lines[0] ?? "", x + 28, y + 66);
+    const lines = wrapText(ctx, body || "Infinitely Graced Church", maxCopy);
+    ctx.fillText(lines[0] ?? "", inset, y + px(66, 32));
   } else if (overlay.design === "verse") {
-    const boxW = Math.min(1040, width * 0.88);
-    const x = (width - boxW) / 2;
+    const layout = verseCardLayout(width, height);
     const copy = body || headline;
     const family = "Fraunces, Georgia, serif";
-    const maxTextH = height * 0.62;
-    const fitted = fitWrappedText(ctx, copy, boxW - 72, maxTextH, family);
-    const boxH = Math.min(height - 48, 80 + fitted.lines.length * fitted.lineHeight + 20);
-    const y = Math.max(24, (height - boxH) / 2);
-    roundRect(ctx, x, y, boxW, boxH, 20);
+    const fitted = fitWrappedText(ctx, copy, layout.innerW, layout.innerH, family, {
+      maxFont: scaled(28, layout.scale, 12),
+      minFont: scaled(12, layout.scale, 8),
+    });
+    const contentH = layout.headerH + fitted.lines.length * fitted.lineHeight;
+    const boxH = Math.min(layout.maxBoxH, layout.padY * 2 + contentH);
+    const y = Math.max(layout.margin, (height - boxH) / 2);
+    roundRect(ctx, layout.x, y, layout.boxW, boxH, px(20, 10));
     ctx.fillStyle = pal.bg;
     ctx.fill();
     ctx.strokeStyle = pal.accent;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = Math.max(2, px(3, 2));
     ctx.stroke();
-    ctx.fillStyle = pal.muted;
-    ctx.font = "600 20px Inter, system-ui, sans-serif";
+    ctx.save();
+    roundRect(ctx, layout.x, y, layout.boxW, boxH, px(20, 10));
+    if (typeof ctx.clip === "function") ctx.clip();
     ctx.textAlign = "center";
-    ctx.fillText(headline || "Holy Scripture", width / 2, y + 18);
+    ctx.fillStyle = pal.muted;
+    ctx.font = `600 ${layout.titleSize}px Inter, system-ui, sans-serif`;
+    ctx.fillText(headline || "Holy Scripture", width / 2, y + layout.padY);
     ctx.fillStyle = pal.text;
     ctx.font = `400 ${fitted.fontSize}px ${family}`;
+    const bodyTop = y + layout.padY + layout.headerH;
     fitted.lines.forEach((line, i) => {
-      ctx.fillText(line, width / 2, y + 52 + i * fitted.lineHeight);
+      ctx.fillText(line, width / 2, bodyTop + i * fitted.lineHeight);
     });
-    ctx.textAlign = "left";
+    ctx.restore();
   } else if (overlay.design === "banner") {
+    const barH = px(132, 64);
+    const inset = px(40, 16);
+    const maxCopy = Math.max(40, width - px(80, 32));
     ctx.fillStyle = pal.bg;
-    ctx.fillRect(0, height - 132, width, 132);
+    ctx.fillRect(0, height - barH, width, barH);
     ctx.fillStyle = pal.accent;
-    ctx.fillRect(0, height - 136, width, 6);
-    ctx.font = "600 34px Fraunces, Georgia, serif";
+    ctx.fillRect(0, height - barH - px(4, 2), width, px(6, 3));
+    ctx.font = `600 ${px(34, 16)}px Fraunces, Georgia, serif`;
     ctx.fillStyle = pal.text;
-    ctx.fillText(headline.slice(0, 60), 40, height - 108);
-    ctx.font = "400 22px Inter, system-ui, sans-serif";
+    const head = wrapText(ctx, headline, maxCopy)[0] ?? headline;
+    ctx.fillText(head, inset, height - barH + px(24, 10));
+    ctx.font = `400 ${px(22, 12)}px Inter, system-ui, sans-serif`;
     ctx.fillStyle = pal.muted;
-    const lines = wrapText(ctx, body, width - 80);
-    ctx.fillText(lines[0] ?? "", 40, height - 60);
+    const lines = wrapText(ctx, body, maxCopy);
+    ctx.fillText(lines[0] ?? "", inset, height - barH + px(72, 34));
   } else if (overlay.design === "news") {
+    const barH = px(72, 40);
     ctx.fillStyle = pal.bg;
-    ctx.fillRect(0, 0, width, 72);
+    ctx.fillRect(0, 0, width, barH);
     ctx.fillStyle = pal.accent;
-    ctx.fillRect(0, 72, width, 4);
-    ctx.font = "700 18px Inter, system-ui, sans-serif";
+    ctx.fillRect(0, barH, width, px(4, 2));
+    ctx.font = `700 ${px(18, 11)}px Inter, system-ui, sans-serif`;
     ctx.fillStyle = pal.accent;
-    ctx.fillText("NEWS", 28, 24);
-    ctx.font = "500 26px Inter, system-ui, sans-serif";
+    ctx.fillText("NEWS", px(28, 12), px(24, 12));
+    ctx.font = `500 ${px(26, 13)}px Inter, system-ui, sans-serif`;
     ctx.fillStyle = pal.text;
-    ctx.fillText([headline, body].filter(Boolean).join("  ·  ").slice(0, 90), 110, 22);
+    const news = wrapText(ctx, [headline, body].filter(Boolean).join("  ·  "), width - px(140, 60));
+    ctx.fillText(news[0] ?? "", px(110, 52), px(22, 11));
   } else if (overlay.design === "prayer") {
-    const boxW = Math.min(820, width * 0.7);
-    ctx.font = "italic 28px Fraunces, Georgia, serif";
-    const lines = wrapText(ctx, body || headline, boxW - 60).slice(0, 5);
-    const boxH = 80 + lines.length * 36;
+    const boxW = Math.min(px(820, 220), width * 0.7);
+    const family = "Fraunces, Georgia, serif";
+    const innerW = Math.max(40, boxW - px(60, 24));
+    const fitted = fitWrappedText(ctx, body || headline, innerW, px(180, 80), family, {
+      maxFont: px(26, 13),
+      minFont: px(14, 9),
+    });
+    const boxH = px(80, 40) + fitted.lines.length * fitted.lineHeight;
     const x = (width - boxW) / 2;
-    const y = height - boxH - 48;
-    roundRect(ctx, x, y, boxW, boxH, 18);
+    const y = Math.max(px(16, 8), height - boxH - px(48, 16));
+    roundRect(ctx, x, y, boxW, boxH, px(18, 8));
     ctx.fillStyle = pal.bg;
     ctx.fill();
+    ctx.save();
+    roundRect(ctx, x, y, boxW, boxH, px(18, 8));
+    if (typeof ctx.clip === "function") ctx.clip();
     ctx.textAlign = "center";
     ctx.fillStyle = pal.muted;
-    ctx.font = "600 18px Inter, system-ui, sans-serif";
-    ctx.fillText(headline || "Let us pray", width / 2, y + 20);
+    ctx.font = `600 ${px(18, 11)}px Inter, system-ui, sans-serif`;
+    ctx.fillText(headline || "Let us pray", width / 2, y + px(20, 10));
     ctx.fillStyle = pal.text;
-    ctx.font = "italic 26px Fraunces, Georgia, serif";
-    lines.forEach((line, i) => ctx.fillText(line, width / 2, y + 52 + i * 36));
-    ctx.textAlign = "left";
+    ctx.font = `italic ${fitted.fontSize}px ${family}`;
+    fitted.lines.forEach((line, i) => {
+      ctx.fillText(line, width / 2, y + px(52, 26) + i * fitted.lineHeight);
+    });
+    ctx.restore();
   } else {
     ctx.textAlign = "center";
-    ctx.font = "700 56px Fraunces, Georgia, serif";
+    const maxCopy = width * 0.9;
+    ctx.font = `700 ${px(56, 22)}px Fraunces, Georgia, serif`;
+    const head = wrapText(ctx, headline, maxCopy)[0] ?? headline;
+    const y = height * 0.38;
     ctx.fillStyle = "rgba(0,0,0,0.45)";
-    ctx.fillText(headline.slice(0, 40), width / 2 + 3, height * 0.38 + 3);
+    ctx.fillText(head, width / 2 + 3, y + 3);
     ctx.fillStyle = pal.text;
-    ctx.fillText(headline.slice(0, 40), width / 2, height * 0.38);
+    ctx.fillText(head, width / 2, y);
     if (body) {
-      ctx.font = "400 26px Inter, system-ui, sans-serif";
+      ctx.font = `400 ${px(26, 13)}px Inter, system-ui, sans-serif`;
       ctx.fillStyle = pal.muted;
-      ctx.fillText(body.slice(0, 80), width / 2, height * 0.38 + 72);
+      const sub = wrapText(ctx, body, maxCopy)[0] ?? body;
+      ctx.fillText(sub, width / 2, y + px(72, 32));
     }
     ctx.textAlign = "left";
   }

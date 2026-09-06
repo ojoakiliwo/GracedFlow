@@ -314,10 +314,10 @@ export default function Studio() {
         <div className="min-w-0 space-y-3">
           <div className="grid gap-3 lg:grid-cols-2">
             <MonitorWell tally="preview" title="Preview" live={false}>
-              <canvas ref={s.previewCanvasRef} className="aspect-video w-full bg-black" />
+              <canvas ref={s.previewCanvasRef} width={1280} height={720} className="aspect-video w-full bg-black object-contain" />
             </MonitorWell>
             <MonitorWell tally="program" title="Program / live" live={s.programOverlay.visible}>
-              <canvas ref={s.canvasRef} className="aspect-video w-full bg-black" />
+              <canvas ref={s.canvasRef} width={1280} height={720} className="aspect-video w-full bg-black object-contain" />
             </MonitorWell>
           </div>
           <p className="text-[11px] text-ink-500">

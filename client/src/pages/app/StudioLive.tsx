@@ -190,7 +190,7 @@ export default function StudioLive() {
               </span>
             ) : null}
           </div>
-          <canvas ref={s.canvasRef} className="aspect-video w-full bg-black" />
+          <canvas ref={s.canvasRef} width={1280} height={720} className="aspect-video w-full bg-black object-contain" />
           <canvas ref={s.previewCanvasRef} className="hidden" />
         </div>
         <div className="rounded-2xl border border-white/10 bg-[#14161d] p-4">

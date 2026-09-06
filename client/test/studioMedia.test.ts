@@ -8,6 +8,7 @@ import {
   mediaReady,
   pictureFit,
   pictureKindLabel,
+  programFrameSize,
   programNeedsCamera,
   programNeedsMic,
   shouldAdaptExposure,
@@ -116,8 +117,17 @@ describe("Recorded media room", () => {
     expect(RECORDING_AUDIO_MISSING).not.toMatch(/Yamaha/i);
   });
 
+  it("promotes a default HTML canvas to 16:9 instead of stretching 300x150", () => {
+    const canvas = { width: 300, height: 150 } as HTMLCanvasElement;
+    const size = programFrameSize(canvas);
+    expect(size).toEqual({ width: 1280, height: 720 });
+    ensureStudioCanvas(canvas, size);
+    expect(canvas.width / canvas.height).toBeCloseTo(16 / 9);
+  });
+
   it("keeps a Low 360p Program canvas instead of forcing 720p", () => {
     const canvas = { width: 640, height: 360 } as HTMLCanvasElement;
+    expect(programFrameSize(canvas)).toEqual({ width: 640, height: 360 });
     ensureStudioCanvas(canvas);
     expect(canvas.width).toBe(640);
     expect(canvas.height).toBe(360);

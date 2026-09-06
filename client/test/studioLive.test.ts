@@ -401,6 +401,9 @@ describe("OBS encoder from this church desk", () => {
     expect(html).toContain('id="igc-program"');
     expect(html).toContain('width="1280"');
     expect(html).toContain('height="720"');
+    expect(html).toContain("max-width: 100vw");
+    expect(html).toContain("max-height: 100vh");
+    expect(html).not.toMatch(/width:\s*100vw;\s*height:\s*100vh/);
     expect(html).toContain("IGC Program");
   });
 

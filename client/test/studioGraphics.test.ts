@@ -12,12 +12,60 @@ import {
   drawProgrammeOverlay,
   fitWrappedText,
   getOverlayPalette,
+  overlayScale,
   OVERLAY_PALETTES,
   suggestDesigns,
+  verseCardLayout,
   wrapText,
 } from "../src/lib/studioOverlays";
 import { transcriptFromSpeechEvent } from "../src/lib/studioSpeech";
 import { searchQuotesLocal, searchQuotesRemote, scoreQuoteMatch } from "../src/lib/scriptureSearch";
+
+function overlayCtx(extra?: Record<string, unknown>) {
+  let font = "";
+  let fillStyle = "";
+  const ctx: Record<string, unknown> = {
+    save: vi.fn(),
+    restore: vi.fn(),
+    setTransform: vi.fn(),
+    fillRect: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    arcTo: vi.fn(),
+    closePath: vi.fn(),
+    clip: vi.fn(),
+    fillText: vi.fn(),
+    measureText: (t: string) => ({ width: String(t).length * 10 }),
+    filter: "none",
+    textBaseline: "top",
+    textAlign: "left",
+    lineWidth: 1,
+    strokeStyle: "",
+  };
+  Object.defineProperty(ctx, "font", {
+    get: () => font,
+    set: (value: string) => {
+      font = String(value);
+    },
+    enumerable: true,
+    configurable: true,
+  });
+  Object.defineProperty(ctx, "fillStyle", {
+    get: () => fillStyle,
+    set: (value: string) => {
+      fillStyle = String(value);
+    },
+    enumerable: true,
+    configurable: true,
+  });
+  if (extra) Object.defineProperties(ctx, Object.getOwnPropertyDescriptors(extra));
+  return ctx as unknown as CanvasRenderingContext2D;
+}
+
+const LONG_VERSE =
+  "John 3:16 — For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.\n\nRomans 8:28 — And we know that all things work together for good to them that love God, to them who are the called according to his purpose.";
 
 describe("Bible reference parsing", () => {
   it("finds ordinary spoken and written references", () => {
@@ -128,31 +176,84 @@ describe("On-air design suggestions", () => {
     expect(paras.length).toBeGreaterThan(lines.length);
     const fitted = fitWrappedText(
       ctx,
-      "John 3:16 — For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.\n\nRomans 8:28 — And we know that all things work together for good to them that love God.",
+      LONG_VERSE,
       400,
       280,
       "serif",
     );
     expect(fitted.lines.join(" ")).toContain("Romans 8:28");
     expect(fitted.lines.join(" ")).toContain("all things work together");
+    expect(fitted.lines.every((line) => ctx.measureText(line).width <= 400.5)).toBe(true);
+    expect(fitted.lines.length * fitted.lineHeight).toBeLessThanOrEqual(280);
+  });
+
+  it("breaks a word that is wider than the scripture card", () => {
+    const ctx = {
+      measureText: (t: string) => ({ width: t.length * 10 }),
+    } as unknown as CanvasRenderingContext2D;
+    const lines = wrapText(ctx, "Supercalifragilisticexpialidocious", 80);
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.every((line) => ctx.measureText(line).width <= 80)).toBe(true);
+  });
+
+  it("keeps Program overlay geometry in 16:9 at 360p and 720p", () => {
+    expect(overlayScale(1280, 720)).toBe(1);
+    expect(overlayScale(640, 360)).toBe(0.5);
+    const full = verseCardLayout(1280, 720);
+    const half = verseCardLayout(640, 360);
+    expect(half.boxW).toBeCloseTo(full.boxW * 0.5, 0);
+    expect(half.innerW).toBeLessThan(half.boxW);
+  });
+
+  it("keeps scripture lines inside the card on 16:9 Program frames", () => {
+    for (const [width, height] of [
+      [1280, 720],
+      [960, 540],
+      [640, 360],
+    ] as const) {
+      const fills: { text: string; y: number; font: string }[] = [];
+      let font = "";
+      const ctx = overlayCtx({
+        fillText(text: string, _x: number, y: number) {
+          fills.push({ text: String(text), y, font });
+        },
+        set font(value: string) {
+          font = String(value);
+        },
+        get font() {
+          return font;
+        },
+      });
+      drawProgrammeOverlay(ctx, width, height, {
+        design: "verse",
+        palette: "sanctuary",
+        headline: "John 3:16",
+        body: LONG_VERSE,
+        visible: true,
+      });
+      const layout = verseCardLayout(width, height);
+      const fitted = fitWrappedText(ctx, LONG_VERSE, layout.innerW, layout.innerH, "Fraunces, Georgia, serif", {
+        maxFont: Math.max(12, Math.round(28 * layout.scale)),
+        minFont: Math.max(8, Math.round(12 * layout.scale)),
+      });
+      const contentH = layout.headerH + fitted.lines.length * fitted.lineHeight;
+      const boxH = Math.min(layout.maxBoxH, layout.padY * 2 + contentH);
+      const y = Math.max(layout.margin, (height - boxH) / 2);
+      expect(fitted.lines.length).toBeGreaterThan(1);
+      expect(fitted.lines.every((line) => ctx.measureText(line).width <= layout.innerW + 0.5)).toBe(true);
+      expect(y + boxH).toBeLessThanOrEqual(height);
+      expect(y).toBeGreaterThanOrEqual(0);
+      for (const fill of fills) {
+        const size = Number(/(\d+)px/.exec(fill.font)?.[1] ?? 0);
+        expect(fill.y).toBeGreaterThanOrEqual(y);
+        expect(fill.y + size).toBeLessThanOrEqual(y + boxH + 1);
+      }
+    }
   });
 
   it("does not draw typed text until it is put on air", () => {
     const fillText = vi.fn();
-    const ctx = {
-      save: vi.fn(),
-      restore: vi.fn(),
-      setTransform: vi.fn(),
-      fillRect: vi.fn(),
-      fill: vi.fn(),
-      stroke: vi.fn(),
-      beginPath: vi.fn(),
-      moveTo: vi.fn(),
-      arcTo: vi.fn(),
-      closePath: vi.fn(),
-      fillText,
-      measureText: (t: string) => ({ width: t.length * 10 }),
-    } as unknown as CanvasRenderingContext2D;
+    const ctx = overlayCtx({ fillText });
     drawProgrammeOverlay(ctx, 1280, 720, {
       design: "lower-third",
       palette: "sanctuary",
@@ -193,32 +294,14 @@ describe("On-air design suggestions", () => {
 
   it("paints overlay plates with the matching ink colour", () => {
     const styles: string[] = [];
-    const ctx = {
-      save: vi.fn(),
-      restore: vi.fn(),
-      setTransform: vi.fn(),
-      fillRect: vi.fn(),
-      fill: vi.fn(),
-      stroke: vi.fn(),
-      beginPath: vi.fn(),
-      moveTo: vi.fn(),
-      arcTo: vi.fn(),
-      closePath: vi.fn(),
-      fillText: vi.fn(),
-      measureText: (t: string) => ({ width: t.length * 10 }),
+    const ctx = overlayCtx({
       set fillStyle(value: string) {
         styles.push(String(value));
       },
       get fillStyle() {
         return styles.at(-1) ?? "";
       },
-      set strokeStyle(_value: string) {},
-      set lineWidth(_value: number) {},
-      set font(_value: string) {},
-      set filter(_value: string) {},
-      set textBaseline(_value: string) {},
-      set textAlign(_value: string) {},
-    } as unknown as CanvasRenderingContext2D;
+    });
     const pal = getOverlayPalette("glory");
     drawProgrammeOverlay(ctx, 1280, 720, {
       design: "lower-third",

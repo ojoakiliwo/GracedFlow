@@ -3,6 +3,7 @@ import {
   type ProgrammeOverlay,
 } from "./studioOverlays";
 import type { VideoAutoState } from "./studioEngine";
+import { DEFAULT_STUDIO_OUTPUT, STUDIO_OUTPUTS } from "./studioOutput";
 
 export type PictureKind = "camera" | "file-video" | "still" | "black";
 export type SoundKind = "mic" | "file-audio" | "file-video" | "silent";
@@ -164,6 +165,22 @@ export function tracksToStop<T>(tracks: T[], preserve: Iterable<T>): T[] {
   return tracks.filter((track) => !keep.has(track));
 }
 
+export function programFrameSize(
+  canvas?: { width: number; height: number } | null,
+  preferred?: { width: number; height: number } | null,
+): { width: number; height: number } {
+  if (preferred && preferred.width >= 2 && preferred.height >= 2) {
+    return { width: preferred.width, height: preferred.height };
+  }
+  if (
+    canvas &&
+    STUDIO_OUTPUTS.some((row) => row.width === canvas.width && row.height === canvas.height)
+  ) {
+    return { width: canvas.width, height: canvas.height };
+  }
+  return { width: DEFAULT_STUDIO_OUTPUT.width, height: DEFAULT_STUDIO_OUTPUT.height };
+}
+
 export function ensureStudioCanvas(
   canvas: HTMLCanvasElement,
   size?: { width: number; height: number },
@@ -176,8 +193,8 @@ export function ensureStudioCanvas(
     return;
   }
   if (canvas.width < 2 || canvas.height < 2) {
-    canvas.width = 1280;
-    canvas.height = 720;
+    canvas.width = DEFAULT_STUDIO_OUTPUT.width;
+    canvas.height = DEFAULT_STUDIO_OUTPUT.height;
   }
 }
 
@@ -204,9 +221,10 @@ export function paintStudioMonitor(
   lookNow: PictureLook,
   auto: VideoAutoState,
   stage: boolean,
+  outputSize?: { width: number; height: number } | null,
 ) {
   if (!canvas) return;
-  ensureStudioCanvas(canvas);
+  ensureStudioCanvas(canvas, programFrameSize(canvas, outputSize));
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   const brightness = lookNow.brightness * auto.brightness;
