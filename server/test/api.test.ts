@@ -118,6 +118,18 @@ describe("Infinitely Graced Church API", () => {
     expect(res.body.recipients).toBeGreaterThan(0);
   });
 
+  it("previews a different automation message for next week", async () => {
+    const res = await auth(request(app).get("/api/automations"));
+    expect(res.status).toBe(200);
+    const sunday = res.body.schedules.find((s: { job: string }) => s.job === "sunday_reminder");
+    const prayer = res.body.schedules.find((s: { job: string }) => s.job === "prayer_reminder");
+    const celebrations = res.body.schedules.find((s: { job: string }) => s.job === "celebrations");
+    expect(sunday.thisWeek.body).not.toBe(sunday.nextWeek.body);
+    expect(prayer.thisWeek.body).not.toBe(prayer.nextWeek.body);
+    expect(celebrations.thisWeek.body).not.toBe(celebrations.nextWeek.body);
+    expect(celebrations.anniversary.thisWeek.body).not.toBe(celebrations.anniversary.nextWeek.body);
+  });
+
   it("sends birthday/anniversary greetings for today's celebrants", async () => {
     const res = await auth(request(app).post("/api/automations/run")).send({
       job: "celebrations",

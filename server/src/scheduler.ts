@@ -1,9 +1,14 @@
 import cron from "node-cron";
 import { config } from "./config.js";
 import { db } from "./db.js";
-import { createAndSendMessage } from "./messaging.js";
+import { createAndSendMessage, personalize } from "./messaging.js";
 import { sendEmail, sendSms } from "./comms.js";
 import { newId, nowIso } from "./util.js";
+import {
+  parseAutomationDate,
+  pickAutomationCopy,
+  type AutomationCopyKind,
+} from "./automationCopy.js";
 
 async function logRun(job: string, detail: string, recipients: number): Promise<void> {
   await db
@@ -13,27 +18,41 @@ async function logRun(job: string, detail: string, recipients: number): Promise<
     .run(newId("run"), job, detail, recipients);
 }
 
-export async function runSundayReminder() {
+function copyFor(kind: AutomationCopyKind, date?: Date | string | null) {
+  return pickAutomationCopy(kind, parseAutomationDate(date), config.scheduler.timezone);
+}
+
+export async function runSundayReminder(date?: Date | string | null) {
+  const copy = copyFor("sunday", date);
   const summary = await createAndSendMessage({
     channel: "both",
-    subject: "See you tomorrow at Infinitely Graced Church",
-    body: "Hello {{first_name}}, this is a loving reminder about our Sunday Service tomorrow. Come expectant — His infinite grace awaits you! God bless you.",
+    subject: copy.subject,
+    body: copy.body,
     audienceType: "all",
     category: "auto:sunday_reminder",
   });
-  await logRun("sunday_reminder", `Sent to ${summary.sent} deliveries`, summary.recipients);
+  await logRun(
+    "sunday_reminder",
+    `Copy ${copy.index + 1}/${copy.total} · sent to ${summary.sent} deliveries`,
+    summary.recipients,
+  );
   return summary;
 }
 
-export async function runPrayerReminder() {
+export async function runPrayerReminder(date?: Date | string | null) {
+  const copy = copyFor("prayer", date);
   const summary = await createAndSendMessage({
     channel: "both",
-    subject: "Wednesday Prayer Meeting today",
-    body: "Good morning {{first_name}}! Remember our Wednesday Prayer Meeting today. Let us gather and press in together. See you there!",
+    subject: copy.subject,
+    body: copy.body,
     audienceType: "all",
     category: "auto:prayer_reminder",
   });
-  await logRun("prayer_reminder", `Sent to ${summary.sent} deliveries`, summary.recipients);
+  await logRun(
+    "prayer_reminder",
+    `Copy ${copy.index + 1}/${copy.total} · sent to ${summary.sent} deliveries`,
+    summary.recipients,
+  );
   return summary;
 }
 
@@ -51,26 +70,29 @@ export async function runCelebrations(dateIso?: string) {
   const anniversaries = await resolveCelebrants("wedding_anniversary", mmdd);
   let count = 0;
 
+  const birthdayCopy = copyFor("birthday", target);
+  const anniversaryCopy = copyFor("anniversary", target);
+
   for (const m of birthdays) {
     await sendPrivate(
       m,
-      "Happy Birthday from your church family!",
-      `Happy Birthday, ${m.first_name}! The whole family at Infinitely Graced Church celebrates you today. May God's infinite grace crown this new year of your life with joy, health and testimonies. We love you!`,
+      personalize(birthdayCopy.subject, m),
+      personalize(birthdayCopy.body, m),
     );
     count++;
   }
   for (const m of anniversaries) {
     await sendPrivate(
       m,
-      "Happy Wedding Anniversary!",
-      `Happy Wedding Anniversary, ${m.first_name}! We thank God for your union. May His grace continue to strengthen and beautify your marriage. Congratulations from all of us at Infinitely Graced Church!`,
+      personalize(anniversaryCopy.subject, m),
+      personalize(anniversaryCopy.body, m),
     );
     count++;
   }
 
   await logRun(
     "celebrations",
-    `Birthdays: ${birthdays.length}, Anniversaries: ${anniversaries.length}`,
+    `Birthdays: ${birthdays.length} (copy ${birthdayCopy.index + 1}/${birthdayCopy.total}), Anniversaries: ${anniversaries.length} (copy ${anniversaryCopy.index + 1}/${anniversaryCopy.total})`,
     count,
   );
   return { birthdays: birthdays.length, anniversaries: anniversaries.length };

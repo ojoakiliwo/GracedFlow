@@ -7,12 +7,22 @@ import { formatDateTime } from "../../lib/format";
 import { useToast } from "../../components/toast";
 import { useAuth } from "../../lib/auth";
 
+interface WeekCopy {
+  subject: string;
+  body: string;
+  variant: number;
+  of: number;
+}
+
 interface AutomationsData {
   schedules: {
     job: string;
     label: string;
     cadence: string;
     description: string;
+    thisWeek?: WeekCopy;
+    nextWeek?: WeekCopy;
+    anniversary?: { thisWeek: WeekCopy; nextWeek: WeekCopy };
   }[];
   runs: {
     id: string;
@@ -68,7 +78,7 @@ export default function Automations() {
     <div>
       <PageHeader
         title="Automations"
-        subtitle="Scheduled reminders and personalized greetings that run on autopilot."
+        subtitle="Reminders and greetings that change every week, so the family never hears the same line on repeat."
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -84,6 +94,18 @@ export default function Automations() {
                 {s.cadence}
               </Badge>
               <p className="mt-3 flex-1 text-sm text-ink-500">{s.description}</p>
+              {s.thisWeek && s.nextWeek ? (
+                <div className="mt-4 space-y-3 rounded-xl bg-brand-50/80 px-3 py-3 text-sm">
+                  <CopyPreview label={`This week · ${s.thisWeek.variant} of ${s.thisWeek.of}`} copy={s.thisWeek} />
+                  <CopyPreview label={`Next week · ${s.nextWeek.variant} of ${s.nextWeek.of}`} copy={s.nextWeek} />
+                  {s.anniversary ? (
+                    <CopyPreview
+                      label={`Anniversaries this week · ${s.anniversary.thisWeek.variant} of ${s.anniversary.thisWeek.of}`}
+                      copy={s.anniversary.thisWeek}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
               {hasRole("admin") && (
                 <Button
                   variant="secondary"
@@ -126,6 +148,16 @@ export default function Automations() {
           </ul>
         )}
       </Card>
+    </div>
+  );
+}
+
+function CopyPreview({ label, copy }: { label: string; copy: WeekCopy }) {
+  return (
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-700">{label}</p>
+      <p className="mt-1 font-medium text-ink-800">{copy.subject}</p>
+      <p className="mt-0.5 text-xs leading-relaxed text-ink-500">{copy.body}</p>
     </div>
   );
 }
