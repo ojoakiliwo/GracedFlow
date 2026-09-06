@@ -133,7 +133,7 @@ export default function StudioMedia() {
 
       <div className="mb-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
         <div className="overflow-hidden rounded-md bg-black shadow-inner ring-2 ring-rose-600/80">
-          <canvas ref={s.canvasRef} className="aspect-video w-full bg-black" />
+          <canvas ref={s.canvasRef} width={1280} height={720} className="aspect-video w-full bg-black object-contain" />
         </div>
         <div className="rounded-2xl border border-white/10 bg-[#14161d] p-4">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-400">On Program</p>

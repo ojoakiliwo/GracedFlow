@@ -9,7 +9,15 @@ export function programOutputHtml(): string {
 <title>${PROGRAM_OUTPUT_TITLE}</title>
 <style>
   html, body { margin: 0; background: #000; height: 100%; overflow: hidden; }
-  canvas { display: block; width: 100vw; height: 100vh; object-fit: contain; background: #000; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas {
+    display: block;
+    max-width: 100vw;
+    max-height: 100vh;
+    width: auto;
+    height: auto;
+    background: #000;
+  }
 </style>
 </head>
 <body>
@@ -45,6 +53,10 @@ export function paintProgramOutputWindow(win: Window | null | undefined, source:
   if (!win || win.closed) return false;
   const dest = win.document.getElementById("igc-program") as HTMLCanvasElement | null;
   if (!dest || !source) return true;
+  if (source.width >= 2 && source.height >= 2 && (dest.width !== source.width || dest.height !== source.height)) {
+    dest.width = source.width;
+    dest.height = source.height;
+  }
   const ctx = dest.getContext("2d");
   if (!ctx) return true;
   ctx.drawImage(source, 0, 0, dest.width, dest.height);

@@ -559,9 +559,10 @@ export function useBroadcastStudioEngine() {
       lookNow.auto && shouldAdaptExposure(pictureKindRef.current)
         ? videoAuto.current
         : { brightness: 1, contrast: 1 };
-    paintStudioMonitor(captureCanvasRef.current, frame, programOverlayRef.current, lookNow, auto, false);
-    paintStudioMonitor(previewCanvasRef.current, frame, overlayRef.current, lookNow, auto, true);
-    paintStudioMonitor(canvasRef.current, frame, programOverlayRef.current, lookNow, auto, false);
+    const size = { width: outputRef.current.width, height: outputRef.current.height };
+    paintStudioMonitor(captureCanvasRef.current, frame, programOverlayRef.current, lookNow, auto, false, size);
+    paintStudioMonitor(previewCanvasRef.current, frame, overlayRef.current, lookNow, auto, true, size);
+    paintStudioMonitor(canvasRef.current, frame, programOverlayRef.current, lookNow, auto, false, size);
     kickCanvasFrames(nodes.current.whipStream);
     const out = programOutputRef.current;
     if (out) {
@@ -1495,9 +1496,10 @@ export function useBroadcastStudioEngine() {
       lookNow.auto && shouldAdaptExposure(pictureKindRef.current)
         ? videoAuto.current
         : { brightness: 1, contrast: 1 };
-    paintStudioMonitor(captureCanvasRef.current, frame, programOverlayRef.current, lookNow, auto, false);
-    paintStudioMonitor(previewCanvasRef.current, frame, overlayRef.current, lookNow, auto, true);
-    paintStudioMonitor(canvasRef.current, frame, programOverlayRef.current, lookNow, auto, false);
+    const size = { width: outputRef.current.width, height: outputRef.current.height };
+    paintStudioMonitor(captureCanvasRef.current, frame, programOverlayRef.current, lookNow, auto, false, size);
+    paintStudioMonitor(previewCanvasRef.current, frame, overlayRef.current, lookNow, auto, true, size);
+    paintStudioMonitor(canvasRef.current, frame, programOverlayRef.current, lookNow, auto, false, size);
     const out = programOutputRef.current;
     if (out) {
       if (out.closed) {
