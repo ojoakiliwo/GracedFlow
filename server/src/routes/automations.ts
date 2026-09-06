@@ -9,6 +9,28 @@ import {
   runPrayerReminder,
   runSundayReminder,
 } from "../scheduler.js";
+import { pickAutomationCopy, plusDays, type AutomationCopyKind } from "../automationCopy.js";
+import { config } from "../config.js";
+
+function weekPreview(kind: AutomationCopyKind, date = new Date()) {
+  const tz = config.scheduler.timezone;
+  const thisWeek = pickAutomationCopy(kind, date, tz);
+  const nextWeek = pickAutomationCopy(kind, plusDays(date, 7), tz);
+  return {
+    thisWeek: {
+      subject: thisWeek.subject,
+      body: thisWeek.body,
+      variant: thisWeek.index + 1,
+      of: thisWeek.total,
+    },
+    nextWeek: {
+      subject: nextWeek.subject,
+      body: nextWeek.body,
+      variant: nextWeek.index + 1,
+      of: nextWeek.total,
+    },
+  };
+}
 
 export const automationsRouter = Router();
 automationsRouter.use(authenticate);
@@ -24,19 +46,26 @@ automationsRouter.get(
           job: "sunday_reminder",
           label: "Sunday Service Reminder",
           cadence: "Every Saturday, 6:00 PM",
-          description: "Reminds every active member about Sunday service.",
+          description:
+            "Reminds every active member about Sunday service. A new wording goes out each week so the family does not get used to one message.",
+          ...weekPreview("sunday"),
         },
         {
           job: "prayer_reminder",
           label: "Wednesday Prayer Reminder",
           cadence: "Every Wednesday, 6:00 AM",
-          description: "Reminds every active member about the prayer meeting.",
+          description:
+            "Reminds every active member about the prayer meeting. Wednesday's text changes every week.",
+          ...weekPreview("prayer"),
         },
         {
           job: "celebrations",
           label: "Birthday & Anniversary Greetings",
           cadence: "Daily, 7:00 AM",
-          description: "Sends private greetings to members celebrating that day.",
+          description:
+            "Sends private greetings to members celebrating that day. Birthday and anniversary wording rotates each week.",
+          ...weekPreview("birthday"),
+          anniversary: weekPreview("anniversary"),
         },
       ],
       runs,
@@ -55,8 +84,8 @@ automationsRouter.post(
   requireRole("admin"),
   asyncHandler(async (req, res) => {
     const { job, date } = parseBody(triggerSchema, req.body);
-    if (job === "sunday_reminder") return void res.json(await runSundayReminder());
-    if (job === "prayer_reminder") return void res.json(await runPrayerReminder());
+    if (job === "sunday_reminder") return void res.json(await runSundayReminder(date));
+    if (job === "prayer_reminder") return void res.json(await runPrayerReminder(date));
     if (job === "celebrations") return void res.json(await runCelebrations(date));
     throw new HttpError(400, "Unknown job");
   }),
